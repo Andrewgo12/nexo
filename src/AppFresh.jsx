@@ -250,6 +250,12 @@ export default function AppFresh() {
   const [tripCards, setTripCards] = useState(trips);
   const [alertFeed, setAlertFeed] = useState(alerts);
   const [modal, setModal] = useState(null);
+  const [isBooting, setIsBooting] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [loginForm, setLoginForm] = useState({ email: initialStudent.email, password: 'ViajaU2026*', remember: true });
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState('KG');
 
   const validEmail = useMemo(() => validateInstitutionalEmail(email, uni.domain), [email, uni]);
 
@@ -262,6 +268,11 @@ export default function AppFresh() {
   const tripRisk = useMemo(() => evaluateTripRisk({ route: route.origin }, student), [route.origin, student]);
   const trustSummary = useMemo(() => buildTrustSummary([{ rating: 4.8 }, { rating: 4.9 }, { rating: 4.7 }, { rating: 4.8 }]), []);
   const safetyAlert = useMemo(() => buildSafetyAlert('Check-in', `Ruta segura en ${route.origin} hacia ${route.destination}. Peligro bajo.`, 'low'), [route.origin, route.destination]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsBooting(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     writeAppData({
@@ -421,8 +432,105 @@ export default function AppFresh() {
     closeModal();
   };
 
+  const handleAuthSubmit = () => {
+    if (!loginForm.email || !loginForm.password) {
+      setToast('Completa el correo institucional y la contraseña para continuar.');
+      return;
+    }
+    if (authMode === 'register' && !loginForm.name) {
+      setToast('Agrega tu nombre para crear tu perfil universitario.');
+      return;
+    }
+    setIsLoggedIn(true);
+    setToast(authMode === 'register' ? 'Cuenta creada con validación universitaria completada.' : 'Inicio de sesión correcto. Bienvenido a ViajaU.');
+  };
+
+  const handlePasswordRecovery = () => {
+    setRecoveryOpen(true);
+    setToast('Se ha enviado un enlace de recuperación a tu correo institucional.');
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#020b10', color: 'white', fontFamily: 'Inter, sans-serif' }}>
+      {isBooting && (
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at center, rgba(16,185,129,.12), rgba(2,11,16,.95) 52%)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 92, height: 92, borderRadius: '50%', margin: '0 auto 20px', border: '2px solid rgba(52,211,153,.5)', boxShadow: '0 0 50px rgba(52,211,153,.15)', display: 'grid', placeItems: 'center', fontSize: 28, fontWeight: 900 }}>V</div>
+            <div style={{ fontSize: 11, letterSpacing: '0.24em', color: '#86efac', fontWeight: 800, marginBottom: 8 }}>VIAJAU</div>
+            <div style={{ fontSize: 24, fontWeight: 800 }}>Preparando movilidad segura</div>
+          </div>
+        </div>
+      )}
+
+      {!isBooting && !isLoggedIn && (
+        <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+          <div style={{ width: '100%', maxWidth: 980, borderRadius: 28, background: 'linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,11,16,.96))', border: '1px solid rgba(148,163,184,.2)', boxShadow: '0 28px 80px rgba(15,23,42,.5)', display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', overflow: 'hidden' }}>
+            <div style={{ padding: 40, background: 'linear-gradient(135deg, rgba(16,185,129,.12), rgba(59,130,246,.08), transparent)' }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#86efac', fontWeight: 800, marginBottom: 12 }}>VIAJAU</div>
+              <h1 style={{ margin: 0, fontSize: 44, lineHeight: 1.08 }}>Tu movilidad segura universitaria</h1>
+              <p style={{ margin: '18px 0 28px', color: '#dbeafe', fontSize: 16, lineHeight: 1.7 }}>
+                Validación institucional, emparejamiento por zona y horario, rutas seguras y notificaciones de seguridad para estudiantes de Cali y alrededores.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12 }}>
+                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 24, fontWeight: 800, color: '#86efac' }}>96%</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Coincidencia segura</div></div>
+                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 24, fontWeight: 800, color: '#7dd3fc' }}>24/7</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Monitoreo</div></div>
+                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 24, fontWeight: 800, color: '#fbbf24' }}>4.8</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Rating promedio</div></div>
+              </div>
+            </div>
+
+            <div style={{ padding: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2,6,23,.9)' }}>
+              <div style={{ width: '100%', maxWidth: 360 }}>
+                <div style={{ display: 'flex', gap: 8, background: 'rgba(15,23,42,.8)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 6, marginBottom: 20 }}>
+                  <button onClick={() => setAuthMode('login')} style={{ flex: 1, border: 'none', background: authMode === 'login' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent', color: '#fff', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}>Ingresar</button>
+                  <button onClick={() => setAuthMode('register')} style={{ flex: 1, border: 'none', background: authMode === 'register' ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'transparent', color: '#fff', borderRadius: 10, padding: '10px 12px', fontWeight: 800 }}>Registrarse</button>
+                </div>
+
+                <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 20, padding: 22 }}>
+                  <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 16 }}>{authMode === 'login' ? 'Acceso a la cuenta' : 'Crear cuenta universitaria'}</div>
+
+                  {authMode === 'register' && (
+                    <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                      <span style={{ color: '#dbeafe', fontWeight: 700 }}>Nombre completo</span>
+                      <input value={loginForm.name || ''} onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="Tu nombre" />
+                    </label>
+                  )}
+
+                  <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                    <span style={{ color: '#dbeafe', fontWeight: 700 }}>Correo institucional</span>
+                    <input value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="usuario@uniajc.edu.co" />
+                  </label>
+
+                  <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                    <span style={{ color: '#dbeafe', fontWeight: 700 }}>Contraseña</span>
+                    <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="••••••••" />
+                  </label>
+
+                  {authMode === 'login' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#dbeafe', fontSize: 13 }}>
+                        <input type="checkbox" checked={loginForm.remember} onChange={(e) => setLoginForm({ ...loginForm, remember: e.target.checked })} />
+                        Recordarme
+                      </label>
+                      <button type="button" onClick={handlePasswordRecovery} style={{ background: 'transparent', border: 'none', color: '#7dd3fc', fontWeight: 700 }}>Recuperar contraseña</button>
+                    </div>
+                  )}
+
+                  <button onClick={handleAuthSubmit} style={{ width: '100%', border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#052e16', padding: '12px 18px', fontWeight: 900, marginBottom: 10 }}>
+                    {authMode === 'login' ? 'Entrar a ViajaU' : 'Crear perfil universitario'}
+                  </button>
+
+                  <div style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 }}>
+                    {authMode === 'login' ? '¿No tienes cuenta? Crea tu perfil con tu correo universitario.' : 'Al registrarte, validamos el dominio institucional y protegemos tu ubicación por barrio.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isBooting && isLoggedIn && (
+        <>
       <div style={{ borderBottom: '1px solid rgba(148,163,184,.2)', padding: 18, position: 'sticky', top: 0, background: 'rgba(2,11,16,.75)', backdropFilter: 'blur(8px)' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
@@ -1059,7 +1167,9 @@ export default function AppFresh() {
           </section>
         )}
       </main>
-    </div>
+      </>
+     )}
+   </div>
   );
 }
 

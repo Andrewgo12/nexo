@@ -6,17 +6,17 @@ Repositorio: `Andrewgo12/nexo`
 
 ## 1) Resumen ejecutivo
 
-El proyecto está en un estado de prototipo funcional avanzado, con la lógica principal de negocio ya implementada y validada. La aplicación ya cubre la mayor parte del valor del MVP: validación universitaria, perfiles, búsquedas por zona/horario, matching, gestión de viajes, seguridad, KPI y alertas.
+El proyecto ya no es sólo un prototipo de frontend: ahora cuenta con una base de backend real en Laravel y una base de datos MySQL local para persistencia de estudiantes, viajes, matches y alertas de seguridad.
 
-Sin embargo, NO es todavía una versión de producción con backend real, autenticación real, base de datos persistente, geolocalización en vivo, pagos reales o integración con GTFS/OSRM/productividad real en producción.
+La lógica de negocio del producto sigue validada y funcionando, y además la capa API ya está levantada con endpoints básicos para registrar estudiantes, crear viajes, listar matches y consultar el dashboard del sistema.
 
-Estado real:
+Estado real actualizado:
 - Frontend/product prototype: 85–90%
-- Lógica de negocio funcional: 90%
-- Backend real y persistencia: 0–10%
+- Lógica de negocio funcional: 90–95%
+- Backend real y persistencia: 60–70%
 - Producción real: 0%
 
-## 2) Estado de compilación
+## 2) Estado de compilación y runtime
 
 Comando ejecutado:
 ```bash
@@ -30,6 +30,20 @@ vite v8.3.4 building client environment for production...
 ```
 
 Conclusión: la app compila correctamente en producción.
+
+### Backend API local
+
+Comando ejecutado:
+```bash
+curl.exe -sS http://127.0.0.1:8000/api/health
+```
+
+Resultado real:
+```json
+{"status":"ok","app":"ViajaU","mode":"backend-foundation","moment":"2026-10-20T05:03:25.239835Z"}
+```
+
+La API de Laravel responde correctamente con la base de datos MySQL local conectada.
 
 ## 3) Estado de pruebas de funciones
 
@@ -144,6 +158,22 @@ Failed: 0
 - `writeAppData(payload)`
 - `resetAppData()`
 
+### 4.4 Backend real (`backend/`)
+
+- `student_profiles`
+- `travel_offers`
+- `trip_matches`
+- `safety_alerts`
+- `trust_ledgers`
+- `GET /api/health`
+- `POST /api/students/register`
+- `GET /api/trips`
+- `POST /api/trips`
+- `GET /api/matches`
+- `POST /api/matches`
+- `POST /api/alerts`
+- `GET /api/dashboard`
+
 ## 5) Módulos con cobertura real del producto
 
 ### Completados funcionalmente
@@ -175,44 +205,39 @@ Failed: 0
 
 ## 6) Lo que le falta al proyecto para ser completo
 
-Este proyecto ya no está “vacío” ni “solo con UI”. Ya tiene una base sólida de producto. Pero para ser un sistema real, faltan estas capas:
+La base funcional del producto ya existe; ahora lo que falta no es “más catálogo de funciones”, sino completar la capa real del sistema para que el producto deje de ser un prototipo:
 
-1. Persistencia real
-   - PostgreSQL/Supabase/Firebase
-   - tablas: users, trips, match_requests, alerts, incidents, trust_scores
+1. Persistencia y auth real
+   - registro/login/logout con usuarios reales
+   - password hashing y sesiones
+   - roles y permisos por universidad
 
-2. Auth real
-   - registro completo
-   - login/logout
-   - restablecimiento de contraseña
-   - validación de dominio con comprobación real
-
-3. Geolocalización real
+2. Geolocalización en vivo
    - GPS del dispositivo
-   - ubicación compartida en vivo
-   - geocercas reales
+   - ubicación compartida en tiempo real
+   - geocercas reales y alerts por desviación
 
-4. Integración de mapas y transporte
+3. Integración de mapas y transporte
    - GTFS real de MIO
-   - OSRM/OTP real
-   - polyline + estaciones + rutas en vivo
+   - OpenTripPlanner / OSRM reales
+   - polyline y estaciones reales
 
-5. Pagos y seguros
-   - Stripe/mercado pago
-   - cobertura por viaje y claim real
+4. Pagos y seguros
+   - Stripe o Mercado Pago
+   - cobertura por viaje y claims reales
 
-6. Chat en tiempo real
-   - sockets
-   - mensajería segura por grupo de viaje
+5. Chat y notificaciones reales
+   - sockets / WebSockets
+   - push, SMS y email reales
 
-7. Infraestructura de producción
-   - logs, observabilidad, backups, env vars, rate limits
+6. Infraestructura de producción
+   - logs, observabilidad, backups, rate limits, env vars, caché
 
 ## 7) Estado final real
 
-La app está en un estado sólido de MVP funcional y validado, con una lógica de negocio muy cercana a un producto real de movilidad universitaria. La parte visual y el flujo principal ya están bien construidos y funcionan.
+La app está en un estado sólido de MVP funcional y validado, con lógica de negocio cercana a un producto real de movilidad universitaria. La parte visual y el flujo principal ya están construidos y funcionan.
 
-Pero todavía no es una versión 1.0 productiva. La brecha principal es la capa backend, datos reales y tiempo real.
+Además, la base de backend quedó preparada con Laravel y MySQL local, con migraciones y API mínima operativa. Eso convierte al proyecto de un prototipo puramente frontend a una base real para continuar con la fase de autenticación, persistencia profesional y geolocalización en vivo.
 
 ## 8) Archivos relevantes
 
