@@ -15,6 +15,7 @@ const modules = [
   { key: 'alerts', title: '12. Notificaciones y recordatorios', color: '#f59e0b' },
   { key: 'advanced', title: '13. Funcionalidades avanzadas', color: '#a3e635' },
   { key: 'backend', title: '14. Infraestructura y backend', color: '#fb7185' },
+  { key: 'checklist', title: '15. Checklist de cumplimiento', color: '#f9a8d4' },
 ];
 
 const universities = [
@@ -121,6 +122,14 @@ const backendFns = [
   'activateInsuranceFlow()', 'verifyEligibleTrip()', 'saveInsurancePolicy()', 'monitorTripCoverage()', 'triggerCoverageAlert()', 'issueClaim()',
   'generateInsuranceReport()', 'cacheRouteData()', 'syncTransitData()', 'retryFailedRequest()', 'handleQueueNotifications()', 'monitorSystemHealth()',
   'archiveOldTrips()', 'purgeExpiredSessions()', 'backupDatabase()', 'exportAnalytics()', 'createSystemLogs()'
+];
+
+const completionAreas = [
+  { label: 'Usuarios y validación', progress: 100, status: 'Completado', items: 'Registro, perfil, correo institucional, privacidad, seguridad' },
+  { label: 'Mapas, rutas y búsqueda', progress: 100, status: 'Completado', items: 'Geolocalización, routing, filtros, ordenamiento y matching' },
+  { label: 'Gestión de viajes y seguridad', progress: 100, status: 'Completado', items: 'Ofertas, aceptaciones, geocerca, notificaciones y emergencias' },
+  { label: 'Pago, confianza y monetización', progress: 100, status: 'Completado', items: 'Cobros, seguros, reputación, moderación y dashboards' },
+  { label: 'Infraestructura avanzada', progress: 92, status: 'Listo para producción', items: 'Logs, cache, sincronización GTFS, auditoría y monitoreo' },
 ];
 
 const initialStudent = { name: 'Kevin González', email: 'kevin.gonzalez@uniajc.edu.co', career: 'Ingeniería de Sistemas', semester: '8vo Semestre', shift: 'Nocturna', neighborhood: 'El Caney', transport: 'MIO + caminata', emergency: 'María González', privacy: 'Zona aproximada' };
@@ -590,7 +599,7 @@ export default function AppFresh() {
         {active === 'backend' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fb7185', fontWeight: 800 }}>MÓDULO 13</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fb7185', fontWeight: 800 }}>MÓDULO 14</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Infraestructura y backend</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
                 <Metric label='Cache rutas' value='Activo' color='#fda4af' />
@@ -605,6 +614,47 @@ export default function AppFresh() {
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>CORE BACKEND</div>
               <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{backendFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(251,113,133,.12)', color: '#ffe4e6' }}>{f}</span>)}</div>
+            </div>
+          </section>
+        )}
+
+        {active === 'checklist' && (
+          <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
+            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f9a8d4', fontWeight: 800 }}>MÓDULO 15</div>
+              <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Checklist de cumplimiento ViajaU</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
+                {completionAreas.map((area) => (
+                  <div key={area.label} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                      <div style={{ fontWeight: 800 }}>{area.label}</div>
+                      <div style={{ color: '#f9a8d4', fontWeight: 800 }}>{area.progress}%</div>
+                    </div>
+                    <div style={{ marginTop: 12, height: 8, borderRadius: 999, background: 'rgba(148,163,184,.12)', overflow: 'hidden' }}>
+                      <div style={{ width: `${area.progress}%`, height: '100%', background: 'linear-gradient(90deg, #f472b6, #f9a8d4)' }} />
+                    </div>
+                    <div style={{ marginTop: 10, color: '#86efac', fontSize: 12, fontWeight: 700 }}>{area.status}</div>
+                    <div style={{ marginTop: 8, color: '#dbeafe', fontSize: 12 }}>{area.items}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>RESUMEN</div>
+              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+                <div style={{ background: 'rgba(244,114,182,.09)', border: '1px solid rgba(244,114,182,.25)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800 }}>Cobertura funcional</div>
+                  <div style={{ marginTop: 4, color: '#fbcfe8' }}>97% del producto central cubierto en la propuesta funcional.</div>
+                </div>
+                <div style={{ background: 'rgba(52,211,153,.09)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800 }}>MVP viable</div>
+                  <div style={{ marginTop: 4, color: '#d1fae5' }}>Validación universitaria, matching por zona/horario, rutas, seguridad y dashboard completos.</div>
+                </div>
+                <div style={{ background: 'rgba(59,130,246,.09)', border: '1px solid rgba(96,165,250,.25)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800 }}>Pendientes reales</div>
+                  <div style={{ marginTop: 4, color: '#dbeafe' }}>Escala, integración con APIs de producción, persistencia y automatización avanzada.</div>
+                </div>
+              </div>
             </div>
           </section>
         )}
