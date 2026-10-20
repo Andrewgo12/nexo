@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { BUSINESS_MODULES } from './data/businessModules';
+import { getOsrmRoute, searchAddressNominatim, calculateMultimodalDetails } from './services/routingApi';
 
 const modules = [
   { key: 'auth', title: '1. Usuarios y validación institucional', color: '#34d399' },
@@ -178,6 +180,11 @@ const kpis = [
 ];
 
 const field = { padding: '12px 14px', borderRadius: 12, background: '#0f172a', border: '1px solid rgba(148,163,184,0.25)', color: '#fff' };
+const functionCoverage = BUSINESS_MODULES.map((module) => ({
+  ...module,
+  count: module.functions.length,
+  sample: module.functions.slice(0, 4)
+}));
 
 export default function AppFresh() {
   const [active, setActive] = useState('auth');
@@ -204,13 +211,23 @@ export default function AppFresh() {
   const [adminState, setAdminState] = useState({ users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
   const [pricing, setPricing] = useState({ premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
   const [executionState, setExecutionState] = useState(executionChecklist);
+  const [routeResult, setRouteResult] = useState(null);
+  const [routeOptions, setRouteOptions] = useState([]);
+  const [tripCards, setTripCards] = useState(trips);
 
   const validEmail = useMemo(() => email.trim().toLowerCase().endsWith(uni.domain.toLowerCase()), [email, uni]);
 
   const summary = useMemo(() => {
+    if (routeResult) {
+      return {
+        duration: `${routeResult.durationMin} min`,
+        distance: `${routeResult.distanceKm} km`,
+        safety: routeResult.durationMin <= 20 ? '94/100' : routeResult.distanceKm > 10 ? '88/100' : '91/100'
+      };
+    }
     const mins = route.mode === 'Moto' ? 18 : route.mode === 'Carro' ? 24 : route.mode === 'Bicicleta' ? 30 : 35;
     return { duration: `${mins + (route.mode.includes('caminata') ? 12 : 0)} min`, distance: route.mode === 'Moto' ? '5.8 km' : route.mode === 'Carro' ? '7.1 km' : '6.4 km', safety: route.mode === 'Moto' ? '78/100' : '90/100' };
-  }, [route]);
+  }, [route, routeResult]);
 
   const filteredResults = useMemo(() => {
     const normalized = [...searchResults].filter((item) => {
@@ -238,6 +255,25 @@ export default function AppFresh() {
     setToast('Registro universitario validado correctamente y perfil creado.');
   };
 
+  const calculateRouteNow = async () => {
+    try {
+      const originResults = await searchAddressNominatim(route.origin || 'UNIAJC Sede Sur, Cali');
+      const destinationResults = await searchAddressNominatim(route.destination || 'El Caney, Cali');
+      const originCoords = originResults[0] ? [originResults[0].lat, originResults[0].lng] : [3.3518, -76.5338];
+      const destinationCoords = destinationResults[0] ? [destinationResults[0].lat, destinationResults[0].lng] : [3.378, -76.524];
+      const routeMode = route.mode.toLowerCase().includes('mio') ? 'mio' : route.mode.toLowerCase().includes('carro') ? 'car' : route.mode.toLowerCase().includes('moto') ? 'moto' : route.mode.toLowerCase().includes('bici') ? 'bike' : route.mode.toLowerCase().includes('taxi') ? 'taxi' : 'walk';
+      const result = await getOsrmRoute(originCoords, destinationCoords, routeMode);
+      setRouteResult(result);
+      setRouteOptions(calculateMultimodalDetails(result?.distanceKm ?? 8));
+      setToast(`Ruta recalculada con ${result?.source ?? 'fallback local'} y modo ${routeMode.toUpperCase()}.`);
+    } catch {
+      setToast('No fue posible recalcular la ruta en este momento; se aplicó una estimación local segura.');
+      const fallback = { distanceKm: 8.6, durationMin: 26, source: 'Fallback local' };
+      setRouteResult(fallback);
+      setRouteOptions(calculateMultimodalDetails(8.6));
+    }
+  };
+
   const action = (label) => setToast(`${label} ejecutado correctamente. Contacto de confianza y autoridades notificadas.`);
   const toggleNotification = (index) => {
     setNotifications((current) => current.map((item, idx) => idx === index ? { ...item, active: !item.active } : item));
@@ -258,6 +294,20 @@ export default function AppFresh() {
   const toggleExecutionTask = (id) => {
     setExecutionState((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
     setToast('Estado del checklist actualizado.');
+  };
+  const createTripOffer = () => {
+    setTripCards((current) => [{
+      driver: student.name,
+      route: `${route.origin || 'UNIAJC'} → ${route.destination || 'El Caney'}`,
+      seats: 2,
+      cost: '2500 COP',
+      status: 'Oferta nueva'
+    }, ...current]);
+    setToast('Oferta de viaje creada y publicada para el grupo adecuado.');
+  };
+  const requestSeat = () => {
+    setTripCards((current) => current.map((trip, index) => index === 0 && trip.seats > 0 ? { ...trip, seats: trip.seats - 1, status: 'Cupo solicitado' } : trip));
+    setToast('Solicitud de cupo enviada y registrada para revisión.');
   };
 
   const completedTasks = executionState.filter((item) => item.done).length;
@@ -336,7 +386,7 @@ export default function AppFresh() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                   <div style={{ color: '#93c5fd', fontWeight: 700 }}>Ruta sugerida con OpenStreetMap + GTFS</div>
-                  <button onClick={() => setToast('Ruta recalculada con datos abiertos y opciones multimodales.')} style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Calcular ruta</button>
+                  <button onClick={calculateRouteNow} style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Calcular ruta</button>
                 </div>
               </div>
             </div>
@@ -347,6 +397,17 @@ export default function AppFresh() {
                 <Metric label='Distancia' value={summary.distance} color='#86efac' />
                 <Metric label='Seguridad' value={summary.safety} color='#fbbf24' />
                 <Metric label='Parada segura' value='Estación Universidades' color='#c4b5fd' />
+              </div>
+              <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
+                {routeOptions.slice(0, 3).map((option) => (
+                  <div key={option.id} style={{ background: 'rgba(59,130,246,.08)', border: '1px solid rgba(96,165,250,.24)', borderRadius: 10, padding: 10, color: '#dbeafe' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 800 }}>{option.name}</span>
+                      <span>{option.timeMin} min</span>
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#bfdbfe' }}>{option.costCop.toLocaleString('es-CO')} COP • {option.safetyScore}</div>
+                  </div>
+                ))}
               </div>
               <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{routeFns.map(f => <span key={f} style={{ color: '#dbeafe', fontSize: 10, background: 'rgba(59,130,246,.12)', borderRadius: 999, padding: '6px 8px' }}>{f}</span>)}</div>
             </div>
@@ -411,7 +472,7 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fbbf24', fontWeight: 800 }}>MÓDULO 4</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Gestión de viajes</h2>
               <div style={{ display: 'grid', gap: 14 }}>
-                {trips.map((t) => <div key={t.driver} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}><div><div style={{ fontSize: 20, fontWeight: 800 }}>{t.driver}</div><div style={{ color: '#dbeafe' }}>{t.route}</div></div><div style={{ color: '#fbbf24', fontWeight: 800 }}>{t.status}</div></div><div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', color: '#dbeafe' }}><span>Asientos: {t.seats}</span><span>Costo: {t.cost}</span></div></div>)}
+                {tripCards.map((t, index) => <div key={`${t.driver}-${index}`} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}><div><div style={{ fontSize: 20, fontWeight: 800 }}>{t.driver}</div><div style={{ color: '#dbeafe' }}>{t.route}</div></div><div style={{ color: '#fbbf24', fontWeight: 800 }}>{t.status}</div></div><div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', color: '#dbeafe' }}><span>Asientos: {t.seats}</span><span>Costo: {t.cost}</span></div></div>)}
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
@@ -543,6 +604,22 @@ export default function AppFresh() {
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>COMUNICACIÓN</div>
               <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{dashboardFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(244,114,182,.12)', color: '#fbcfe8' }}>{f}</span>)}</div>
+              <div style={{ marginTop: 20, background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
+                <div style={{ fontWeight: 800, marginBottom: 10 }}>Cobertura funcional por módulo</div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {functionCoverage.map((module) => (
+                    <div key={module.id} style={{ background: 'rgba(15,23,42,.72)', border: '1px solid rgba(148,163,184,.15)', borderRadius: 10, padding: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 800, fontSize: 12 }}>{module.title}</span>
+                        <span style={{ color: '#f9a8d4', fontWeight: 800, fontSize: 11 }}>{module.count}</span>
+                      </div>
+                      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {module.sample.map((func) => <span key={`${module.id}-${func}`} style={{ background: 'rgba(244,114,182,.08)', color: '#fbcfe8', borderRadius: 999, padding: '4px 6px', fontSize: 9 }}>{func}</span>)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
         )}

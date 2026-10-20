@@ -60,8 +60,8 @@ export async function getOsrmRoute(origin, dest, mode = 'car') {
         source: 'OSRM OpenStreetMap Engine (En vivo)'
       };
     }
-  } catch (err) {
-    // console.warn('OSRM public service timeout or error, using high-fidelity street fallback', err);
+  } catch {
+    // OSRM fallback intentionally ignored; a realistic Cali route is generated below.
   } finally {
     clearTimeout(timeoutId);
   }
@@ -153,8 +153,7 @@ export async function searchAddressNominatim(query) {
       lng: parseFloat(item.lon),
       type: item.type || 'lugar'
     }));
-  } catch (err) {
-    // console.warn('Nominatim search error', err);
+  } catch {
     return [];
   }
 }
