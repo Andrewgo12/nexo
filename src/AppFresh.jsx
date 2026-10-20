@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BUSINESS_MODULES } from './data/businessModules';
 import { getOsrmRoute, searchAddressNominatim, calculateMultimodalDetails } from './services/routingApi';
+import { readAppData, writeAppData } from './services/appDatabase';
 import {
   validateInstitutionalEmail,
   createStudentProfile,
@@ -14,7 +15,17 @@ import {
   buildTravelSearchCandidates,
   buildSafetyOverview,
   buildDashboardSnapshot,
-  buildMatchRecommendations
+  buildMatchRecommendations,
+  calculateTravelReadiness,
+  buildDashboardMetrics,
+  buildSafetyMatrix,
+  getRouteModeKey,
+  getCurrentStudentLocation,
+  searchZoneByText,
+  suggestMeetingPoint,
+  evaluateTripRisk,
+  buildTrustSummary,
+  buildSafetyAlert
 } from './services/viajauCore';
 
 const modules = [
@@ -194,6 +205,13 @@ const kpis = [
   ['Usuarios registrados', '18.4K'], ['Viajes activos', '2.1K'], ['Tasa de coincidencia', '89%'], ['Viajes seguros', '96%']
 ];
 
+const overviewCards = [
+  { key: 'validacion', title: 'Validación institucional', value: '100%', detail: 'Correo universitario validado', tone: '#34d399' },
+  { key: 'ruta', title: 'Ruta más segura', value: '18 min', detail: 'UNIAJC → El Caney', tone: '#60a5fa' },
+  { key: 'compatibilidad', title: 'Compatibilidad media', value: '92%', detail: 'Coincidencia con zona y horario', tone: '#a7f3d0' },
+  { key: 'seguridad', title: 'Seguimiento activo', value: '24/7', detail: 'Geocerca y check-in funcionando', tone: '#fca5a5' }
+];
+
 const field = { padding: '12px 14px', borderRadius: 12, background: '#0f172a', border: '1px solid rgba(148,163,184,0.25)', color: '#fff' };
 const functionCoverage = BUSINESS_MODULES.map((module) => ({
   ...module,
@@ -202,36 +220,66 @@ const functionCoverage = BUSINESS_MODULES.map((module) => ({
 }));
 
 export default function AppFresh() {
-  const [active, setActive] = useState('auth');
-  const [student, setStudent] = useState(initialStudent);
-  const [uni, setUni] = useState(universities[0]);
-  const [email, setEmail] = useState(initialStudent.email);
-  const [privacy, setPrivacy] = useState('Zona aproximada');
+  const persisted = useMemo(() => readAppData(), []);
+  const [active, setActive] = useState(persisted.activeTab || 'auth');
+  const [student, setStudent] = useState(persisted.student || initialStudent);
+  const [uni, setUni] = useState(universities.find((u) => u.id === (persisted.university?.id || 'uniajc')) || universities[0]);
+  const [email, setEmail] = useState(persisted.email || initialStudent.email);
+  const [privacy, setPrivacy] = useState(persisted.privacy || 'Zona aproximada');
   const [toast, setToast] = useState('');
-  const [route, setRoute] = useState({ origin: 'UNIAJC Sede Sur', destination: 'El Caney', mode: 'MIO + caminata', time: '9:45 PM' });
-  const [searchState, setSearchState] = useState({ zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO', confidence: '4.8+', gender: 'Cualquiera', sort: 'Compatibilidad' });
+  const [route, setRoute] = useState(persisted.route || { origin: 'UNIAJC Sede Sur', destination: 'El Caney', mode: 'MIO + caminata', time: '9:45 PM' });
+  const [searchState, setSearchState] = useState(persisted.searchState || { zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO', confidence: '4.8+', gender: 'Cualquiera', sort: 'Compatibilidad' });
   const [searchResults, setSearchResults] = useState([
     { name: 'Ana Vélez', zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO + caminata', score: 96, safety: 'Alta', gender: 'Mujer' },
     { name: 'Daniela Carmona', zone: 'El Caney', time: '19:50', faculty: 'Ingeniería', transport: 'MIO', score: 92, safety: 'Alta', gender: 'Mujer' },
     { name: 'Santiago Rojas', zone: 'Pance', time: '20:10', faculty: 'Diseño', transport: 'Carro', score: 86, safety: 'Media', gender: 'Hombre' },
   ]);
-  const [notifications, setNotifications] = useState([
+  const [notifications, setNotifications] = useState(persisted.notifications || [
     { title: 'Salida en 15 min', channel: 'Push', active: true },
     { title: 'Check-in de llegada pendiente', channel: 'SMS', active: true },
     { title: 'Cambio de ruta detectado', channel: 'Alerta', active: false },
     { title: 'Contacto de confianza notificado', channel: 'WhatsApp', active: true },
   ]);
-  const [advancedMode, setAdvancedMode] = useState({ night: true, safeties: true, hotspots: true, recommendations: true });
-  const [safetyState, setSafetyState] = useState({ panic: false, geofence: true, emergency: true, arrival: false });
-  const [adminState, setAdminState] = useState({ users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
-  const [pricing, setPricing] = useState({ premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
-  const [executionState, setExecutionState] = useState(executionChecklist);
+  const [advancedMode, setAdvancedMode] = useState(persisted.advancedMode || { night: true, safeties: true, hotspots: true, recommendations: true });
+  const [safetyState, setSafetyState] = useState(persisted.safetyState || { panic: false, geofence: true, emergency: true, arrival: false });
+  const [adminState, setAdminState] = useState(persisted.adminState || { users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
+  const [pricing, setPricing] = useState(persisted.pricing || { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
+  const [executionState, setExecutionState] = useState(persisted.executionState || executionChecklist);
   const [routeResult, setRouteResult] = useState(null);
   const [routeOptions, setRouteOptions] = useState([]);
   const [tripCards, setTripCards] = useState(trips);
   const [alertFeed, setAlertFeed] = useState(alerts);
+  const [modal, setModal] = useState(null);
 
   const validEmail = useMemo(() => validateInstitutionalEmail(email, uni.domain), [email, uni]);
+
+  const readiness = useMemo(() => calculateTravelReadiness(student, route), [student, route]);
+  const dashboardMetrics = useMemo(() => buildDashboardMetrics(student, route, tripCards, alertFeed), [student, route, tripCards, alertFeed]);
+  const safetyMatrix = useMemo(() => buildSafetyMatrix(student), [student]);
+  const currentLocation = useMemo(() => getCurrentStudentLocation(student), [student]);
+  const zoneMatches = useMemo(() => searchZoneByText(student.neighborhood || 'El Caney', ['El Caney', 'Pance', 'Valle del Lili', 'Jardín del Sol', 'Santiago de Cali']), [student.neighborhood]);
+  const safeMeetingPoint = useMemo(() => suggestMeetingPoint(route.origin, route.destination, zoneMatches), [route.origin, route.destination, zoneMatches]);
+  const tripRisk = useMemo(() => evaluateTripRisk({ route: route.origin }, student), [route.origin, student]);
+  const trustSummary = useMemo(() => buildTrustSummary([{ rating: 4.8 }, { rating: 4.9 }, { rating: 4.7 }, { rating: 4.8 }]), []);
+  const safetyAlert = useMemo(() => buildSafetyAlert('Check-in', `Ruta segura en ${route.origin} hacia ${route.destination}. Peligro bajo.`, 'low'), [route.origin, route.destination]);
+
+  useEffect(() => {
+    writeAppData({
+      student,
+      university: uni,
+      email,
+      privacy,
+      route,
+      searchState,
+      notifications,
+      advancedMode,
+      safetyState,
+      adminState,
+      pricing,
+      executionState,
+      activeTab: active
+    });
+  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, safetyState, adminState, pricing, executionState, active]);
 
   const summary = useMemo(() => {
     if (routeResult) {
@@ -333,6 +381,46 @@ export default function AppFresh() {
 
   const completedTasks = executionState.filter((item) => item.done).length;
 
+  const summaryCards = [
+    { key: 'validacion', title: 'Validación institucional', value: dashboardMetrics.validation, detail: `Correo ${uni.domain} verificado`, tone: '#34d399' },
+    { key: 'ruta', title: 'Ruta más segura', value: summary.duration, detail: `${route.origin} → ${route.destination}`, tone: '#60a5fa' },
+    { key: 'compatibilidad', title: 'Compatibilidad media', value: dashboardMetrics.compatibility, detail: `${readiness.status} • ${getRouteModeKey(route.mode)}`, tone: '#a7f3d0' },
+    { key: 'seguridad', title: 'Seguimiento activo', value: safetyMatrix.risk, detail: `${safetyMatrix.confidence} de confianza de seguridad`, tone: '#fca5a5' }
+  ];
+
+  const openModal = (payload) => setModal(payload);
+  const closeModal = () => setModal(null);
+
+  const confirmProfile = () => {
+    register();
+    closeModal();
+  };
+
+  const confirmRoute = async () => {
+    await calculateRouteNow();
+    closeModal();
+  };
+
+  const confirmTripOffer = () => {
+    createTripOffer();
+    closeModal();
+  };
+
+  const confirmSeatRequest = () => {
+    requestSeat();
+    closeModal();
+  };
+
+  const confirmEmergency = () => {
+    activatePanic();
+    closeModal();
+  };
+
+  const confirmArrival = () => {
+    confirmSafeArrival();
+    closeModal();
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#020b10', color: 'white', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ borderBottom: '1px solid rgba(148,163,184,.2)', padding: 18, position: 'sticky', top: 0, background: 'rgba(2,11,16,.75)', backdropFilter: 'blur(8px)' }}>
@@ -343,7 +431,7 @@ export default function AppFresh() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {modules.map((m) => (
-              <button key={m.key} onClick={() => setActive(m.key)} style={{ border: active === m.key ? '1px solid rgba(52,211,153,.5)' : '1px solid rgba(148,163,184,.2)', background: active === m.key ? 'rgba(16,185,129,.12)' : 'rgba(10,15,20,.75)', color: '#fff', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }}>
+              <button key={m.key} onClick={() => setActive(m.key)} style={{ border: active === m.key ? '1px solid rgba(52,211,153,.5)' : '1px solid rgba(148,163,184,.2)', background: active === m.key ? 'rgba(16,185,129,.12)' : 'rgba(10,15,20,.75)', color: '#fff', borderRadius: 10, padding: '10px 12px', fontWeight: 700, transition: 'all 0.2s ease', transform: active === m.key ? 'translateY(-1px)' : 'none', boxShadow: active === m.key ? '0 8px 24px rgba(16,185,129,0.18)' : 'none' }}>
                 {m.title}
               </button>
             ))}
@@ -352,7 +440,79 @@ export default function AppFresh() {
       </div>
 
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px 60px' }}>
-        {toast && <div style={{ background: 'rgba(16,185,129,.12)', border: '1px solid rgba(52,211,153,.4)', borderRadius: 12, padding: '12px 14px', marginBottom: 18, color: '#d1fae5' }}>{toast}</div>}
+        {toast && <div style={{ background: 'rgba(16,185,129,.12)', border: '1px solid rgba(52,211,153,.4)', borderRadius: 12, padding: '12px 14px', marginBottom: 18, color: '#d1fae5', animation: 'fadeIn 0.22s ease-out' }}>{toast}</div>}
+
+        <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(59,130,246,0.08), rgba(15,23,42,0.9))', border: '1px solid rgba(148,163,184,.18)', borderRadius: 24, padding: 24, marginBottom: 24, boxShadow: '0 22px 40px rgba(2,6,23,0.45)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: 20, alignItems: 'center' }}>
+            <div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                <span style={{ background: 'rgba(52,211,153,0.14)', color: '#a7f3d0', border: '1px solid rgba(52,211,153,0.35)', borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>MVP activo</span>
+                <span style={{ background: 'rgba(96,165,250,0.12)', color: '#bfdbfe', border: '1px solid rgba(96,165,250,0.28)', borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Seguridad + matching</span>
+              </div>
+              <h2 style={{ margin: 0, fontSize: 38, lineHeight: 1.1, maxWidth: 700 }}>ViajaU: movilidad segura para estudiantes universitarios</h2>
+              <p style={{ marginTop: 12, color: '#dbeafe', fontSize: 15, maxWidth: 660, lineHeight: 1.7 }}>
+                Plataforma de viajes compartidos por zona, jornada y confianza con validación universitaria, rutas inteligentes, geocerca y alertas de seguridad para la comunidad estudiantil.
+              </p>
+            </div>
+            <div style={{ background: 'rgba(15,23,42,0.62)', border: '1px solid rgba(148,163,184,.22)', borderRadius: 18, padding: 18 }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Estado del sistema</div>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: '#dbeafe' }}>Perfil verificado</span>
+                  <span style={{ color: '#34d399', fontWeight: 800 }}>{dashboardMetrics.validation}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: '#dbeafe' }}>Compatibilidad</span>
+                  <span style={{ color: '#7dd3fc', fontWeight: 800 }}>{dashboardMetrics.compatibility}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ color: '#dbeafe' }}>Riesgo</span>
+                  <span style={{ color: '#fca5a5', fontWeight: 800 }}>{safetyMatrix.risk}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 16, marginBottom: 24 }}>
+          {summaryCards.map((card) => (
+            <div key={card.key} style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 18, padding: 18, boxShadow: '0 18px 32px rgba(15,23,42,0.22)', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${card.tone}22, transparent)`, pointerEvents: 'none' }} />
+              <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, letterSpacing: '0.12em', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8' }}>{card.title}</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: card.tone }}>{card.value}</div>
+                <div style={{ fontSize: 12, color: '#dbeafe' }}>{card.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {modal && (
+          <div className="modal-overlay" onClick={closeModal}>
+            <div className="modal-card" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 560, animation: 'slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800 }}>Confirmación</div>
+                  <h3 style={{ marginTop: 6, fontSize: 28, fontWeight: 800 }}>{modal.title}</h3>
+                </div>
+                <button className="btn-secondary" style={{ padding: '8px 10px' }} onClick={closeModal}>✕</button>
+              </div>
+
+              <div style={{ background: 'rgba(15,23,42,.8)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16, marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: '50%', display: 'inline-block', background: modal.accent || '#10b981', boxShadow: `0 0 0 6px ${modal.accent || '#10b981'}22` }} />
+                  <span style={{ fontWeight: 800, color: '#dbeafe' }}>Acción segura y validada</span>
+                </div>
+                <p style={{ color: '#dbeafe', lineHeight: 1.6, margin: 0 }}>{modal.message}</p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button className="btn-secondary" onClick={closeModal}>Cancelar</button>
+                <button className="btn-primary" onClick={modal.onConfirm}>{modal.confirmText}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {active === 'auth' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
@@ -378,7 +538,14 @@ export default function AppFresh() {
               </div>
               <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ color: validEmail ? '#86efac' : '#fca5a5', fontWeight: 800 }}>Dominio requerido: {uni.domain}</div>
-                <button onClick={register} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Crear perfil universitario</button>
+                <button onClick={() => openModal({
+                  type: 'profile',
+                  title: 'Verificación universitaria',
+                  accent: '#10b981',
+                  message: `Se validará el dominio ${uni.domain} para ${student.name} y se creará el perfil con jornada ${student.shift}, barrio ${student.neighborhood} y contacto ${student.emergency}.`,
+                  confirmText: 'Confirmar perfil',
+                  onConfirm: confirmProfile,
+                })} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Crear perfil universitario</button>
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
@@ -407,7 +574,14 @@ export default function AppFresh() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                   <div style={{ color: '#93c5fd', fontWeight: 700 }}>Ruta sugerida con OpenStreetMap + GTFS</div>
-                  <button onClick={calculateRouteNow} style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Calcular ruta</button>
+                  <button onClick={() => openModal({
+                    type: 'route',
+                    title: 'Ruta segura sugerida',
+                    accent: '#3b82f6',
+                    message: `Se calculará la ruta de ${route.origin} hacia ${route.destination} en modo ${route.mode}. La app evaluará seguridad, tiempo y puntos de encuentro más seguros para la jornada actual.`,
+                    confirmText: 'Calcular ruta',
+                    onConfirm: confirmRoute,
+                  })} style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Calcular ruta</button>
                 </div>
               </div>
             </div>
@@ -417,7 +591,12 @@ export default function AppFresh() {
                 <Metric label='Tiempo estimado' value={summary.duration} color='#7dd3fc' />
                 <Metric label='Distancia' value={summary.distance} color='#86efac' />
                 <Metric label='Seguridad' value={summary.safety} color='#fbbf24' />
-                <Metric label='Parada segura' value='Estación Universidades' color='#c4b5fd' />
+                <Metric label='Punto seguro' value={safeMeetingPoint.name} color='#c4b5fd' />
+                <Metric label='Ubicación' value={currentLocation.zone} color='#67e8f9' />
+              </div>
+              <div style={{ marginTop: 14, background: 'rgba(103,232,249,0.08)', border: '1px solid rgba(103,232,249,0.24)', borderRadius: 12, padding: 12, color: '#dbeafe' }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Evaluación de riesgo</div>
+                <div>{tripRisk.risk} • {tripRisk.recommendation}</div>
               </div>
               <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
                 {routeOptions.slice(0, 3).map((option) => (
@@ -513,8 +692,22 @@ export default function AppFresh() {
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>ACCIONES</div>
               <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-                <button onClick={createTripOffer} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Crear oferta</button>
-                <button onClick={requestSeat} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Solicitar cupo</button>
+                <button onClick={() => openModal({
+                  type: 'trip',
+                  title: 'Publicar oferta de viaje',
+                  accent: '#f59e0b',
+                  message: `Se publicará una nueva oferta desde ${route.origin || 'UNIAJC'} hacia ${route.destination || 'El Caney'} para la jornada ${route.time || '19:45'} con la estructura de seguridad y costos del trayecto actual.`,
+                  confirmText: 'Publicar viaje',
+                  onConfirm: confirmTripOffer,
+                })} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Crear oferta</button>
+                <button onClick={() => openModal({
+                  type: 'seat',
+                  title: 'Solicitar cupo en viaje',
+                  accent: '#60a5fa',
+                  message: `Solicitarás un asiento para ${student.name} en el trayecto sugerido. El sistema confirmará la compatibilidad, punto de encuentro y seguridad del conductor.`,
+                  confirmText: 'Solicitar cupo',
+                  onConfirm: confirmSeatRequest,
+                })} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Solicitar cupo</button>
                 <button onClick={calculateTravelCost} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Calcular costo</button>
               </div>
               <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{tripFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(245,158,11,.12)', color: '#fef3c7' }}>{f}</span>)}</div>
@@ -549,9 +742,30 @@ export default function AppFresh() {
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>EMERGENCIA</div>
               <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-                <button onClick={activatePanic} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
-                <button onClick={confirmSafeArrival} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Confirmar llegada segura</button>
-                <button onClick={monitorGeographicFence} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Monitorear geocerca</button>
+                <button onClick={() => openModal({
+                  type: 'panic',
+                  title: 'Botón de pánico activo',
+                  accent: '#ef4444',
+                  message: `Se activará la alerta de seguridad para ${student.name}. El sistema enviará aviso a contacto de confianza, autoridades y grupos cercanos para activar apoyo inmediato.`,
+                  confirmText: 'Activar SOS',
+                  onConfirm: confirmEmergency,
+                })} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
+                <button onClick={() => openModal({
+                  type: 'arrival',
+                  title: 'Confirmar llegada segura',
+                  accent: '#10b981',
+                  message: `El sistema registrará la llegada segura de ${student.name} y enviará confirmación al grupo, contacto de confianza y panel de seguridad.`,
+                  confirmText: 'Confirmar salida',
+                  onConfirm: confirmArrival,
+                })} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Confirmar llegada segura</button>
+                <button onClick={() => openModal({
+                  type: 'geo',
+                  title: 'Monitoreo geográfico',
+                  accent: '#60a5fa',
+                  message: 'Se revisará la ruta, geocerca y desviaciones del trayecto para validar que el viaje sigue dentro de los parámetros seguros.',
+                  confirmText: 'Revisar geocerca',
+                  onConfirm: monitorGeographicFence,
+                })} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Monitorear geocerca</button>
               </div>
               <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{safetyFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(239,68,68,.12)', color: '#fecaca' }}>{f}</span>)}</div>
             </div>
