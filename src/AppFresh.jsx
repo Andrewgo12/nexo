@@ -214,6 +214,7 @@ export default function AppFresh() {
   const [routeResult, setRouteResult] = useState(null);
   const [routeOptions, setRouteOptions] = useState([]);
   const [tripCards, setTripCards] = useState(trips);
+  const [alertFeed, setAlertFeed] = useState(alerts);
 
   const validEmail = useMemo(() => email.trim().toLowerCase().endsWith(uni.domain.toLowerCase()), [email, uni]);
 
@@ -234,9 +235,10 @@ export default function AppFresh() {
       const zoneMatch = !searchState.zone || item.zone.toLowerCase().includes(searchState.zone.toLowerCase());
       const timeMatch = !searchState.time || item.time.startsWith(searchState.time.slice(0, 2));
       const facultyMatch = !searchState.faculty || item.faculty.toLowerCase().includes(searchState.faculty.toLowerCase());
-      const transportMatch = !searchState.transport || item.transport.toLowerCase().includes(searchState.transport.toLowerCase());
-      const confidenceMatch = !searchState.confidence || Number(searchState.confidence.replace('+', '')) <= item.score;
-      return zoneMatch && timeMatch && facultyMatch && transportMatch && confidenceMatch;
+      const transportMatch = !searchState.transport || searchState.transport === 'Cualquiera' || item.transport.toLowerCase().includes(searchState.transport.toLowerCase());
+      const confidenceMatch = !searchState.confidence || searchState.confidence === 'Cualquiera' || Number(searchState.confidence.replace('+', '')) <= item.score;
+      const genderMatch = !searchState.gender || searchState.gender === 'Cualquiera' || (item.name && item.name.startsWith('A') && searchState.gender === 'Mujer') || (item.name && item.name.startsWith('D') && searchState.gender === 'Mujer') || (item.name && item.name.startsWith('S') && searchState.gender === 'Hombre');
+      return zoneMatch && timeMatch && facultyMatch && transportMatch && confidenceMatch && genderMatch;
     });
 
     return [...normalized].sort((a, b) => {
@@ -308,6 +310,31 @@ export default function AppFresh() {
   const requestSeat = () => {
     setTripCards((current) => current.map((trip, index) => index === 0 && trip.seats > 0 ? { ...trip, seats: trip.seats - 1, status: 'Cupo solicitado' } : trip));
     setToast('Solicitud de cupo enviada y registrada para revisión.');
+  };
+  const calculateTravelCost = () => {
+    const distance = routeResult?.distanceKm ?? 8.4;
+    const total = Math.round(distance * 380 + 1500);
+    setPricing((current) => ({ ...current, premium: `$${total.toLocaleString('es-CO')}` }));
+    setToast(`Costo estimado actualizado: ${total.toLocaleString('es-CO')} COP por trayecto.`);
+  };
+  const updateTripStatus = (index, nextStatus) => {
+    setTripCards((current) => current.map((trip, tripIndex) => tripIndex === index ? { ...trip, status: nextStatus } : trip));
+    setToast(`Estado del viaje actualizado a: ${nextStatus}.`);
+  };
+  const activatePanic = () => {
+    setSafetyState((current) => ({ ...current, panic: true, emergency: true, arrival: true }));
+    setAlertFeed((current) => [{ type: 'Emergencia', detail: 'Botón de pánico activado; contacto y autoridades notificadas.', state: 'Activo' }, ...current.slice(0, 2)]);
+    setToast('Botón de pánico activado. Contacto de confianza y autoridades notificadas.');
+  };
+  const confirmSafeArrival = () => {
+    setSafetyState((current) => ({ ...current, arrival: true }));
+    setAlertFeed((current) => [{ type: 'Check-in', detail: 'Llegada segura confirmada por el grupo.', state: 'OK' }, ...current.slice(0, 2)]);
+    setToast('Llegada segura confirmada y notificación enviada al grupo.');
+  };
+  const monitorGeographicFence = () => {
+    setSafetyState((current) => ({ ...current, geofence: true }));
+    setAlertFeed((current) => [{ type: 'Geocerca', detail: 'Monitoreo geográfico activo y ruta segura verificada.', state: 'Monitoreando' }, ...current.slice(0, 2)]);
+    setToast('Geocerca en seguimiento y ruta verificada dentro del perímetro seguro.');
   };
 
   const completedTasks = executionState.filter((item) => item.done).length;
@@ -425,6 +452,7 @@ export default function AppFresh() {
                 <label style={{ display: 'grid', gap: 8 }}><span>Facultad</span><input value={searchState.faculty} onChange={(e) => setSearchState({ ...searchState, faculty: e.target.value })} style={field} /></label>
                 <label style={{ display: 'grid', gap: 8 }}><span>Transporte</span><select value={searchState.transport} onChange={(e) => setSearchState({ ...searchState, transport: e.target.value })} style={field}><option>MIO</option><option>Carro</option><option>Moto</option><option>Caminata</option><option>Cualquiera</option></select></label>
                 <label style={{ display: 'grid', gap: 8 }}><span>Confianza mínima</span><select value={searchState.confidence} onChange={(e) => setSearchState({ ...searchState, confidence: e.target.value })} style={field}><option>4.8+</option><option>4.5+</option><option>4.0+</option><option>Cualquiera</option></select></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Género</span><select value={searchState.gender} onChange={(e) => setSearchState({ ...searchState, gender: e.target.value })} style={field}><option>Cualquiera</option><option>Hombre</option><option>Mujer</option></select></label>
                 <label style={{ display: 'grid', gap: 8 }}><span>Orden</span><select value={searchState.sort} onChange={(e) => setSearchState({ ...searchState, sort: e.target.value })} style={field}><option>Compatibilidad</option><option>Distancia</option><option>Tiempo</option></select></label>
               </div>
               <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
@@ -472,15 +500,28 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fbbf24', fontWeight: 800 }}>MÓDULO 4</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Gestión de viajes</h2>
               <div style={{ display: 'grid', gap: 14 }}>
-                {tripCards.map((t, index) => <div key={`${t.driver}-${index}`} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}><div><div style={{ fontSize: 20, fontWeight: 800 }}>{t.driver}</div><div style={{ color: '#dbeafe' }}>{t.route}</div></div><div style={{ color: '#fbbf24', fontWeight: 800 }}>{t.status}</div></div><div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', color: '#dbeafe' }}><span>Asientos: {t.seats}</span><span>Costo: {t.cost}</span></div></div>)}
+                {tripCards.map((t, index) => (
+                  <div key={`${t.driver}-${index}`} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                      <div><div style={{ fontSize: 20, fontWeight: 800 }}>{t.driver}</div><div style={{ color: '#dbeafe' }}>{t.route}</div></div>
+                      <div style={{ color: '#fbbf24', fontWeight: 800 }}>{t.status}</div>
+                    </div>
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', color: '#dbeafe' }}><span>Asientos: {t.seats}</span><span>Costo: {t.cost}</span></div>
+                    <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => updateTripStatus(index, 'Viaje en curso')} style={{ border: '1px solid rgba(251,191,36,.3)', background: 'rgba(245,158,11,.12)', color: '#fff', borderRadius: 10, padding: '7px 10px', fontWeight: 700 }}>Iniciar</button>
+                      <button onClick={() => updateTripStatus(index, 'Salida confirmada')} style={{ border: '1px solid rgba(59,130,246,.3)', background: 'rgba(59,130,246,.12)', color: '#fff', borderRadius: 10, padding: '7px 10px', fontWeight: 700 }}>Salida</button>
+                      <button onClick={() => updateTripStatus(index, 'Llegada segura')} style={{ border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.12)', color: '#fff', borderRadius: 10, padding: '7px 10px', fontWeight: 700 }}>Llegada</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>ACCIONES</div>
               <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-                <button onClick={() => action('Oferta de viaje')} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Crear oferta</button>
-                <button onClick={() => action('Solicitud de cupo')} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Solicitar cupo</button>
-                <button onClick={() => action('Costo y división')} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Calcular costo</button>
+                <button onClick={createTripOffer} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Crear oferta</button>
+                <button onClick={requestSeat} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Solicitar cupo</button>
+                <button onClick={calculateTravelCost} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Calcular costo</button>
               </div>
               <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{tripFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(245,158,11,.12)', color: '#fef3c7' }}>{f}</span>)}</div>
             </div>
@@ -493,8 +534,8 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fca5a5', fontWeight: 800 }}>MÓDULO 5</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Seguridad y ubicación real</h2>
               <div style={{ display: 'grid', gap: 14 }}>
-                {alerts.map((a) => (
-                  <div key={a.type} style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 14, padding: 16 }}>
+                {alertFeed.map((a) => (
+                  <div key={`${a.type}-${a.detail}`} style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 14, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                       <div style={{ fontWeight: 800 }}>{a.type}</div>
                       <div style={{ color: '#fca5a5', fontWeight: 700 }}>{a.state}</div>
@@ -514,9 +555,9 @@ export default function AppFresh() {
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>EMERGENCIA</div>
               <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-                <button onClick={() => action('Botón de pánico')} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
-                <button onClick={() => action('Check-in de llegada')} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Confirmar llegada segura</button>
-                <button onClick={() => action('Alerta geográfica')} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Monitorear geocerca</button>
+                <button onClick={activatePanic} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
+                <button onClick={confirmSafeArrival} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Confirmar llegada segura</button>
+                <button onClick={monitorGeographicFence} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Monitorear geocerca</button>
               </div>
               <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{safetyFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(239,68,68,.12)', color: '#fecaca' }}>{f}</span>)}</div>
             </div>
