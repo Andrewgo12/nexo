@@ -163,6 +163,13 @@ export default function AppFresh() {
     { name: 'Daniela Carmona', zone: 'El Caney', time: '19:50', faculty: 'Ingeniería', transport: 'MIO', score: 92, safety: 'Alta' },
     { name: 'Santiago Rojas', zone: 'Pance', time: '20:10', faculty: 'Diseño', transport: 'Carro', score: 86, safety: 'Media' },
   ]);
+  const [notifications, setNotifications] = useState([
+    { title: 'Salida en 15 min', channel: 'Push', active: true },
+    { title: 'Check-in de llegada pendiente', channel: 'SMS', active: true },
+    { title: 'Cambio de ruta detectado', channel: 'Alerta', active: false },
+    { title: 'Contacto de confianza notificado', channel: 'WhatsApp', active: true },
+  ]);
+  const [advancedMode, setAdvancedMode] = useState({ night: true, safeties: true, hotspots: true, recommendations: true });
 
   const validEmail = useMemo(() => email.trim().toLowerCase().endsWith(uni.domain.toLowerCase()), [email, uni]);
 
@@ -198,6 +205,14 @@ export default function AppFresh() {
   };
 
   const action = (label) => setToast(`${label} ejecutado correctamente. Contacto de confianza y autoridades notificadas.`);
+  const toggleNotification = (index) => {
+    setNotifications((current) => current.map((item, idx) => idx === index ? { ...item, active: !item.active } : item));
+    setToast('Recordatorio actualizado correctamente.');
+  };
+  const toggleAdvancedFeature = (key) => {
+    setAdvancedMode((current) => ({ ...current, [key]: !current[key] }));
+    setToast('Configuración de recomendación avanzada actualizada.');
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#020b10', color: 'white', fontFamily: 'Inter, sans-serif' }}>
@@ -496,8 +511,14 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f59e0b', fontWeight: 800 }}>MÓDULO 11</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Notificaciones y recordatorios</h2>
               <div style={{ display: 'grid', gap: 12 }}>
-                {['Salida en 15 min', 'Check-in de llegada pendiente', 'Cambio de ruta detectado', 'Contacto de confianza notificado'].map((msg) => (
-                  <div key={msg} style={{ background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 12, padding: 12 }}>{msg}</div>
+                {notifications.map((item, index) => (
+                  <div key={item.title} style={{ background: item.active ? 'rgba(245,158,11,.08)' : 'rgba(148,163,184,.08)', border: `1px solid ${item.active ? 'rgba(245,158,11,.25)' : 'rgba(148,163,184,.25)'}`, borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{item.title}</div>
+                      <div style={{ color: '#dbeafe', fontSize: 12, marginTop: 4 }}>{item.channel}</div>
+                    </div>
+                    <button onClick={() => toggleNotification(index)} style={{ background: item.active ? 'rgba(245,158,11,.18)' : 'rgba(15,23,42,.9)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 10, color: '#fff', padding: '8px 12px', fontWeight: 700 }}>{item.active ? 'Desactivar' : 'Activar'}</button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -514,13 +535,22 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#a3e635', fontWeight: 800 }}>MÓDULO 12</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Funcionalidades avanzadas</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
-                <Metric label='Modo nocturno' value='Activo' color='#a3e635' />
+                <Metric label='Modo nocturno' value={advancedMode.night ? 'Activo' : 'Inactivo'} color='#a3e635' />
                 <Metric label='Puntos seguros' value='17' color='#bef264' />
                 <Metric label='Hotspots' value='5' color='#65a30d' />
                 <Metric label='Uniones frecuentes' value='12' color='#4ade80' />
               </div>
-              <div style={{ marginTop: 20, background: 'rgba(163,230,53,.08)', border: '1px solid rgba(163,230,53,.22)', borderRadius: 14, padding: 16, color: '#ecfccb' }}>
-                Recomendación inteligente: prioriza rutas más seguras y sugerencias de horarios a partir de patrones de salida y frecuencia de viajes del estudiante.
+              <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
+                {Object.entries({
+                  night: 'activarModoNocturno()',
+                  safeties: 'sugerirRutasMasSeguras()',
+                  hotspots: 'mostrarHotspotsDeViaje()',
+                  recommendations: 'recomendarMejorHorario()',
+                }).map(([key, value]) => (
+                  <button key={key} onClick={() => toggleAdvancedFeature(key)} style={{ border: advancedMode[key] ? '1px solid rgba(163,230,53,.4)' : '1px solid rgba(148,163,184,.2)', background: advancedMode[key] ? 'rgba(163,230,53,.12)' : 'rgba(15,23,42,.8)', borderRadius: 12, padding: '12px 14px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>
+                    {value} • {advancedMode[key] ? 'ON' : 'OFF'}
+                  </button>
+                ))}
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
