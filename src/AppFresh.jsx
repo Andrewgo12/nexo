@@ -170,6 +170,9 @@ export default function AppFresh() {
     { title: 'Contacto de confianza notificado', channel: 'WhatsApp', active: true },
   ]);
   const [advancedMode, setAdvancedMode] = useState({ night: true, safeties: true, hotspots: true, recommendations: true });
+  const [safetyState, setSafetyState] = useState({ panic: false, geofence: true, emergency: true, arrival: false });
+  const [adminState, setAdminState] = useState({ users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
+  const [pricing, setPricing] = useState({ premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
 
   const validEmail = useMemo(() => email.trim().toLowerCase().endsWith(uni.domain.toLowerCase()), [email, uni]);
 
@@ -212,6 +215,14 @@ export default function AppFresh() {
   const toggleAdvancedFeature = (key) => {
     setAdvancedMode((current) => ({ ...current, [key]: !current[key] }));
     setToast('Configuración de recomendación avanzada actualizada.');
+  };
+  const toggleSafetyFeature = (key) => {
+    setSafetyState((current) => ({ ...current, [key]: !current[key] }));
+    setToast('Estado de seguridad actualizado.');
+  };
+  const toggleInsurance = () => {
+    setPricing((current) => ({ ...current, insured: !current.insured }));
+    setToast('Cobertura de seguro actualizada.');
   };
 
   return (
@@ -384,7 +395,22 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fca5a5', fontWeight: 800 }}>MÓDULO 5</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Seguridad y ubicación real</h2>
               <div style={{ display: 'grid', gap: 14 }}>
-                {alerts.map((a) => <div key={a.type} style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 14, padding: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><div style={{ fontWeight: 800 }}>{a.type}</div><div style={{ color: '#fca5a5', fontWeight: 700 }}>{a.state}</div></div><div style={{ marginTop: 6, color: '#fecaca' }}>{a.detail}</div></div>)}
+                {alerts.map((a) => (
+                  <div key={a.type} style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 14, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontWeight: 800 }}>{a.type}</div>
+                      <div style={{ color: '#fca5a5', fontWeight: 700 }}>{a.state}</div>
+                    </div>
+                    <div style={{ marginTop: 6, color: '#fecaca' }}>{a.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
+                {Object.entries({ panic: 'Botón de pánico', geofence: 'Geocerca activa', emergency: 'Modo emergencia', arrival: 'Check-in de llegada' }).map(([key, label]) => (
+                  <button key={key} onClick={() => toggleSafetyFeature(key)} style={{ border: safetyState[key] ? '1px solid rgba(239,68,68,.5)' : '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: safetyState[key] ? 'rgba(239,68,68,.12)' : 'rgba(15,23,42,.8)', color: '#fff', padding: '12px 16px', fontWeight: 800, textAlign: 'left' }}>
+                    {label} • {safetyState[key] ? 'ON' : 'OFF'}
+                  </button>
+                ))}
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
@@ -405,7 +431,7 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 6</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Administración, analytics y moderación</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(160px,1fr))', gap: 16 }}>
-                {kpis.map(([label, value]) => <div key={label} style={{ background: 'rgba(139,92,246,.08)', border: '1px solid rgba(196,181,253,.3)', borderRadius: 14, padding: 18 }}><div style={{ color: '#d8b4fe', fontWeight: 700 }}>{label}</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 8 }}>{value}</div></div>)}
+                {Object.entries(adminState).map(([label, value]) => <div key={label} style={{ background: 'rgba(139,92,246,.08)', border: '1px solid rgba(196,181,253,.3)', borderRadius: 14, padding: 18 }}><div style={{ color: '#d8b4fe', fontWeight: 700 }}>{label}</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 8 }}>{value}</div></div>)}
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
@@ -444,14 +470,15 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#5eead4', fontWeight: 800 }}>MÓDULO 8</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Pago y seguro por trayecto</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
-                <Metric label='Prima estimada' value='$4.800' color='#5eead4' />
-                <Metric label='Cobertura activa' value='98.3%' color='#34d399' />
-                <Metric label='Pago realizado' value='OK' color='#fbbf24' />
-                <Metric label='Claim pendiente' value='0' color='#fca5a5' />
+                <Metric label='Prima estimada' value={pricing.premium} color='#5eead4' />
+                <Metric label='Cobertura activa' value={pricing.coverage} color='#34d399' />
+                <Metric label='Pago realizado' value={pricing.insured ? 'OK' : 'Pendiente'} color='#fbbf24' />
+                <Metric label='Claim pendiente' value={pricing.claim} color='#fca5a5' />
               </div>
               <div style={{ marginTop: 20, background: 'rgba(45,212,191,.06)', border: '1px solid rgba(45,212,191,.2)', borderRadius: 14, padding: 16, color: '#ccfbf1' }}>
                 Seguro de viaje activo para el trayecto UNIAJC → El Caney. Cobertura por asistencia, soporte y alertas de emergencia incluida.
               </div>
+              <div style={{ marginTop: 18 }}><button onClick={toggleInsurance} style={{ border: '1px solid rgba(45,212,191,.4)', borderRadius: 12, background: pricing.insured ? 'rgba(45,212,191,.12)' : 'rgba(15,23,42,.8)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>{pricing.insured ? 'Desactivar cobertura' : 'Activar cobertura'}</button></div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>MONETIZACIÓN</div>
