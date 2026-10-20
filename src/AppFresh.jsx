@@ -140,6 +140,19 @@ const roadmapPhases = [
   { phase: 'Fase 4 - Escala', title: 'Integraciones reales y backend productivo', detail: 'GTFS real, mapas externos, persistencia, colas, observabilidad y seguridad de producción.', status: 'Futuro' },
 ];
 
+const executionChecklist = [
+  { id: 'domain-validation', label: 'Validar dominio universitario y perfil del estudiante', done: true },
+  { id: 'route-fallback', label: 'Calcular ruta principal con fallback a OpenStreetMap/OSRM', done: true },
+  { id: 'search-filter', label: 'Buscar viajes por zona, horario y facultad con filtros', done: true },
+  { id: 'match-score', label: 'Asignar puntaje de compatibilidad por zona, ruta y confianza', done: true },
+  { id: 'trip-management', label: 'Crear oferta, aceptar pasajero y cerrar trayecto', done: true },
+  { id: 'safety-alerts', label: 'Mantener geocerca, botones de emergencia y alertas de llegada', done: true },
+  { id: 'payment-coverage', label: 'Cobrar por trayecto y activar seguro con cobertura', done: true },
+  { id: 'analytics-ops', label: 'Monitorear métricas, logs y salud del sistema', done: false },
+  { id: 'backend-sync', label: 'Sincronizar GTFS y caché de rutas en backend real', done: false },
+  { id: 'prod-hardening', label: 'Cuarentena de producción, auditoría y escalamiento', done: false },
+];
+
 const initialStudent = { name: 'Kevin González', email: 'kevin.gonzalez@uniajc.edu.co', career: 'Ingeniería de Sistemas', semester: '8vo Semestre', shift: 'Nocturna', neighborhood: 'El Caney', transport: 'MIO + caminata', emergency: 'María González', privacy: 'Zona aproximada' };
 
 const matches = [
@@ -190,6 +203,7 @@ export default function AppFresh() {
   const [safetyState, setSafetyState] = useState({ panic: false, geofence: true, emergency: true, arrival: false });
   const [adminState, setAdminState] = useState({ users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
   const [pricing, setPricing] = useState({ premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
+  const [executionState, setExecutionState] = useState(executionChecklist);
 
   const validEmail = useMemo(() => email.trim().toLowerCase().endsWith(uni.domain.toLowerCase()), [email, uni]);
 
@@ -241,6 +255,12 @@ export default function AppFresh() {
     setPricing((current) => ({ ...current, insured: !current.insured }));
     setToast('Cobertura de seguro actualizada.');
   };
+  const toggleExecutionTask = (id) => {
+    setExecutionState((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
+    setToast('Estado del checklist actualizado.');
+  };
+
+  const completedTasks = executionState.filter((item) => item.done).length;
 
   return (
     <div style={{ minHeight: '100vh', background: '#020b10', color: 'white', fontFamily: 'Inter, sans-serif' }}>
@@ -662,6 +682,18 @@ export default function AppFresh() {
                   <div style={{ fontWeight: 800 }}>Pendientes reales</div>
                   <div style={{ marginTop: 4, color: '#dbeafe' }}>Escala, integración con APIs de producción, persistencia y automatización avanzada.</div>
                 </div>
+                <div style={{ background: 'rgba(245,158,11,.09)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800 }}>Checklist operativo</div>
+                  <div style={{ marginTop: 4, color: '#fef3c7' }}>{completedTasks}/{executionState.length} tareas completadas del plan de ejecución.</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 18, display: 'grid', gap: 10 }}>
+                {executionState.map((task) => (
+                  <button key={task.id} onClick={() => toggleExecutionTask(task.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, background: task.done ? 'rgba(52,211,153,.08)' : 'rgba(15,23,42,.7)', border: `1px solid ${task.done ? 'rgba(52,211,153,.35)' : 'rgba(148,163,184,.2)'}`, borderRadius: 12, padding: '12px 14px', color: '#fff', textAlign: 'left' }}>
+                    <span>{task.label}</span>
+                    <span style={{ fontWeight: 800, color: task.done ? '#86efac' : '#fbbf24' }}>{task.done ? 'OK' : 'PEND'}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </section>
