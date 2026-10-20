@@ -1,6 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { BUSINESS_MODULES } from './data/businessModules';
 import { getOsrmRoute, searchAddressNominatim, calculateMultimodalDetails } from './services/routingApi';
+import {
+  validateInstitutionalEmail,
+  createStudentProfile,
+  filterTravelMatches,
+  createTravelOffer,
+  requestTripSeat,
+  calculateTripCost,
+  createEmergencyAlert,
+  updateTravelStatus,
+  buildRouteSummary,
+  buildTravelSearchCandidates,
+  buildSafetyOverview,
+  buildDashboardSnapshot,
+  buildMatchRecommendations
+} from './services/viajauCore';
 
 const modules = [
   { key: 'auth', title: '1. Usuarios y validación institucional', color: '#34d399' },
@@ -196,9 +211,9 @@ export default function AppFresh() {
   const [route, setRoute] = useState({ origin: 'UNIAJC Sede Sur', destination: 'El Caney', mode: 'MIO + caminata', time: '9:45 PM' });
   const [searchState, setSearchState] = useState({ zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO', confidence: '4.8+', gender: 'Cualquiera', sort: 'Compatibilidad' });
   const [searchResults, setSearchResults] = useState([
-    { name: 'Ana Vélez', zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO + caminata', score: 96, safety: 'Alta' },
-    { name: 'Daniela Carmona', zone: 'El Caney', time: '19:50', faculty: 'Ingeniería', transport: 'MIO', score: 92, safety: 'Alta' },
-    { name: 'Santiago Rojas', zone: 'Pance', time: '20:10', faculty: 'Diseño', transport: 'Carro', score: 86, safety: 'Media' },
+    { name: 'Ana Vélez', zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO + caminata', score: 96, safety: 'Alta', gender: 'Mujer' },
+    { name: 'Daniela Carmona', zone: 'El Caney', time: '19:50', faculty: 'Ingeniería', transport: 'MIO', score: 92, safety: 'Alta', gender: 'Mujer' },
+    { name: 'Santiago Rojas', zone: 'Pance', time: '20:10', faculty: 'Diseño', transport: 'Carro', score: 86, safety: 'Media', gender: 'Hombre' },
   ]);
   const [notifications, setNotifications] = useState([
     { title: 'Salida en 15 min', channel: 'Push', active: true },
@@ -216,44 +231,25 @@ export default function AppFresh() {
   const [tripCards, setTripCards] = useState(trips);
   const [alertFeed, setAlertFeed] = useState(alerts);
 
-  const validEmail = useMemo(() => email.trim().toLowerCase().endsWith(uni.domain.toLowerCase()), [email, uni]);
+  const validEmail = useMemo(() => validateInstitutionalEmail(email, uni.domain), [email, uni]);
 
   const summary = useMemo(() => {
     if (routeResult) {
-      return {
-        duration: `${routeResult.durationMin} min`,
-        distance: `${routeResult.distanceKm} km`,
-        safety: routeResult.durationMin <= 20 ? '94/100' : routeResult.distanceKm > 10 ? '88/100' : '91/100'
-      };
+      return buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult });
     }
     const mins = route.mode === 'Moto' ? 18 : route.mode === 'Carro' ? 24 : route.mode === 'Bicicleta' ? 30 : 35;
     return { duration: `${mins + (route.mode.includes('caminata') ? 12 : 0)} min`, distance: route.mode === 'Moto' ? '5.8 km' : route.mode === 'Carro' ? '7.1 km' : '6.4 km', safety: route.mode === 'Moto' ? '78/100' : '90/100' };
   }, [route, routeResult]);
 
-  const filteredResults = useMemo(() => {
-    const normalized = [...searchResults].filter((item) => {
-      const zoneMatch = !searchState.zone || item.zone.toLowerCase().includes(searchState.zone.toLowerCase());
-      const timeMatch = !searchState.time || item.time.startsWith(searchState.time.slice(0, 2));
-      const facultyMatch = !searchState.faculty || item.faculty.toLowerCase().includes(searchState.faculty.toLowerCase());
-      const transportMatch = !searchState.transport || searchState.transport === 'Cualquiera' || item.transport.toLowerCase().includes(searchState.transport.toLowerCase());
-      const confidenceMatch = !searchState.confidence || searchState.confidence === 'Cualquiera' || Number(searchState.confidence.replace('+', '')) <= item.score;
-      const genderMatch = !searchState.gender || searchState.gender === 'Cualquiera' || (item.name && item.name.startsWith('A') && searchState.gender === 'Mujer') || (item.name && item.name.startsWith('D') && searchState.gender === 'Mujer') || (item.name && item.name.startsWith('S') && searchState.gender === 'Hombre');
-      return zoneMatch && timeMatch && facultyMatch && transportMatch && confidenceMatch && genderMatch;
-    });
-
-    return [...normalized].sort((a, b) => {
-      if (searchState.sort === 'Distancia') return a.score - b.score;
-      if (searchState.sort === 'Tiempo') return a.time.localeCompare(b.time);
-      return b.score - a.score;
-    });
-  }, [searchResults, searchState]);
+  const filteredResults = useMemo(() => filterTravelMatches(searchState, searchResults), [searchResults, searchState]);
 
   const register = () => {
     if (!validEmail) {
       setToast('Error: el correo no pertenece al dominio universitario seleccionado.');
       return;
     }
-    setStudent({ ...student, email, privacy });
+    const profile = createStudentProfile({ ...student, email, privacy, university: uni.name, emergency: student.emergency, neighborhood: student.neighborhood });
+    setStudent(profile);
     setToast('Registro universitario validado correctamente y perfil creado.');
   };
 
@@ -265,14 +261,17 @@ export default function AppFresh() {
       const destinationCoords = destinationResults[0] ? [destinationResults[0].lat, destinationResults[0].lng] : [3.378, -76.524];
       const routeMode = route.mode.toLowerCase().includes('mio') ? 'mio' : route.mode.toLowerCase().includes('carro') ? 'car' : route.mode.toLowerCase().includes('moto') ? 'moto' : route.mode.toLowerCase().includes('bici') ? 'bike' : route.mode.toLowerCase().includes('taxi') ? 'taxi' : 'walk';
       const result = await getOsrmRoute(originCoords, destinationCoords, routeMode);
+      const summary = buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult: result });
       setRouteResult(result);
       setRouteOptions(calculateMultimodalDetails(result?.distanceKm ?? 8));
-      setToast(`Ruta recalculada con ${result?.source ?? 'fallback local'} y modo ${routeMode.toUpperCase()}.`);
+      setToast(`Ruta recalculada con ${result?.source ?? 'fallback local'} y modo ${routeMode.toUpperCase()}. ${summary.distance} / ${summary.duration}.`);
     } catch {
       setToast('No fue posible recalcular la ruta en este momento; se aplicó una estimación local segura.');
       const fallback = { distanceKm: 8.6, durationMin: 26, source: 'Fallback local' };
+      const summary = buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult: fallback });
       setRouteResult(fallback);
       setRouteOptions(calculateMultimodalDetails(8.6));
+      setToast(`Ruta estimada segura: ${summary.distance} / ${summary.duration}.`);
     }
   };
 
@@ -298,32 +297,27 @@ export default function AppFresh() {
     setToast('Estado del checklist actualizado.');
   };
   const createTripOffer = () => {
-    setTripCards((current) => [{
-      driver: student.name,
-      route: `${route.origin || 'UNIAJC'} → ${route.destination || 'El Caney'}`,
-      seats: 2,
-      cost: '2500 COP',
-      status: 'Oferta nueva'
-    }, ...current]);
+    const offer = createTravelOffer(student, route);
+    setTripCards((current) => [offer, ...current]);
     setToast('Oferta de viaje creada y publicada para el grupo adecuado.');
   };
   const requestSeat = () => {
-    setTripCards((current) => current.map((trip, index) => index === 0 && trip.seats > 0 ? { ...trip, seats: trip.seats - 1, status: 'Cupo solicitado' } : trip));
+    setTripCards((current) => requestTripSeat(current, 0));
     setToast('Solicitud de cupo enviada y registrada para revisión.');
   };
   const calculateTravelCost = () => {
-    const distance = routeResult?.distanceKm ?? 8.4;
-    const total = Math.round(distance * 380 + 1500);
-    setPricing((current) => ({ ...current, premium: `$${total.toLocaleString('es-CO')}` }));
-    setToast(`Costo estimado actualizado: ${total.toLocaleString('es-CO')} COP por trayecto.`);
+    const { premium } = calculateTripCost(routeResult?.distanceKm ?? 8.4);
+    setPricing((current) => ({ ...current, premium }));
+    setToast(`Costo estimado actualizado: ${premium} por trayecto.`);
   };
   const updateTripStatus = (index, nextStatus) => {
-    setTripCards((current) => current.map((trip, tripIndex) => tripIndex === index ? { ...trip, status: nextStatus } : trip));
+    setTripCards((current) => updateTravelStatus(current, index, nextStatus));
     setToast(`Estado del viaje actualizado a: ${nextStatus}.`);
   };
   const activatePanic = () => {
     setSafetyState((current) => ({ ...current, panic: true, emergency: true, arrival: true }));
-    setAlertFeed((current) => [{ type: 'Emergencia', detail: 'Botón de pánico activado; contacto y autoridades notificadas.', state: 'Activo' }, ...current.slice(0, 2)]);
+    const alert = createEmergencyAlert('Botón de pánico', student.name);
+    setAlertFeed((current) => [alert, ...current.slice(0, 2)]);
     setToast('Botón de pánico activado. Contacto de confianza y autoridades notificadas.');
   };
   const confirmSafeArrival = () => {
