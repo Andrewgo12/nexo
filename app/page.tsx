@@ -43,6 +43,7 @@ export default function Page() {
   const [showRoute, setShowRoute] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [showMobileNav, setShowMobileNav] = useState(false)
   const [selectedRoute, setSelectedRoute] = useState(1)
   const [joined, setJoined] = useState(false)
 
@@ -77,7 +78,7 @@ export default function Page() {
 
       <section className="content-area">
         <header className="topbar">
-          <button className="mobile-menu"><Menu /></button>
+          <button className="mobile-menu" aria-label="Abrir menú" onClick={() => setShowMobileNav(true)}><Menu /></button>
           <div className="breadcrumb"><span>ViajaU</span><ChevronRight /><strong>{activeTab === 'inicio' ? 'Inicio' : activeTab.replace('-', ' ')}</strong></div>
           <div className="top-actions">
             <button className="icon-btn notification-btn" aria-label="Notificaciones" onClick={() => setShowNotifications(!showNotifications)}><Bell />{!joined && <i />}</button>
@@ -87,9 +88,12 @@ export default function Page() {
           {showProfile && <div className="popover profile-popover"><button onClick={() => setActiveTab('perfil')}><UserRound /> Mi perfil</button><button onClick={() => setActiveTab('seguridad')}><ShieldCheck /> Centro de seguridad</button><button className="logout" onClick={() => setShowLogin(true)}><LogIn /> Cerrar sesión</button></div>}
         </header>
 
+        {showMobileNav && <div className="mobile-nav-backdrop" onClick={() => setShowMobileNav(false)}><aside className="mobile-drawer" onClick={e => e.stopPropagation()}><div className="drawer-head"><div className="brand-lockup"><div className="brand-mark"><Navigation /></div><div><strong>Viaja<span>U</span></strong><small>Movilidad segura</small></div></div><button className="drawer-close" aria-label="Cerrar menú" onClick={() => setShowMobileNav(false)}><X /></button></div><div className="drawer-campus"><GraduationCap /><div><span>Campus conectado</span><strong>Universidad Autónoma</strong></div></div><nav className="drawer-nav" aria-label="Menú móvil"><button className={activeTab === 'inicio' ? 'active' : ''} onClick={() => { setActiveTab('inicio'); setShowMobileNav(false) }}><Home /><span>Inicio</span></button><button className={activeTab === 'mis-rutas' ? 'active' : ''} onClick={() => { setActiveTab('mis-rutas'); setShowMobileNav(false) }}><Route /><span>Mis rutas</span><b>2</b></button><button className={activeTab === 'comunidad' ? 'active' : ''} onClick={() => { setActiveTab('comunidad'); setShowMobileNav(false) }}><Users /><span>Comunidad</span></button><button className={activeTab === 'seguridad' ? 'active' : ''} onClick={() => { setActiveTab('seguridad'); setShowMobileNav(false) }}><ShieldCheck /><span>Seguridad</span></button></nav><div className="drawer-help"><CircleHelp /><span>¿Necesitas ayuda?</span><ChevronRight /></div><button className="drawer-profile" onClick={() => { setShowProfile(true); setShowMobileNav(false) }}><div className="avatar">AM</div><div><strong>Andrea Martínez</strong><span>Estudiante verificada</span></div><ChevronRight /></button></aside></div>}
+
         <div className="page-content">
           {activeTab === 'inicio' && <>
             <section className="welcome-row"><div><p className="eyebrow">Jueves, 24 de abril de 2026</p><h1>Buenas noches, Andrea <span>✦</span></h1><p className="subtitle">Tu trayecto seguro empieza aquí.</p></div><button className="primary-btn" onClick={() => setShowRoute(true)}><Plus /> Crear una ruta</button></section>
+            <div className="mobile-quick-actions"><button onClick={() => setShowRoute(true)}><Plus /> Crear ruta</button><button onClick={() => setShowNotifications(true)}><Bell /> Alertas{!joined && <i />}</button></div>
             <section className="stats-grid"><div className="stat-card"><div className="stat-icon teal"><ShieldCheck /></div><div><span>Viajes seguros</span><strong>12</strong><small><span className="up">↑ 3</span> este mes</small></div></div><div className="stat-card"><div className="stat-icon orange"><Clock3 /></div><div><span>Próximo viaje</span><strong>21:20</strong><small>En 42 minutos</small></div></div><div className="stat-card"><div className="stat-icon purple"><Users /></div><div><span>Comunidad</span><strong>248</strong><small>estudiantes activos</small></div></div></section>
             <section className="dashboard-grid">
               <div className="map-card"><div className="card-heading"><div><h2>Mapa de movilidad</h2><p>Rutas activas cerca de ti</p></div><button className="filter-btn"><SlidersHorizontal /> Filtrar</button></div><div className="map-view"><div className="map-label label-one"><MapPin /> Campus</div><div className="map-label label-two"><MapPin /> San Fernando</div><div className="map-label label-three"><MapPin /> Ciudad Jardín</div><div className="map-road road-one" /><div className="map-road road-two" /><div className="map-road road-three" /><div className="map-road road-four" /><div className="route-line route-a" /><div className="route-line route-b" /><div className="route-line route-c" /><div className="you-pin"><div className="pulse" /><LocateFixed /></div><div className="map-legend"><span><i className="legend-dot active-dot" /> Tu ubicación</span><span><i className="legend-line" /> Ruta activa</span></div><button className="locate-btn"><LocateFixed /></button></div></div>
