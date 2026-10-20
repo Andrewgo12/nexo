@@ -16,6 +16,7 @@ const modules = [
   { key: 'advanced', title: '13. Funcionalidades avanzadas', color: '#a3e635' },
   { key: 'backend', title: '14. Infraestructura y backend', color: '#fb7185' },
   { key: 'checklist', title: '15. Checklist de cumplimiento', color: '#f9a8d4' },
+  { key: 'roadmap', title: '16. Roadmap de implementación', color: '#67e8f9' },
 ];
 
 const universities = [
@@ -130,6 +131,13 @@ const completionAreas = [
   { label: 'Gestión de viajes y seguridad', progress: 100, status: 'Completado', items: 'Ofertas, aceptaciones, geocerca, notificaciones y emergencias' },
   { label: 'Pago, confianza y monetización', progress: 100, status: 'Completado', items: 'Cobros, seguros, reputación, moderación y dashboards' },
   { label: 'Infraestructura avanzada', progress: 92, status: 'Listo para producción', items: 'Logs, cache, sincronización GTFS, auditoría y monitoreo' },
+];
+
+const roadmapPhases = [
+  { phase: 'Fase 1 - MVP', title: 'Validación + matching + seguridad', detail: 'Permitir registro institucional, afinidad por zona/horario, recomendaciones y geolocalización segura.', status: 'Activo' },
+  { phase: 'Fase 2 - Operación', title: 'Viajes + pagos + notificaciones', detail: 'Publicación de viajes, cobro por trayecto, recordatorios y seguimiento de llegada.', status: 'Siguiente' },
+  { phase: 'Fase 3 - Crecimiento', title: 'Confianza + analytics + administración', detail: 'Reputación, reportes, panel administrativo y métricas de negocio.', status: 'Planeado' },
+  { phase: 'Fase 4 - Escala', title: 'Integraciones reales y backend productivo', detail: 'GTFS real, mapas externos, persistencia, colas, observabilidad y seguridad de producción.', status: 'Futuro' },
 ];
 
 const initialStudent = { name: 'Kevin González', email: 'kevin.gonzalez@uniajc.edu.co', career: 'Ingeniería de Sistemas', semester: '8vo Semestre', shift: 'Nocturna', neighborhood: 'El Caney', transport: 'MIO + caminata', emergency: 'María González', privacy: 'Zona aproximada' };
@@ -653,6 +661,40 @@ export default function AppFresh() {
                 <div style={{ background: 'rgba(59,130,246,.09)', border: '1px solid rgba(96,165,250,.25)', borderRadius: 12, padding: 14 }}>
                   <div style={{ fontWeight: 800 }}>Pendientes reales</div>
                   <div style={{ marginTop: 4, color: '#dbeafe' }}>Escala, integración con APIs de producción, persistencia y automatización avanzada.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {active === 'roadmap' && (
+          <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
+            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#67e8f9', fontWeight: 800 }}>MÓDULO 16</div>
+              <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Roadmap de implementación</h2>
+              <div style={{ display: 'grid', gap: 14 }}>
+                {roadmapPhases.map((item) => (
+                  <div key={item.phase} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 800 }}>{item.phase}</div>
+                      <div style={{ color: '#67e8f9', fontWeight: 800 }}>{item.status}</div>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 20, fontWeight: 800 }}>{item.title}</div>
+                    <div style={{ marginTop: 6, color: '#dbeafe' }}>{item.detail}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>OBJETIVO</div>
+              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+                <div style={{ background: 'rgba(103,232,249,.08)', border: '1px solid rgba(103,232,249,.25)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800 }}>Prioridad real</div>
+                  <div style={{ marginTop: 4, color: '#cffafe' }}>Alinear MVP con validación, rutas, matching y seguridad antes de escalar a monetización e infraestructura.</div>
+                </div>
+                <div style={{ background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.25)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontWeight: 800 }}>Criterio de éxito</div>
+                  <div style={{ marginTop: 4, color: '#dcfce7' }}>Que la app pueda conectar estudiantes reales por barrio, horario y ruta con confianza y vigilancia mínima.</div>
                 </div>
               </div>
             </div>
