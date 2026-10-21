@@ -12,6 +12,20 @@ import {
   getCurrentAccount,
   getTravelMatches,
   getTravelOffers,
+  getAdminDashboard,
+  getAdminUsers,
+  updateAdminUser,
+  getAdminIncidents,
+  getInstitutionalCatalog,
+  createInstitutionalCatalogEntry,
+  deactivateInstitutionalCatalogEntry,
+  importTransitFeed,
+  getLatestTransitFeed,
+  getMyReputation,
+  getAdminReports,
+  submitTripReview,
+  submitTripReport,
+  moderateAdminReport,
   getMyTrips,
   createTripCheckIn,
   publishTravelOffer,
@@ -47,8 +61,7 @@ import {
   calculateTravelReadiness,
   buildDashboardMetrics,
   buildSafetyMatrix,
-  getRouteModeKey,
-  buildTrustSummary
+  getRouteModeKey
 } from './services/viajauCore';
 
 const modules = [
@@ -108,18 +121,22 @@ const matchFns = [
   'compararTransportePreferido()', 'explicarPuntajeCoincidencia()', 'ordenarRecomendaciones()'
 ];
 
-const adminFns = [
-  'registrarUniversidad()', 'registrarSede()', 'gestionarProgramas()', 'gestionarFacultades()', 'gestionarPeriodos()', 'gestionarRutasMIO()',
-  'importarGTFS()', 'actualizarParadas()', 'validarDatosRutas()', 'gestionarUsuarios()', 'gestionarSolicitudesVerificacion()',
-  'gestionarReportes()', 'gestionarIncidentes()', 'revisarDenuncias()', 'totalUsuariosRegistrados()', 'viajesActivos()', 'viajesCompletados()',
-  'viajesSeguros()', 'tasaDeCoincidencia()', 'tasaDeRetencion()', 'analisisPorBarrio()', 'analisisPorJornada()',
-  'cifrarDatosSensibles()', 'protegerJWT()', 'validarToken()', 'gestionarSesiones()', 'limitarIntentosLogin()', 'auditoriaAcciones()', 'generarLogsSeguridad()'
+const adminChecklist = [
+  { id: '7.1', label: 'Consultar métricas reales con alcance por rol', done: true },
+  { id: '7.2', label: 'Consultar agregados por universidad, barrio y jornada', done: true },
+  { id: '7.3', label: 'Exportar métricas agregadas sin datos personales', done: true },
+  { id: '7.4', label: 'Limitar el panel institucional a su propia universidad', done: true },
+  { id: '7.5', label: 'Gestionar cuentas estudiantiles y verificación de perfiles', done: true },
+  { id: '7.6', label: 'Consultar y filtrar incidentes de seguridad', done: true },
+  { id: '7.7', label: 'Administrar sedes, facultades, programas y periodos', done: true },
+  { id: '7.8', label: 'Importar y validar paradas y rutas de un feed GTFS', done: true },
 ];
-
-const trustFns = [
-  'obtenerCalificacionUsuario()', 'calcularRatingPromedio()', 'mostrarHistorialConfiable()', 'mostrarComentarios()', 'detectarUsuariosRecurrentes()',
-  'validarCorreoUniversitario()', 'verificarEstudiante()', 'confirmarPertenencia()', 'validarFacultad()', 'validarEstudianteActiva()',
-  'revisarReportes()', 'suspenderCuenta()', 'activarInvestigacion()', 'archivarIncidente()'
+const adminUniversities = ['UNIAJC', 'Univalle', 'Javeriana Cali', 'Icesi'];
+const catalogTypes = [
+  { value: 'campus', label: 'Sede' },
+  { value: 'faculty', label: 'Facultad' },
+  { value: 'program', label: 'Programa' },
+  { value: 'period', label: 'Periodo académico' },
 ];
 
 const paymentFns = [
@@ -250,7 +267,38 @@ export default function AppFresh() {
     { title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false },
   ]);
   const [advancedMode, setAdvancedMode] = useState(persisted.advancedMode || { night: true, safeties: true, hotspots: true, recommendations: true });
-  const [adminState, setAdminState] = useState(persisted.adminState || { users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
+  const [adminDashboard, setAdminDashboard] = useState(null);
+  const [adminDashboardLoading, setAdminDashboardLoading] = useState(false);
+  const [adminDashboardError, setAdminDashboardError] = useState('');
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminUserMeta, setAdminUserMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
+  const [adminIncidents, setAdminIncidents] = useState([]);
+  const [adminIncidentMeta, setAdminIncidentMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
+  const [adminIncidentPage, setAdminIncidentPage] = useState(1);
+  const [adminIncidentStatus, setAdminIncidentStatus] = useState('all');
+  const [adminCatalog, setAdminCatalog] = useState([]);
+  const [adminSelectedUniversity, setAdminSelectedUniversity] = useState('');
+  const [adminCatalogForm, setAdminCatalogForm] = useState({ type: 'campus', name: '' });
+  const [adminUserFilters, setAdminUserFilters] = useState({ status: '', verification: '', search: '' });
+  const [adminUserSearch, setAdminUserSearch] = useState('');
+  const [adminStopsFile, setAdminStopsFile] = useState(null);
+  const [adminRoutesFile, setAdminRoutesFile] = useState(null);
+  const [adminFeedVersion, setAdminFeedVersion] = useState('');
+  const [adminLatestFeed, setAdminLatestFeed] = useState(null);
+  const [adminManagementLoading, setAdminManagementLoading] = useState(false);
+  const [adminManagementAction, setAdminManagementAction] = useState('');
+  const [adminManagementError, setAdminManagementError] = useState('');
+  const [adminManagementRefresh, setAdminManagementRefresh] = useState(0);
+  const [reputationData, setReputationData] = useState(null);
+  const [reputationLoading, setReputationLoading] = useState(false);
+  const [reputationError, setReputationError] = useState('');
+  const [reputationAction, setReputationAction] = useState('');
+  const [reputationRefresh, setReputationRefresh] = useState(0);
+  const [adminReports, setAdminReports] = useState([]);
+  const [adminReportsMeta, setAdminReportsMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
+  const [adminReportsPage, setAdminReportsPage] = useState(1);
+  const [reviewForm, setReviewForm] = useState({ trip_id: '', reviewee_profile_id: '', rating: '5', comment: '' });
+  const [reportForm, setReportForm] = useState({ trip_id: '', reported_profile_id: '', category: 'conduct', description: '' });
   const [pricing, setPricing] = useState(persisted.pricing || { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
   const [executionState, setExecutionState] = useState(persisted.executionState || executionChecklist);
   const [routeResult, setRouteResult] = useState(null);
@@ -331,7 +379,6 @@ export default function AppFresh() {
   const readiness = useMemo(() => calculateTravelReadiness(student, route), [student, route]);
   const dashboardMetrics = useMemo(() => buildDashboardMetrics(student, route, tripCards, alertFeed), [student, route, tripCards, alertFeed]);
   const safetyMatrix = useMemo(() => buildSafetyMatrix(student), [student]);
-  const trustSummary = useMemo(() => buildTrustSummary([{ rating: 4.8 }, { rating: 4.9 }, { rating: 4.7 }, { rating: 4.8 }]), []);
 
   const applyAuthenticatedUser = useCallback((user) => {
     setAuthUser(user);
@@ -407,12 +454,171 @@ export default function AppFresh() {
       searchState,
       notifications,
       advancedMode,
-      adminState,
       pricing,
       executionState,
       activeTab: active
     });
-  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, adminState, pricing, executionState, active]);
+  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, pricing, executionState, active]);
+
+  useEffect(() => {
+    const canViewAdminDashboard = active === 'admin'
+      && isLoggedIn
+      && isEmailVerified
+      && ['admin', 'university'].includes(authUser?.role);
+    if (!canViewAdminDashboard) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadDashboard = async () => {
+      setAdminDashboardLoading(true);
+      setAdminDashboardError('');
+      try {
+        const response = await getAdminDashboard(getAuthToken(), controller.signal);
+        if (!response.stats || !response.distribution) {
+          throw new Error('El servidor devolvió métricas administrativas inválidas.');
+        }
+        if (!cancelled) setAdminDashboard(response);
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setAdminDashboard(null);
+          setAdminDashboardError(error.message || 'No fue posible cargar las métricas administrativas.');
+        }
+      } finally {
+        if (!cancelled) setAdminDashboardLoading(false);
+      }
+    };
+    loadDashboard();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, authUser?.role, isEmailVerified, isLoggedIn]);
+
+  useEffect(() => {
+    if (authUser?.role === 'university' && authUser.university) {
+      setAdminSelectedUniversity(authUser.university);
+    }
+  }, [authUser?.role, authUser?.university]);
+
+  useEffect(() => {
+    if (
+      active !== 'admin'
+      || !isLoggedIn
+      || !isEmailVerified
+      || !['admin', 'university'].includes(authUser?.role)
+    ) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadAdminManagement = async () => {
+      setAdminManagementLoading(true);
+      setAdminManagementError('');
+      try {
+        const [usersResponse, incidentsResponse, catalogResponse] = await Promise.all([
+          getAdminUsers(adminUserFilters, getAuthToken(), controller.signal),
+          getAdminIncidents(adminIncidentStatus, getAuthToken(), controller.signal, adminIncidentPage),
+          authUser?.role === 'university' || adminSelectedUniversity
+            ? getInstitutionalCatalog(
+              authUser?.role === 'university' ? undefined : adminSelectedUniversity,
+              getAuthToken(),
+              controller.signal,
+            )
+            : Promise.resolve({ data: [] }),
+        ]);
+        if (!Array.isArray(usersResponse.data) || !Array.isArray(incidentsResponse.data) || !Array.isArray(catalogResponse.data)) {
+          throw new Error('El servidor devolvió datos administrativos inválidos.');
+        }
+        if (!cancelled) {
+          setAdminUsers(usersResponse.data);
+          setAdminUserMeta(usersResponse.meta);
+          setAdminIncidents(incidentsResponse.data);
+          setAdminIncidentMeta(incidentsResponse.meta);
+          setAdminCatalog(catalogResponse.data);
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setAdminManagementError(error.message || 'No fue posible cargar la gestión administrativa.');
+        }
+      } finally {
+        if (!cancelled) setAdminManagementLoading(false);
+      }
+    };
+    loadAdminManagement();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    active,
+    adminManagementRefresh,
+    adminIncidentStatus,
+    adminIncidentPage,
+    adminSelectedUniversity,
+    adminUserFilters,
+    authUser?.role,
+    isEmailVerified,
+    isLoggedIn,
+  ]);
+
+  useEffect(() => {
+    if (active !== 'trust' || !isLoggedIn || !isEmailVerified) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadReputation = async () => {
+      setReputationLoading(true);
+      setReputationError('');
+      try {
+        const [reputationResponse, reportsResponse] = await Promise.all([
+          authUser?.role === 'student'
+            ? getMyReputation(getAuthToken(), controller.signal)
+            : Promise.resolve({ data: null }),
+          authUser?.role === 'admin'
+            ? getAdminReports('open', getAuthToken(), controller.signal, adminReportsPage)
+            : Promise.resolve({ data: [] }),
+        ]);
+        if (!cancelled) {
+          setReputationData(reputationResponse.data);
+          setAdminReports(reportsResponse.data);
+          setAdminReportsMeta(reportsResponse.meta || { current_page: 1, last_page: 1, total: reportsResponse.data.length });
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setReputationError(error.message || 'No fue posible cargar la reputación y los reportes.');
+        }
+      } finally {
+        if (!cancelled) setReputationLoading(false);
+      }
+    };
+    loadReputation();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, adminReportsPage, authUser?.role, isEmailVerified, isLoggedIn, reputationRefresh]);
+
+  useEffect(() => {
+    if (active !== 'admin' || authUser?.role !== 'admin' || !isLoggedIn || !isEmailVerified) return undefined;
+    const controller = new AbortController();
+    let cancelled = false;
+    getLatestTransitFeed(getAuthToken(), controller.signal)
+      .then((response) => {
+        if (!cancelled) setAdminLatestFeed(response.data || null);
+      })
+      .catch((error) => {
+        if (!cancelled && error.name !== 'AbortError') {
+          setAdminManagementError(error.message || 'No fue posible consultar el último feed GTFS.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, adminManagementRefresh, authUser?.role, isEmailVerified, isLoggedIn]);
 
   useEffect(() => {
     if (active !== 'search' || !isLoggedIn || !isEmailVerified) return undefined;
@@ -756,6 +962,167 @@ export default function AppFresh() {
     } catch (error) {
       setToast(error.message);
     }
+  };
+
+  const hasAdminDashboardAccess = isLoggedIn
+    && isEmailVerified
+    && ['admin', 'university'].includes(authUser?.role);
+  const currentAdminDashboard = hasAdminDashboardAccess && (
+    adminDashboard?.scope?.global
+      ? authUser?.role === 'admin'
+      : authUser?.role === 'university'
+        && adminDashboard?.scope?.university === (authUser?.university || null)
+  ) ? adminDashboard : null;
+
+  const refreshAdminManagement = () => setAdminManagementRefresh((value) => value + 1);
+
+  const saveAdminUser = async (user, changes) => {
+    setAdminManagementAction(`user-${user.id}`);
+    setAdminManagementError('');
+    try {
+      await updateAdminUser(user.id, changes);
+      refreshAdminManagement();
+      setToast('Cuenta estudiantil actualizada.');
+    } catch (error) {
+      setAdminManagementError(error.message || 'No fue posible actualizar la cuenta.');
+    } finally {
+      setAdminManagementAction('');
+    }
+  };
+
+  const createAdminCatalogEntry = async (event) => {
+    event.preventDefault();
+    setAdminManagementAction('catalog');
+    setAdminManagementError('');
+    try {
+      await createInstitutionalCatalogEntry({
+        ...(authUser?.role === 'admin' ? { university: adminSelectedUniversity } : {}),
+        ...adminCatalogForm,
+      });
+      setAdminCatalogForm((current) => ({ ...current, name: '' }));
+      refreshAdminManagement();
+      setToast('Elemento del catálogo institucional creado.');
+    } catch (error) {
+      setAdminManagementError(error.message || 'No fue posible crear el elemento.');
+    } finally {
+      setAdminManagementAction('');
+    }
+  };
+
+  const deactivateAdminCatalogEntry = async (entry) => {
+    setAdminManagementAction(`catalog-${entry.id}`);
+    setAdminManagementError('');
+    try {
+      await deactivateInstitutionalCatalogEntry(entry.id);
+      refreshAdminManagement();
+      setToast('Elemento del catálogo desactivado.');
+    } catch (error) {
+      setAdminManagementError(error.message || 'No fue posible desactivar el elemento.');
+    } finally {
+      setAdminManagementAction('');
+    }
+  };
+
+  const submitAdminTransitFeed = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!adminStopsFile || !adminRoutesFile) {
+      setAdminManagementError('Selecciona stops.txt y routes.txt antes de importar.');
+      return;
+    }
+    setAdminManagementAction('gtfs');
+    setAdminManagementError('');
+    try {
+      const response = await importTransitFeed({
+        feed_version: adminFeedVersion,
+        stops: adminStopsFile,
+        routes: adminRoutesFile,
+      });
+      setAdminLatestFeed(response.data);
+      setAdminStopsFile(null);
+      setAdminRoutesFile(null);
+      setAdminFeedVersion('');
+      form.reset();
+      setToast('Feed GTFS validado e importado. La interfaz no afirmará horarios activos.');
+    } catch (error) {
+      setAdminManagementError(error.message || 'No fue posible importar el feed GTFS.');
+    } finally {
+      setAdminManagementAction('');
+    }
+  };
+
+  const submitReputationReview = async (event) => {
+    event.preventDefault();
+    setReputationAction('review');
+    setReputationError('');
+    try {
+      await submitTripReview(Number(reviewForm.trip_id), {
+        reviewee_profile_id: Number(reviewForm.reviewee_profile_id),
+        rating: Number(reviewForm.rating),
+        comment: reviewForm.comment,
+      });
+      setReviewForm((current) => ({ ...current, comment: '' }));
+      setReputationRefresh((value) => value + 1);
+      setToast('Valoración verificada registrada.');
+    } catch (error) {
+      setReputationError(error.message || 'No fue posible enviar la valoración.');
+    } finally {
+      setReputationAction('');
+    }
+  };
+
+  const submitReputationReport = async (event) => {
+    event.preventDefault();
+    setReputationAction('report');
+    setReputationError('');
+    try {
+      await submitTripReport(Number(reportForm.trip_id), {
+        reported_profile_id: Number(reportForm.reported_profile_id),
+        category: reportForm.category,
+        description: reportForm.description,
+      });
+      setReportForm((current) => ({ ...current, description: '' }));
+      setReputationRefresh((value) => value + 1);
+      setToast('Reporte enviado de forma privada para revisión.');
+    } catch (error) {
+      setReputationError(error.message || 'No fue posible enviar el reporte.');
+    } finally {
+      setReputationAction('');
+    }
+  };
+
+  const moderateReputationReport = async (reportId, status) => {
+    const resolutionNote = window.prompt('Nota de resolución (opcional):');
+    if (resolutionNote === null) return;
+    setReputationAction(`report-${reportId}`);
+    setReputationError('');
+    try {
+      await moderateAdminReport(reportId, { status, resolution_note: resolutionNote });
+      setReputationRefresh((value) => value + 1);
+      setToast('Reporte moderado.');
+    } catch (error) {
+      setReputationError(error.message || 'No fue posible actualizar el reporte.');
+    } finally {
+      setReputationAction('');
+    }
+  };
+
+  const exportAdminAnalytics = () => {
+    if (!currentAdminDashboard) return;
+    const contents = JSON.stringify({
+      exported_at: new Date().toISOString(),
+      scope: currentAdminDashboard.scope,
+      stats: currentAdminDashboard.stats,
+      distribution: currentAdminDashboard.distribution,
+    }, null, 2);
+    const file = new Blob([contents], { type: 'application/json' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `viajau-analytics-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setToast('Se descargaron métricas agregadas sin datos personales.');
   };
 
   const updateSearchFilter = (key, value) => {
@@ -2220,40 +2587,459 @@ export default function AppFresh() {
         )}
 
         {active === 'admin' && (
-          <section style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 24 }}>
+          <section style={{ display: 'grid', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 7</div>
-              <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Administración, analytics y moderación</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(160px,1fr))', gap: 16 }}>
-                {Object.entries(adminState).map(([label, value]) => <div key={label} style={{ background: 'rgba(139,92,246,.08)', border: '1px solid rgba(196,181,253,.3)', borderRadius: 14, padding: 18 }}><div style={{ color: '#d8b4fe', fontWeight: 700 }}>{label}</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 8 }}>{value}</div></div>)}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 7</div>
+                  <h2 style={{ margin: '10px 0 6px', fontSize: 34 }}>Administración y analytics</h2>
+                  <div style={{ color: '#cbd5e1' }}>
+                    {currentAdminDashboard?.scope?.global
+                      ? 'Alcance: toda la plataforma'
+                      : `Alcance institucional: ${currentAdminDashboard?.scope?.university || authUser?.university || 'universidad sin asignar'}`}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!currentAdminDashboard || adminDashboardLoading}
+                  onClick={exportAdminAnalytics}
+                  style={{ border: '1px solid rgba(196,181,253,.4)', borderRadius: 10, padding: '10px 14px', background: 'rgba(139,92,246,.16)', color: '#e9d5ff', fontWeight: 800, cursor: currentAdminDashboard ? 'pointer' : 'not-allowed' }}
+                >
+                  Exportar métricas JSON
+                </button>
+              </div>
+
+              {adminDashboardLoading && <p role="status" style={{ color: '#cbd5e1' }}>Cargando métricas verificadas del servidor…</p>}
+              {adminDashboardError && <p role="alert" style={{ color: '#fca5a5' }}>{adminDashboardError}</p>}
+              {currentAdminDashboard && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginTop: 20 }}>
+                    {[
+                      ['Usuarios registrados', currentAdminDashboard.stats.registered_users],
+                      ['Perfiles estudiantiles', currentAdminDashboard.stats.students],
+                      ['Ofertas activas', currentAdminDashboard.stats.active_trips],
+                      ['Viajes completados', currentAdminDashboard.stats.completed_trips],
+                      ['Solicitudes de cupo', currentAdminDashboard.stats.trip_requests],
+                      ['Solicitudes aceptadas', currentAdminDashboard.stats.accepted_requests],
+                      ['Aceptación de solicitudes', currentAdminDashboard.stats.request_acceptance_rate === null ? 'Sin datos' : `${currentAdminDashboard.stats.request_acceptance_rate}%`],
+                      ['Alertas sin resolver', currentAdminDashboard.stats.active_alerts],
+                      ['Coincidencias registradas', currentAdminDashboard.stats.matches],
+                    ].map(([label, value]) => (
+                      <div key={label} style={{ background: 'rgba(139,92,246,.08)', border: '1px solid rgba(196,181,253,.3)', borderRadius: 14, padding: 18 }}>
+                        <div style={{ color: '#d8b4fe', fontWeight: 700 }}>{label}</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}>{value ?? 0}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 20 }}>
+                    {[
+                      ['Por universidad', currentAdminDashboard.distribution.by_university],
+                      ['Por barrio', currentAdminDashboard.distribution.by_neighborhood],
+                      ['Por jornada', currentAdminDashboard.distribution.by_shift],
+                    ].map(([title, rows]) => (
+                      <div key={title} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
+                        <strong>{title}</strong>
+                        {rows?.length
+                          ? rows.map((row) => (
+                            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 10, color: '#cbd5e1' }}>
+                              <span>{row.label}</span><span>{row.total}</span>
+                            </div>
+                          ))
+                          : <div style={{ marginTop: 10, color: '#94a3b8' }}>Sin datos disponibles.</div>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+              <h3 style={{ marginTop: 0 }}>Checklist del módulo 7</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+                {adminChecklist.map((item) => (
+                  <div key={item.id} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>
+                    {item.done ? '☑' : '☐'} {item.id} {item.label}
+                  </div>
+                ))}
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 0 }}>
+                Las valoraciones de reputación siguen fuera de este módulo. La importación GTFS valida y guarda paradas/rutas; no importa viajes, horarios ni calendarios.
+              </p>
+            </div>
+
+            {adminManagementError && (
+              <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10 }}>
+                {adminManagementError}
+              </div>
+            )}
+            {adminManagementLoading && <div role="status" style={{ color: '#cbd5e1' }}>Actualizando panel administrativo…</div>}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+              <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+                <h3 style={{ marginTop: 0 }}>Cuentas y verificación de perfiles</h3>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setAdminUserFilters((current) => ({ ...current, search: adminUserSearch, page: 1 }));
+                  }}
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}
+                >
+                  <input
+                    aria-label="Buscar estudiante por nombre o correo"
+                    placeholder="Nombre o correo"
+                    value={adminUserSearch}
+                    onChange={(event) => setAdminUserSearch(event.target.value)}
+                    style={field}
+                  />
+                  <select
+                    aria-label="Filtrar estado de cuenta"
+                    value={adminUserFilters.status}
+                    onChange={(event) => setAdminUserFilters((current) => ({ ...current, status: event.target.value, page: 1 }))}
+                    style={field}
+                  >
+                    <option value="">Todos los estados</option>
+                    <option value="active">Activa</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="blocked">Bloqueada</option>
+                  </select>
+                  <select
+                    aria-label="Filtrar verificación de perfil"
+                    value={adminUserFilters.verification}
+                    onChange={(event) => setAdminUserFilters((current) => ({ ...current, verification: event.target.value, page: 1 }))}
+                    style={field}
+                  >
+                    <option value="">Todos los perfiles</option>
+                    <option value="pending">Verificación pendiente</option>
+                    <option value="verified">Verificado</option>
+                  </select>
+                  <button type="submit" style={{ ...field, cursor: 'pointer', fontWeight: 800 }}>Buscar</button>
+                </form>
+                <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+                  {adminUsers.map((user) => (
+                    <div key={user.id} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                        <div>
+                          <strong>{user.name}</strong>
+                          <div style={{ color: '#94a3b8', fontSize: 12 }}>{user.email} · {user.university || 'Sin universidad'}</div>
+                          <div style={{ color: '#cbd5e1', fontSize: 12 }}>
+                            Cuenta: {user.status} · Perfil: {user.profile_verified ? 'verificado' : 'pendiente'} · Correo: {user.email_verified_at ? 'verificado' : 'pendiente'}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {!user.profile_verified && (
+                            <button
+                              type="button"
+                              disabled={adminManagementAction === `user-${user.id}`}
+                              onClick={() => saveAdminUser(user, { profile_verified: true })}
+                              style={field}
+                            >
+                              Verificar perfil
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={adminManagementAction === `user-${user.id}`}
+                            onClick={() => saveAdminUser(user, { status: user.status === 'blocked' ? 'active' : 'blocked' })}
+                            style={field}
+                          >
+                            {user.status === 'blocked' ? 'Reactivar' : 'Bloquear'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {!adminUsers.length && !adminManagementLoading && <div style={{ color: '#94a3b8' }}>No hay cuentas para los filtros seleccionados.</div>}
+                </div>
+                {adminUserMeta.total > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 14, color: '#94a3b8', fontSize: 12 }}>
+                    <span>{adminUserMeta.total} cuentas · página {adminUserMeta.current_page} de {adminUserMeta.last_page}</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" disabled={adminUserMeta.current_page <= 1} onClick={() => setAdminUserFilters((current) => ({ ...current, page: adminUserMeta.current_page - 1 }))} style={field}>Anterior</button>
+                      <button type="button" disabled={adminUserMeta.current_page >= adminUserMeta.last_page} onClick={() => setAdminUserFilters((current) => ({ ...current, page: adminUserMeta.current_page + 1 }))} style={field}>Siguiente</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <h3 style={{ marginTop: 0 }}>Incidentes de seguridad</h3>
+                  <select
+                    aria-label="Filtrar incidentes por estado"
+                    value={adminIncidentStatus}
+                    onChange={(event) => {
+                      setAdminIncidentStatus(event.target.value);
+                      setAdminIncidentPage(1);
+                    }}
+                    style={field}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="active">Sin resolver</option>
+                    <option value="resolved">Atendidos</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {adminIncidents.map((incident) => (
+                    <div key={incident.id} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 12 }}>
+                      <strong>{incident.type} · {incident.severity}</strong>
+                      <div style={{ color: '#cbd5e1', fontSize: 12 }}>{incident.student || 'Perfil eliminado'} · {incident.university || 'Universidad desconocida'}</div>
+                      <div style={{ color: '#94a3b8', fontSize: 12 }}>
+                        {incident.active ? 'Sin resolver' : 'Atendido'} · {incident.created_at ? new Date(incident.created_at).toLocaleString() : 'Fecha no disponible'}
+                      </div>
+                    </div>
+                  ))}
+                  {!adminIncidents.length && !adminManagementLoading && <div style={{ color: '#94a3b8' }}>No hay incidentes registrados en este alcance.</div>}
+                </div>
+                {adminIncidentMeta.total > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 14, color: '#94a3b8', fontSize: 12 }}>
+                    <span>{adminIncidentMeta.total} incidentes · página {adminIncidentMeta.current_page} de {adminIncidentMeta.last_page}</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" disabled={adminIncidentMeta.current_page <= 1} onClick={() => setAdminIncidentPage(adminIncidentMeta.current_page - 1)} style={field}>Anterior</button>
+                      <button type="button" disabled={adminIncidentMeta.current_page >= adminIncidentMeta.last_page} onClick={() => setAdminIncidentPage(adminIncidentMeta.current_page + 1)} style={field}>Siguiente</button>
+                    </div>
+                  </div>
+                )}
+                <p style={{ color: '#94a3b8', fontSize: 12 }}>
+                  Este listado omite coordenadas y datos de contacto. La resolución operativa está disponible en el panel de seguridad.
+                </p>
               </div>
             </div>
+
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>COBERTURA</div>
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{adminFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(139,92,246,.12)', color: '#e9d5ff' }}>{f}</span>)}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Catálogos institucionales</h3>
+                  <p style={{ color: '#94a3b8', marginTop: 0 }}>Gestiona sedes, facultades, programas y periodos. Los elementos se desactivan sin borrar su historial.</p>
+                </div>
+                {authUser?.role === 'admin' && (
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    Universidad del catálogo
+                    <select value={adminSelectedUniversity} onChange={(event) => setAdminSelectedUniversity(event.target.value)} style={field}>
+                      <option value="">Selecciona universidad</option>
+                      {adminUniversities.map((university) => <option key={university} value={university}>{university}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+              {adminSelectedUniversity || authUser?.role === 'university' ? (
+                <>
+                  <form onSubmit={createAdminCatalogEntry} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '14px 0' }}>
+                    <select
+                      value={adminCatalogForm.type}
+                      onChange={(event) => setAdminCatalogForm((current) => ({ ...current, type: event.target.value }))}
+                      style={field}
+                    >
+                      {catalogTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </select>
+                    <input
+                      required
+                      maxLength={120}
+                      value={adminCatalogForm.name}
+                      onChange={(event) => setAdminCatalogForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Nombre del elemento"
+                      style={{ ...field, flex: 1, minWidth: 180 }}
+                    />
+                    <button type="submit" disabled={adminManagementAction === 'catalog'} style={{ ...field, cursor: 'pointer' }}>Agregar</button>
+                  </form>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                    {adminCatalog.map((entry) => (
+                      <div key={entry.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, border: '1px solid rgba(148,163,184,.2)', borderRadius: 10, padding: 10 }}>
+                        <span>{catalogTypes.find((type) => type.value === entry.type)?.label}: {entry.name}</span>
+                        <button
+                          type="button"
+                          disabled={adminManagementAction === `catalog-${entry.id}`}
+                          onClick={() => deactivateAdminCatalogEntry(entry)}
+                          style={{ ...field, cursor: 'pointer' }}
+                        >
+                          Desactivar
+                        </button>
+                      </div>
+                    ))}
+                    {!adminCatalog.length && <div style={{ color: '#94a3b8' }}>No hay elementos activos en este catálogo.</div>}
+                  </div>
+                </>
+              ) : <div style={{ color: '#fcd34d' }}>Selecciona una universidad para consultar o editar sus catálogos.</div>}
             </div>
+
+            {authUser?.role === 'admin' && (
+              <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+                <h3 style={{ marginTop: 0 }}>Importar datos estáticos GTFS</h3>
+                <p style={{ color: '#cbd5e1' }}>
+                  Importa `stops.txt` y `routes.txt` (CSV UTF-8) de un feed de Metro Cali. Se verifican encabezados, IDs únicos, nombres y coordenadas; el máximo es 50.000 filas por archivo. No se importan ni publican horarios ni calendarios.
+                </p>
+                <form onSubmit={submitAdminTransitFeed} style={{ display: 'grid', gap: 10 }}>
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    Versión o fecha del feed
+                    <input required maxLength={120} value={adminFeedVersion} onChange={(event) => setAdminFeedVersion(event.target.value)} style={field} />
+                  </label>
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    stops.txt
+                    <input required type="file" accept=".txt,.csv,text/csv,text/plain" onChange={(event) => setAdminStopsFile(event.target.files?.[0] || null)} style={field} />
+                  </label>
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    routes.txt
+                    <input required type="file" accept=".txt,.csv,text/csv,text/plain" onChange={(event) => setAdminRoutesFile(event.target.files?.[0] || null)} style={field} />
+                  </label>
+                  <button type="submit" disabled={adminManagementAction === 'gtfs'} style={{ ...field, cursor: 'pointer', fontWeight: 800 }}>
+                    {adminManagementAction === 'gtfs' ? 'Validando…' : 'Validar e importar'}
+                  </button>
+                </form>
+                {adminLatestFeed && (
+                  <div role="status" style={{ marginTop: 14, color: '#86efac' }}>
+                    Último feed: {adminLatestFeed.feed_version} · {adminLatestFeed.stops_count} paradas · {adminLatestFeed.routes_count} rutas
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
 
         {active === 'trust' && (
-          <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
+          <section style={{ display: 'grid', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 8</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Confiabilidad y reputación</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 16 }}>
-                <Metric label='Rating promedio' value='4.8/5' color='#a78bfa' />
-                <Metric label='Usuarios recurrentes' value='61%' color='#c4b5fd' />
-                <Metric label='Reportes activos' value='13' color='#fca5a5' />
-              </div>
-              <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
-                {['Ana Vélez: 4.9', 'Claudia Aranda: 4.8', 'Daniela Carmona: 4.7'].map((item) => (
-                  <div key={item} style={{ background: 'rgba(167,139,250,.08)', border: '1px solid rgba(196,181,253,.25)', borderRadius: 12, padding: 12 }}>{item}</div>
-                ))}
-              </div>
-            </div>
-            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>VERIFICACIÓN</div>
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{trustFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(167,139,250,.12)', color: '#e9d5ff' }}>{f}</span>)}</div>
+              {reputationLoading && <p role="status" style={{ color: '#cbd5e1' }}>Cargando calificaciones verificadas…</p>}
+              {reputationError && <p role="alert" style={{ color: '#fca5a5' }}>{reputationError}</p>}
+              {authUser?.role === 'student' && reputationData && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+                    <Metric
+                      label="Calificación recibida"
+                      value={reputationData.summary.rating_average === null
+                        ? 'Sin calificaciones'
+                        : `${reputationData.summary.rating_average}/5 (${reputationData.summary.rating_count})`}
+                      color="#a78bfa"
+                    />
+                    <Metric label="Viajes completados" value={reputationData.summary.completed_trips} color="#c4b5fd" />
+                    <Metric label="Valoraciones pendientes" value={reputationData.pending_trips.length} color="#fbbf24" />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, marginTop: 24 }}>
+                    <form onSubmit={submitReputationReview} style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
+                      <h3 style={{ margin: 0 }}>Valorar participante de un viaje</h3>
+                      <label style={{ display: 'grid', gap: 6, color: '#cbd5e1' }}>
+                        Viaje completado
+                        <select required value={reviewForm.trip_id} onChange={(event) => setReviewForm((current) => ({ ...current, trip_id: event.target.value, reviewee_profile_id: '' }))} style={field}>
+                          <option value="">Selecciona un viaje</option>
+                          {reputationData.completed_trips.map((trip) => <option key={trip.trip_id} value={trip.trip_id}>{trip.route}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: 6, color: '#cbd5e1' }}>
+                        Participante
+                        <select required value={reviewForm.reviewee_profile_id} onChange={(event) => setReviewForm((current) => ({ ...current, reviewee_profile_id: event.target.value }))} style={field}>
+                          <option value="">Selecciona a quién valorar</option>
+                          {reputationData.completed_trips.find((trip) => String(trip.trip_id) === reviewForm.trip_id)?.participants
+                            .filter((participant) => !participant.reviewed)
+                            .map((participant) => <option key={participant.profile_id} value={participant.profile_id}>{participant.name} · {participant.university}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: 6, color: '#cbd5e1' }}>
+                        Calificación
+                        <select value={reviewForm.rating} onChange={(event) => setReviewForm((current) => ({ ...current, rating: event.target.value }))} style={field}>
+                          {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} de 5 estrellas</option>)}
+                        </select>
+                      </label>
+                      <textarea maxLength={1000} placeholder="Comentario opcional (máximo 1000 caracteres)" value={reviewForm.comment} onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))} style={{ ...field, minHeight: 80 }} />
+                      <button type="submit" disabled={reputationAction === 'review'} style={field}>{reputationAction === 'review' ? 'Enviando…' : 'Enviar valoración'}</button>
+                    </form>
+
+                    <form onSubmit={submitReputationReport} style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
+                      <h3 style={{ margin: 0 }}>Reportar conducta</h3>
+                      <label style={{ display: 'grid', gap: 6, color: '#cbd5e1' }}>
+                        Viaje relacionado
+                        <select required value={reportForm.trip_id} onChange={(event) => setReportForm((current) => ({ ...current, trip_id: event.target.value, reported_profile_id: '' }))} style={field}>
+                          <option value="">Selecciona un viaje</option>
+                          {reputationData.reportable_trips.map((trip) => <option key={trip.trip_id} value={trip.trip_id}>{trip.route} · {trip.status === 'en-curso' ? 'En curso' : 'Completado'}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: 6, color: '#cbd5e1' }}>
+                        Persona reportada
+                        <select required value={reportForm.reported_profile_id} onChange={(event) => setReportForm((current) => ({ ...current, reported_profile_id: event.target.value }))} style={field}>
+                          <option value="">Selecciona a un participante</option>
+                          {reputationData.reportable_trips.find((trip) => String(trip.trip_id) === reportForm.trip_id)?.participants
+                            .map((participant) => <option key={participant.profile_id} value={participant.profile_id}>{participant.name}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: 6, color: '#cbd5e1' }}>
+                        Motivo
+                        <select value={reportForm.category} onChange={(event) => setReportForm((current) => ({ ...current, category: event.target.value }))} style={field}>
+                          <option value="safety">Seguridad</option>
+                          <option value="harassment">Acoso</option>
+                          <option value="no_show">No se presentó</option>
+                          <option value="conduct">Conducta</option>
+                          <option value="other">Otro</option>
+                        </select>
+                      </label>
+                      <textarea required minLength={10} maxLength={1500} placeholder="Describe lo ocurrido (10–1500 caracteres)" value={reportForm.description} onChange={(event) => setReportForm((current) => ({ ...current, description: event.target.value }))} style={{ ...field, minHeight: 80 }} />
+                      <button type="submit" disabled={reputationAction === 'report'} style={field}>{reputationAction === 'report' ? 'Enviando…' : 'Enviar reporte privado'}</button>
+                    </form>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, marginTop: 24 }}>
+                    <div>
+                      <h3>Valoraciones recibidas</h3>
+                      {reputationData.received_reviews.length
+                        ? reputationData.received_reviews.map((review) => (
+                          <article key={review.id} style={{ border: '1px solid rgba(196,181,253,.25)', borderRadius: 12, padding: 12, marginTop: 10 }}>
+                            <strong>{review.rating}/5 · {review.reviewer || 'Participante verificado'}</strong>
+                            <div style={{ color: '#cbd5e1', marginTop: 6 }}>{review.comment || 'Sin comentario.'}</div>
+                            <small style={{ color: '#94a3b8' }}>{review.created_at ? new Date(review.created_at).toLocaleDateString() : ''}</small>
+                          </article>
+                        ))
+                        : <p style={{ color: '#94a3b8' }}>Aún no hay valoraciones verificadas.</p>}
+                    </div>
+                    <div>
+                      <h3>Mis reportes</h3>
+                      {reputationData.reports.length
+                        ? reputationData.reports.map((report) => (
+                          <article key={report.id} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 12, marginTop: 10 }}>
+                            <strong>{report.category} · {report.status}</strong>
+                            {report.resolution_note && <div style={{ color: '#cbd5e1', marginTop: 6 }}>{report.resolution_note}</div>}
+                          </article>
+                        ))
+                        : <p style={{ color: '#94a3b8' }}>No has enviado reportes.</p>}
+                    </div>
+                  </div>
+                  {!reputationData.completed_trips.length && !reputationData.reportable_trips.length && <p style={{ color: '#94a3b8', marginTop: 20 }}>Las valoraciones y reportes se habilitan para participantes de viajes registrados.</p>}
+                </>
+              )}
+
+              {authUser?.role === 'admin' && (
+                <div style={{ marginTop: 20 }}>
+                  <h3>Reportes pendientes de moderación</h3>
+                  {adminReports.length
+                    ? adminReports.map((report) => (
+                      <article key={report.id} style={{ border: '1px solid rgba(252,165,165,.25)', borderRadius: 12, padding: 14, marginTop: 10 }}>
+                        <strong>{report.category} · {report.reporter} reporta a {report.reported}</strong>
+                        <div style={{ color: '#cbd5e1', marginTop: 8 }}>{report.description}</div>
+                        <small style={{ color: '#94a3b8' }}>{report.route}</small>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                          {[
+                            ['reviewed', 'Marcar revisado'],
+                            ['actioned', 'Tomar acción'],
+                            ['dismissed', 'Descartar'],
+                          ].map(([status, label]) => (
+                            <button key={status} type="button" disabled={reputationAction === `report-${report.id}`} onClick={() => moderateReputationReport(report.id, status)} style={field}>{label}</button>
+                          ))}
+                        </div>
+                      </article>
+                    ))
+                    : <p style={{ color: '#94a3b8' }}>No hay reportes abiertos.</p>}
+                  {adminReportsMeta.total > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 14, color: '#94a3b8', fontSize: 12 }}>
+                      <span>{adminReportsMeta.total} reportes abiertos · página {adminReportsMeta.current_page} de {adminReportsMeta.last_page}</span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" disabled={adminReportsMeta.current_page <= 1} onClick={() => setAdminReportsPage(adminReportsMeta.current_page - 1)} style={field}>Anterior</button>
+                        <button type="button" disabled={adminReportsMeta.current_page >= adminReportsMeta.last_page} onClick={() => setAdminReportsPage(adminReportsMeta.current_page + 1)} style={field}>Siguiente</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <p style={{ color: '#94a3b8', fontSize: 12, marginTop: 20, marginBottom: 0 }}>
+                Solo participantes de un viaje completado pueden valorarse una vez por viaje. Los comentarios se muestran al destinatario; los reportes son privados y solo los modera administración.
+              </p>
             </div>
           </section>
         )}

@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ReputationController;
 use App\Http\Controllers\Api\ViajauController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +35,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/students/{id}/profile', [ViajauController::class, 'updateProfile']);
 
     Route::middleware('verified')->group(function () {
+        Route::get('/reputation/me', [ReputationController::class, 'mine']);
+        Route::get('/reputation/profiles/{profile}', [ReputationController::class, 'profile']);
+        Route::post('/trips/{trip}/reviews', [ReputationController::class, 'review'])
+            ->middleware('throttle:10,1');
+        Route::post('/trips/{trip}/reports', [ReputationController::class, 'report'])
+            ->middleware('throttle:5,1');
         Route::get('/trips', [ViajauController::class, 'listTrips']);
         Route::post('/trips', [ViajauController::class, 'createTrip']);
         Route::get('/trips/mine', [ViajauController::class, 'myTrips']);
@@ -50,6 +58,22 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware(['verified', 'role:admin,university'])->get('/dashboard', [ViajauController::class, 'dashboard']);
+    Route::middleware(['verified', 'role:admin,university'])->prefix('admin')->group(function () {
+        Route::get('/users', [AdminManagementController::class, 'users']);
+        Route::patch('/users/{managedUser}', [AdminManagementController::class, 'updateUser']);
+        Route::get('/incidents', [AdminManagementController::class, 'incidents']);
+        Route::get('/catalog', [AdminManagementController::class, 'catalog']);
+        Route::post('/catalog', [AdminManagementController::class, 'createCatalogEntry']);
+        Route::patch('/catalog/{entry}', [AdminManagementController::class, 'updateCatalogEntry']);
+        Route::delete('/catalog/{entry}', [AdminManagementController::class, 'deactivateCatalogEntry']);
+    });
+    Route::middleware(['verified', 'role:admin'])->prefix('admin')->group(function () {
+        Route::get('/reports', [ReputationController::class, 'reports']);
+        Route::patch('/reports/{report}', [ReputationController::class, 'moderateReport']);
+        Route::post('/transit-feed/import', [AdminManagementController::class, 'importTransitFeed'])
+            ->middleware('throttle:3,1');
+        Route::get('/transit-feed/latest', [AdminManagementController::class, 'latestTransitFeed']);
+    });
     Route::middleware(['verified', 'role:security,admin'])->group(function () {
         Route::get('/security/alerts', [ViajauController::class, 'securityAlerts']);
         Route::patch('/security/alerts/{alert}/resolve', [ViajauController::class, 'resolveSafetyAlert']);

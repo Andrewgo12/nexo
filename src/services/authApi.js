@@ -84,6 +84,30 @@ export function getMyTrips(token = getAuthToken(), signal) {
   return request('/trips/mine', { token, signal });
 }
 
+export function getMyReputation(token = getAuthToken(), signal) {
+  return request('/reputation/me', { token, signal });
+}
+
+export function getProfileReputation(profileId, token = getAuthToken(), signal) {
+  return request(`/reputation/profiles/${profileId}`, { token, signal });
+}
+
+export function submitTripReview(tripId, data, token = getAuthToken()) {
+  return request(`/trips/${tripId}/reviews`, { method: 'POST', token, body: JSON.stringify(data) });
+}
+
+export function submitTripReport(tripId, data, token = getAuthToken()) {
+  return request(`/trips/${tripId}/reports`, { method: 'POST', token, body: JSON.stringify(data) });
+}
+
+export function getAdminReports(status = 'open', token = getAuthToken(), signal, page = 1) {
+  return request(`/admin/reports?status=${encodeURIComponent(status)}&page=${page}`, { token, signal });
+}
+
+export function moderateAdminReport(reportId, data, token = getAuthToken()) {
+  return request(`/admin/reports/${reportId}`, { method: 'PATCH', token, body: JSON.stringify(data) });
+}
+
 export function publishTravelOffer(data, token = getAuthToken()) {
   return request('/trips', {
     method: 'POST',
@@ -146,6 +170,60 @@ export function createSafetyAlert(location = {}, token = getAuthToken()) {
 
 export function getSafetyAlerts(token = getAuthToken(), signal) {
   return request('/security/alerts', { token, signal });
+}
+
+export function getAdminDashboard(token = getAuthToken(), signal) {
+  return request('/dashboard', { token, signal });
+}
+
+export function getAdminUsers(filters = {}, token = getAuthToken(), signal) {
+  const params = new URLSearchParams();
+  for (const key of ['status', 'verification', 'search', 'page']) {
+    if (filters[key]) params.set(key, filters[key]);
+  }
+  return request(`/admin/users?${params}`, { token, signal });
+}
+
+export function updateAdminUser(userId, data, token = getAuthToken()) {
+  return request(`/admin/users/${userId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export function getAdminIncidents(status = 'active', token = getAuthToken(), signal, page = 1) {
+  return request(`/admin/incidents?status=${encodeURIComponent(status)}&page=${page}`, { token, signal });
+}
+
+export function getInstitutionalCatalog(university, token = getAuthToken(), signal) {
+  const params = new URLSearchParams();
+  if (university) params.set('university', university);
+  return request(`/admin/catalog?${params}`, { token, signal });
+}
+
+export function createInstitutionalCatalogEntry(data, token = getAuthToken()) {
+  return request('/admin/catalog', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export function deactivateInstitutionalCatalogEntry(entryId, token = getAuthToken()) {
+  return request(`/admin/catalog/${entryId}`, { method: 'DELETE', token });
+}
+
+export function importTransitFeed(data, token = getAuthToken()) {
+  const body = new FormData();
+  body.append('feed_version', data.feed_version);
+  body.append('stops', data.stops);
+  body.append('routes', data.routes);
+  return request('/admin/transit-feed/import', { method: 'POST', token, body });
+}
+
+export function getLatestTransitFeed(token = getAuthToken(), signal) {
+  return request('/admin/transit-feed/latest', { token, signal });
 }
 
 export function resolveSafetyAlert(alertId, token = getAuthToken()) {

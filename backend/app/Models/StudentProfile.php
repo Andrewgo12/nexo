@@ -37,4 +37,9 @@ class StudentProfile extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function reviewsReceived()
+    {
+        return $this->hasMany(TripReview::class, 'reviewee_profile_id');
+    }
 }

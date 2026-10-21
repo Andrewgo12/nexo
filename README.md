@@ -12,8 +12,10 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 | 4 | Emparejamiento por zona y horario | Implementado para ofertas verificadas; afinidad explicable, no reputación ni evaluación de seguridad. |
 | 5 | Gestión de viajes | Implementado: publicar ofertas, pedir/aceptar cupos, evitar sobreventa, cancelar, iniciar y completar. |
 | 6 | Seguridad y ubicación del viaje | Parcial: SOS, GPS consentido, geocercas y avisos opt-in; requiere SMTP/Twilio y cola configurados. No integra autoridades ni servicios de emergencia. |
+| 7 | Administración y analytics | Implementado: métricas agregadas, gestión institucional de cuentas/verificaciones, incidentes, catálogos e importación validada de paradas/rutas GTFS. |
+| 8 | Confiabilidad y reputación | Implementado: calificaciones entre participantes de viajes completados, promedios verificables e informes privados moderados por admin. |
 
-Los módulos 7–16 siguen en el inventario y no se han iniciado como trabajo secuencial. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
+El módulo 9, Pago y seguro, es el siguiente; aún no se ha iniciado. Los módulos 10–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
 
 ## Cómo ejecutar y validar
 
@@ -41,7 +43,7 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 - La búsqueda permite filtrar por barrio incluido en origen/destino, hora de salida (misma hora), transporte, carrera y universidad. Los resultados se actualizan con una pausa breve mientras se escribe.
 - El orden de afinidad es una estimación explicable basada en barrio, transporte y jornada declarados; también se puede ordenar por hora o fecha de publicación. No equivale a reputación ni a una evaluación de seguridad.
 - Se retornan hasta 100 ofertas por búsqueda y se informa si hay más resultados. La afinidad se calcula con una función separada del puntaje usado por el módulo de emparejamiento.
-- No se habilitan filtros de género, reputación o distancia: los perfiles no almacenan preferencias de género voluntarias ni coordenadas de ruta consentidas, y `trust_score` aún no proviene de valoraciones verificables. Estos límites son explícitos para evitar revelar o inventar datos.
+- No se habilitan filtros de género o distancia: los perfiles no almacenan preferencias de género voluntarias ni coordenadas de ruta consentidas. Aunque las valoraciones verificables ya existen, la búsqueda aún no ofrece filtro ni orden por reputación.
 - Las pruebas feature del endpoint están en `backend/tests/Feature/TripSearchTest.php`; requieren habilitar `pdo_sqlite` y `sqlite3` si la instalación de PHP no los carga por defecto.
 
 ## Módulo 4: emparejamiento por zona y horario
@@ -73,9 +75,29 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 - No se contactan automáticamente autoridades ni líneas públicas de emergencia. El equipo de seguridad ve SOS en el panel; la plataforma no sustituye un servicio de respuesta.
 - Endpoints: `POST/DELETE /api/trips/{id}/location`, `GET /api/trips/{id}/safety` y `POST /api/trips/{id}/check-ins`. Cobertura feature: `backend/tests/Feature/SafetyAlertTest.php`, `backend/tests/Feature/TripSafetyTrackingTest.php` y `backend/tests/Feature/SafetyNotificationsTest.php`.
 
+## Módulo 7: administración y analytics
+
+- `GET /api/dashboard` entrega conteos reales de usuarios/perfiles, viajes activos y completados, coincidencias persistidas, solicitudes y alertas; también calcula la tasa de aceptación de solicitudes. No inventa métricas de reputación: `trust_score_avg` es `null` hasta contar con valoraciones verificables.
+- Los perfiles se agrupan por universidad, barrio y jornada. El rol `admin` ve el conjunto global; `university` queda limitado a su universidad, incluidos los listados recientes. La respuesta no incluye coordenadas de alertas ni datos de contacto.
+- El panel consume la API autenticada y exporta solo estadísticas agregadas en JSON.
+- Admin puede filtrar cuentas por estado, buscar estudiantes, aprobar/revocar verificación del perfil y bloquear/reactivar cuentas; al bloquear se revocan sus tokens. Universidad solo gestiona estudiantes de su propia institución; roles privilegiados y el estado propio no se modifican.
+- La vista de incidentes es filtrable y omite coordenadas; operaciones autorizadas de atención permanecen en el panel de seguridad.
+- Los catálogos permiten crear/desactivar sedes, facultades, programas y periodos por universidad, con baja lógica e historial.
+- Admin puede importar snapshots GTFS mediante `stops.txt` y `routes.txt`; se validan columnas, identificadores únicos, nombres y coordenadas (máx. 50.000 filas/archivo), y la transacción no guarda importaciones parciales. Esto no importa viajes, `stop_times` ni calendarios; no se publican horarios vigentes ni se cambia el proveedor actual de rutas.
+- Checklist 7.1–7.8 implementado con esos límites de alcance. Cobertura feature: `backend/tests/Feature/DashboardAnalyticsTest.php` y `backend/tests/Feature/AdminManagementTest.php`.
+
+## Módulo 8: confiabilidad y reputación
+
+- Solo usuarios con correo y perfil institucional verificados pueden participar. Las calificaciones se habilitan cuando el viaje queda completado y solo se permite una por persona y viaje; el servidor verifica que calificador y destinatario sean participantes aceptados.
+- Las calificaciones son enteras de 1 a 5, con comentario opcional. El promedio y el número de valoraciones se calculan desde `trip_reviews`; las cuentas sin calificaciones aparecen como “Sin calificaciones”. Se eliminó el valor inicial ficticio `trust_score=4.8`.
+- La búsqueda de viajes muestra solo promedio y cantidad agregados; no incluye comentarios. Los comentarios y autor se muestran únicamente al usuario evaluado.
+- Los participantes pueden reportar a otro participante en un viaje en curso o completado, una vez por persona y trayecto. Los reportes son privados para su autor y administración; admin puede marcarlos revisados, tomar acción o descartarlos con nota. El bloqueo/reactivación de cuentas permanece en la gestión administrativa del módulo 7.
+- Endpoints: `GET /api/reputation/me`, `GET /api/reputation/profiles/{profile}`, `POST /api/trips/{trip}/reviews`, `POST /api/trips/{trip}/reports`, `GET /api/admin/reports` y `PATCH /api/admin/reports/{report}`. Los endpoints requieren Sanctum y correo verificado; moderación requiere rol `admin`.
+- Migraciones: `backend/database/migrations/2026_10_21_000007_create_trip_reviews_and_user_reports.php` y `backend/database/migrations/2026_10_21_000008_remove_default_trust_score.php`. Cobertura feature: `backend/tests/Feature/ReputationTest.php` y `backend/tests/Feature/DashboardAnalyticsTest.php`.
+
 ## Alineación del inventario adjunto
 
-El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. Ubicación en tiempo real, emergencias externas, chat, reputación y pagos permanecen pendientes.
+El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. Ubicación en tiempo real, emergencias externas, chat y pagos permanecen pendientes.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

@@ -97,7 +97,7 @@ export const BUSINESS_MODULES = [
     id: 'admin-analytics',
     title: '7. Administración y analytics',
     summary: 'Gestión institucional, reportes y métricas administrativas.',
-    status: 'Parcial: roles y endpoints restringidos; panel y flujos administrativos completos pendientes.',
+    status: 'Implementado: analytics con alcance institucional, gestión de cuentas y verificación, incidentes, catálogos e importación validada de paradas/rutas GTFS.',
     functions: [
       'registrarUniversidad()', 'registrarSede()', 'gestionarProgramas()', 'gestionarFacultades()',
       'gestionarPeriodos()', 'gestionarRutasMIO()', 'importarGTFS()', 'actualizarParadas()',
@@ -112,7 +112,7 @@ export const BUSINESS_MODULES = [
     id: 'confianza-reputacion',
     title: '8. Confiabilidad y reputación',
     summary: 'Calificaciones verificables, historial, reportes y moderación de usuarios.',
-    status: 'Pendiente: no se calculan reputaciones desde valoraciones reales.',
+    status: 'Implementado: valoraciones ligadas a viajes completados, promedio real y moderación administrativa de reportes.',
     functions: [
       'obtenerCalificacionUsuario()', 'calcularRatingPromedio()', 'mostrarHistorialConfiable()',
       'mostrarComentarios()', 'detectarUsuariosRecurrentes()', 'valorarConductor()', 'valorarPasajero()',

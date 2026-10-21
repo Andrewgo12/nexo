@@ -41,7 +41,6 @@ export const DEFAULT_APP_DATA = {
   ],
   advancedMode: { night: true, safeties: true, hotspots: true, recommendations: true },
   safetyState: { panic: false, geofence: false, emergency: false, arrival: false },
-  adminState: { users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' },
   pricing: { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 },
   executionState: [
     { id: 'domain-validation', label: 'Validar dominio universitario y perfil del estudiante', done: true },
@@ -70,6 +69,7 @@ export function readAppData() {
     }
 
     const parsed = JSON.parse(raw);
+    delete parsed.adminState;
     const savedExecutionState = Array.isArray(parsed.executionState)
       ? parsed.executionState
       : DEFAULT_APP_DATA.executionState;
@@ -92,7 +92,6 @@ export function readAppData() {
         geofence: false,
         emergency: false
       },
-      adminState: { ...DEFAULT_APP_DATA.adminState, ...(parsed.adminState || {}) },
       pricing: { ...DEFAULT_APP_DATA.pricing, ...(parsed.pricing || {}) },
       executionState: savedExecutionState.map((task) => task?.id === 'safety-alerts'
         ? { ...task, ...safetyTask, done: false }
