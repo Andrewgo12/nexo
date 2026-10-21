@@ -312,7 +312,7 @@ export default function InteractiveMap({
       getOsrmRoute(selectedTrip.origin.coords, selectedTrip.destination.coords, selectedTrip.transportMode)
         .then(result => {
           if (!isMounted || !result) return;
-          const coords = result.polyline || selectedTrip.routePolyline;
+          const coords = result.polyline;
           setActivePolylineCoords(coords);
           setRoutingSource(result.source || 'OSRM');
 
@@ -338,6 +338,11 @@ export default function InteractiveMap({
           const simIcon = createCustomIcon('#059669', vehicleEmoji, 38);
           const simMarker = L.marker(coords[0], { icon: simIcon, zIndexOffset: 1000 }).addTo(map);
           simulationMarkerRef.current = simMarker;
+        })
+        .catch(error => {
+          if (!isMounted) return;
+          setActivePolylineCoords(null);
+          setRoutingSource(error.message || 'No se pudo calcular una ruta vial real.');
         });
     }
 
@@ -348,7 +353,7 @@ export default function InteractiveMap({
 
   // Real-Time GPS Tracking Simulation Engine
   const startSimulation = () => {
-    const coords = activePolylineCoords || selectedTrip?.routePolyline;
+    const coords = activePolylineCoords;
     if (!coords || coords.length < 2) return;
     setIsSimulating(true);
     setSimulationFinished(false);
@@ -384,9 +389,9 @@ export default function InteractiveMap({
         if (mapInstanceRef.current && simulationMarkerRef.current) {
           simulationMarkerRef.current.bindPopup(`
             <div style="font-family: var(--font-body); text-align: center; padding: 6px;">
-              <div style="color: #10b981; font-weight: 800; font-size: 0.85rem;">🛡️ ¡Llegada Segura Confirmada!</div>
+              <div style="color: #10b981; font-weight: 800; font-size: 0.85rem;">Simulación de recorrido completada</div>
               <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">
-                Contacto de confianza notificado automáticamente vía SMS y WhatsApp.
+                Esta simulación no verifica una llegada real ni notifica a contactos.
               </div>
             </div>
           `).openPopup();
@@ -504,8 +509,7 @@ export default function InteractiveMap({
             <div className="tracking-pulse-dot" style={{ background: simulationFinished ? '#10b981' : isSimulating ? '#38bdf8' : '#f59e0b' }} />
             <div>
               <div className="tracking-text-title">
-                <span>{simulationFinished ? 'Trayecto Completado' : isSimulating ? 'Rastreo Satelital en Vivo...' : 'Simular Desplazamiento'}</span>
-                <span className="insurance-badge">🛡️ AXA Protegido</span>
+                <span>{simulationFinished ? 'Simulación completada' : isSimulating ? 'Simulación de trayecto...' : 'Simular desplazamiento'}</span>
                 {routingSource && (
                   <span style={{ fontSize: '0.68rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '1px 6px', borderRadius: '4px' }}>
                     {routingSource}

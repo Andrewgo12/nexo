@@ -9,6 +9,13 @@ class StudentProfile extends Model
 {
     use HasFactory;
 
+    protected function casts(): array
+    {
+        return [
+            'verified' => 'boolean',
+        ];
+    }
+
     protected $fillable = [
         'user_id',
         'name',

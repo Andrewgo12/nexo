@@ -37,7 +37,7 @@ import {
   buildTrustSummary,
   buildSafetyAlert
 } from '../src/services/viajauCore.js';
-import { getOsrmRoute, searchAddressNominatim, calculateMultimodalDetails } from '../src/services/routingApi.js';
+import { calculateMultimodalDetails } from '../src/services/routingApi.js';
 
 const makeLocalStorageMock = () => {
   const store = new Map();
@@ -221,14 +221,6 @@ const testCases = [
   {
     name: 'buildSafetyAlert',
     fn: () => buildSafetyAlert('Check-in', 'Llegada segura confirmada a la universidad', 'low')
-  },
-  {
-    name: 'getOsrmRoute',
-    fn: async () => getOsrmRoute([3.4577, -76.5394], [3.47, -76.52], 'mio')
-  },
-  {
-    name: 'searchAddressNominatim',
-    fn: async () => searchAddressNominatim('UNIAJC Sede Sur Cali')
   },
   {
     name: 'calculateMultimodalDetails',

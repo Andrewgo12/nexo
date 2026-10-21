@@ -71,19 +71,49 @@ export function calculateCompatibilityScore(student, trip) {
   return Math.min(99, Math.max(70, Math.round(base + zoneBonus + timeBonus + routeBonus + trustBonus)));
 }
 
+export function calculateTravelAffinityScore(student, trip) {
+  const normalized = (value) => String(value || '').trim().toLocaleLowerCase();
+  const studentZone = normalized(student.neighborhood);
+  const tripZone = normalized(trip.zone);
+  const preferredMode = normalized(student.transport).split(/[+/,]/)[0].trim();
+  const tripMode = normalized(trip.transport);
+  const shift = normalized(student.shift);
+  const hour = Number.parseInt(String(trip.time || '').slice(0, 2), 10);
+  let score = 0;
+
+  if (studentZone && tripZone && tripZone.includes(studentZone)) score += 40;
+  if (preferredMode && tripMode && (tripMode.includes(preferredMode) || preferredMode.includes(tripMode))) score += 30;
+  if (Number.isFinite(hour) && shift) {
+    const shiftMatches = shift.includes('mañana') ? hour >= 5 && hour < 12
+      : shift.includes('tarde') ? hour >= 12 && hour < 18
+        : shift.includes('noche') || shift.includes('noct') ? hour >= 18 || hour < 5
+          : false;
+    if (shiftMatches) score += 30;
+  }
+  return score;
+}
+
 export function filterTravelMatches(searchState, candidates = []) {
   return [...candidates].filter((item) => {
-    const zoneMatch = !searchState.zone || item.zone.toLowerCase().includes(searchState.zone.toLowerCase());
-    const timeMatch = !searchState.time || item.time.startsWith(searchState.time.slice(0, 2));
-    const facultyMatch = !searchState.faculty || item.faculty.toLowerCase().includes(searchState.faculty.toLowerCase());
-    const transportMatch = !searchState.transport || searchState.transport === 'Cualquiera' || item.transport.toLowerCase().includes(searchState.transport.toLowerCase());
-    const confidenceMatch = !searchState.confidence || searchState.confidence === 'Cualquiera' || Number(searchState.confidence.replace('+', '')) <= item.score;
-    const genderMatch = !searchState.gender || searchState.gender === 'Cualquiera' || item.gender === searchState.gender;
-    return zoneMatch && timeMatch && facultyMatch && transportMatch && confidenceMatch && genderMatch;
+    const normalized = (value) => String(value || '').trim().toLocaleLowerCase();
+    const zoneMatch = !searchState.zone || normalized(item.zone).includes(normalized(searchState.zone));
+    const timeMatch = !searchState.time || normalized(item.time).startsWith(searchState.time.slice(0, 2));
+    const facultyMatch = !searchState.faculty || normalized(item.faculty).includes(normalized(searchState.faculty));
+    const universityMatch = !searchState.university || searchState.university === 'Cualquiera' ||
+      normalized(item.university).includes(normalized(searchState.university));
+    const transportMatch = !searchState.transport || searchState.transport === 'Cualquiera' ||
+      normalized(item.transport).includes(normalized(searchState.transport));
+    return zoneMatch && timeMatch && facultyMatch && universityMatch && transportMatch;
   }).sort((a, b) => {
-    if (searchState.sort === 'Distancia') return a.score - b.score;
-    if (searchState.sort === 'Tiempo') return a.time.localeCompare(b.time);
-    return b.score - a.score;
+    if (searchState.sort === 'Hora de salida') return String(a.time).localeCompare(String(b.time));
+    if (searchState.sort === 'Más recientes') {
+      const aDate = Date.parse(a.created_at || '');
+      const bDate = Date.parse(b.created_at || '');
+      if (!Number.isFinite(aDate)) return Number.isFinite(bDate) ? 1 : 0;
+      if (!Number.isFinite(bDate)) return -1;
+      return bDate - aDate;
+    }
+    return Number(b.score || 0) - Number(a.score || 0);
   });
 }
 
@@ -148,8 +178,8 @@ export function buildTravelSearchCandidates() {
 export function buildSafetyOverview(student) {
   return {
     panic: false,
-    geofence: true,
-    emergency: true,
+    geofence: false,
+    emergency: false,
     arrival: false,
     contact: student.emergencyContact || 'Contacto de confianza',
     privacy: student.privacy || 'Zona aproximada'
@@ -173,7 +203,7 @@ export function buildMatchRecommendations(student, candidates = []) {
     zone: candidate.zone,
     time: candidate.time,
     mode: candidate.transport,
-    recommendation: `Coincidencia ${calculateCompatibilityScore(student, candidate)}% por zona, horario y confianza.`
+    recommendation: `Afinidad estimada ${calculateCompatibilityScore(student, candidate)}% por barrio, transporte y jornada.`
   }));
 }
 
@@ -303,7 +333,7 @@ export function buildSafetyMatrix(student) {
   const base = student?.trustScore || 4.8;
   return {
     panicReady: true,
-    geofence: true,
+    geofence: false,
     emergencyContact: Boolean(student?.emergencyContact || student?.emergency),
     risk: base >= 4.8 ? 'Baja' : base >= 4.4 ? 'Media' : 'Alta',
     safeZone: 'Barrio compatible con ruta',
@@ -357,7 +387,7 @@ export function evaluateTripRisk(trip = {}, student = {}) {
     risk,
     score: Math.max(10, Math.min(99, Math.round(baseScore))),
     recommendation: risk === 'Bajo' ? 'Viaje seguro para acompañamiento grupal.' : 'Revisar ruta, horario y contacto de confianza.',
-    geofence: trip?.route ? 'Ruta verificada dentro del perímetro seguro' : 'Monitoreo pendiente'
+    geofence: 'Monitoreo de geocerca no disponible'
   };
 }
 

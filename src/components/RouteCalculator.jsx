@@ -30,6 +30,7 @@ export default function RouteCalculator({ activeUniversity, onSelectCalculatedTr
   const [addressSearchQuery, setAddressSearchQuery] = useState('');
   const [addressSearchResults, setAddressSearchResults] = useState([]);
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [addressSearchError, setAddressSearchError] = useState('');
   const [customDestination, setCustomDestination] = useState(null);
 
   const originUni = UNIVERSITIES.find(u => u.id === originId) || activeUniversity;
@@ -55,11 +56,23 @@ export default function RouteCalculator({ activeUniversity, onSelectCalculatedTr
 
   const handleSearchNominatim = async (e) => {
     e.preventDefault();
-    if (!addressSearchQuery.trim()) return;
+    if (addressSearchQuery.trim().length < 3) {
+      setAddressSearchError('Escribe al menos 3 caracteres para buscar.');
+      setAddressSearchResults([]);
+      return;
+    }
     setIsSearchingAddress(true);
-    const results = await searchAddressNominatim(addressSearchQuery);
-    setAddressSearchResults(results);
-    setIsSearchingAddress(false);
+    setAddressSearchError('');
+    try {
+      const results = await searchAddressNominatim(addressSearchQuery);
+      setAddressSearchResults(results);
+      if (results.length === 0) setAddressSearchError('No se encontraron lugares para esa búsqueda.');
+    } catch (error) {
+      setAddressSearchResults([]);
+      setAddressSearchError(error.message || 'No fue posible buscar esa dirección.');
+    } finally {
+      setIsSearchingAddress(false);
+    }
   };
 
   const handleSelectSearchResult = (res) => {
@@ -87,6 +100,12 @@ export default function RouteCalculator({ activeUniversity, onSelectCalculatedTr
             Compara tiempos, tarifas de aporte, ahorro de CO2 y seguridad en 7 modos de transporte en Cali
           </p>
         </div>
+
+        {addressSearchError && (
+          <div role="alert" style={{ color: '#b91c1c', fontSize: '0.82rem' }}>
+            {addressSearchError}
+          </div>
+        )}
 
         <div className="badge badge-emerald">
           <Sparkles size={12} /> OSRM & OpenStreetMap Cali
@@ -203,7 +222,7 @@ export default function RouteCalculator({ activeUniversity, onSelectCalculatedTr
       {/* Multimodal Cards Comparison (7 Modes) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span>Comparativa Multimodal de Transporte ({multimodalModes.length} alternativas evaluadas)</span>
+          <span>Estimaciones orientativas ({multimodalModes.length} modos; sin rutas verificadas)</span>
         </h3>
 
         {multimodalModes.map(mode => (
@@ -253,7 +272,7 @@ export default function RouteCalculator({ activeUniversity, onSelectCalculatedTr
                   <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px' }}>
                     <Leaf size={12} /> {mode.co2SavedKg} kg CO₂ ahorrados
                   </span>
-                  <span>🛡️ Seguro AXA Opcional</span>
+                  <span>Estimación no vinculante</span>
                 </div>
               </div>
             </div>

@@ -1,253 +1,233 @@
-// Service for Free Open Source Routing (OSRM) and Geocoding (Nominatim OpenStreetMap)
-// specifically calibrated for Santiago de Cali, Colombia.
-
-/**
- * Maps application transport modes to OSRM supported profiles.
- */
-const getOsrmProfile = (mode) => {
-  switch (mode) {
-    case 'bike':
-      return 'cycling';
-    case 'walk':
-      return 'foot';
-    case 'car':
-    case 'moto':
-    case 'taxi':
-    case 'intermunicipal':
-    case 'mio':
-    default:
-      return 'driving';
-  }
+const OSRM_PROVIDERS = {
+  car: { baseUrl: 'https://router.project-osrm.org', profile: 'driving', source: 'OSRM / OpenStreetMap' },
+  taxi: { baseUrl: 'https://router.project-osrm.org', profile: 'driving', source: 'OSRM / OpenStreetMap' },
+  walk: { baseUrl: 'https://routing.openstreetmap.de/routed-foot', profile: 'driving', source: 'OSM foot routing' },
+  bike: { baseUrl: 'https://routing.openstreetmap.de/routed-bike', profile: 'driving', source: 'OSM bicycle routing' },
 };
+const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
+const REQUEST_TIMEOUT_MS = 8000;
+const NOMINATIM_MIN_INTERVAL_MS = 1100;
+let nextNominatimRequestAt = 0;
 
-/**
- * Fetch real routing polyline and metrics from public OSRM API.
- * Uses 3.5s timeout with fallback to intelligent street interpolation.
- * 
- * @param {Array<number>} origin [lat, lng]
- * @param {Array<number>} dest [lat, lng]
- * @param {string} mode 'car' | 'moto' | 'mio' | 'walk' | 'bike' | 'taxi' | 'intermunicipal'
- * @returns {Promise<{ polyline: Array<[number, number]>, distanceKm: number, durationMin: number, source: string }>}
- */
+function validateCoordinates(coordinates, label) {
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length !== 2 ||
+    !Number.isFinite(coordinates[0]) ||
+    !Number.isFinite(coordinates[1]) ||
+    coordinates[0] < -90 ||
+    coordinates[0] > 90 ||
+    coordinates[1] < -180 ||
+    coordinates[1] > 180
+  ) {
+    throw new Error(`${label} debe tener latitud y longitud válidas.`);
+  }
+}
+
+function getOsrmProfile(mode) {
+  const provider = OSRM_PROVIDERS[mode];
+  if (provider) return provider;
+  if (mode === 'moto') return { ...OSRM_PROVIDERS.car, mode: 'moto' };
+  throw new Error(`El cálculo de rutas para "${mode}" aún no está conectado a un proveedor real.`);
+}
+
 export async function getOsrmRoute(origin, dest, mode = 'car') {
-  if (!origin || !dest) return null;
-
-  const profile = getOsrmProfile(mode);
-  // OSRM expects {lng},{lat} order
-  const url = `https://router.project-osrm.org/route/v1/${profile}/${origin[1]},${origin[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`;
-
+  validateCoordinates(origin, 'El origen');
+  validateCoordinates(dest, 'El destino');
+  const provider = getOsrmProfile(mode);
+  const url = `${provider.baseUrl}/route/v1/${provider.profile}/${origin[1]},${origin[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4000);
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) throw new Error(`OSRM HTTP error: ${res.status}`);
-    const data = await res.json();
-
-    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-      const bestRoute = data.routes[0];
-      // Convert GeoJSON [lng, lat] to Leaflet [lat, lng]
-      const polyline = bestRoute.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-      const distanceKm = +(bestRoute.distance / 1000).toFixed(2);
-      const durationMin = Math.max(2, Math.round(bestRoute.duration / 60));
-
-      return {
-        polyline,
-        distanceKm,
-        durationMin,
-        source: 'OSRM OpenStreetMap Engine (En vivo)'
-      };
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`El servicio de rutas respondió con el estado ${response.status}.`);
     }
-  } catch {
-    // OSRM fallback intentionally ignored; a realistic Cali route is generated below.
+
+    const data = await response.json();
+    const bestRoute = data.routes?.[0];
+    const coordinates = bestRoute?.geometry?.coordinates;
+    if (
+      data.code !== 'Ok' ||
+      !Array.isArray(coordinates) ||
+      coordinates.length < 2 ||
+      !Number.isFinite(bestRoute.distance) ||
+      !Number.isFinite(bestRoute.duration) ||
+      coordinates.some((coordinate) => {
+        if (!Array.isArray(coordinate) || coordinate.length !== 2) return true;
+        const [lng, lat] = coordinate;
+        return !Number.isFinite(lng) ||
+          !Number.isFinite(lat) ||
+          lng < -180 ||
+          lng > 180 ||
+          lat < -90 ||
+          lat > 90;
+      })
+    ) {
+      throw new Error('No se encontró una ruta vial entre esos puntos.');
+    }
+
+    return {
+      polyline: coordinates.map(([lng, lat]) => [lat, lng]),
+      distanceKm: +(bestRoute.distance / 1000).toFixed(2),
+      durationMin: Math.max(1, Math.round(bestRoute.duration / 60)),
+      source: provider.source,
+      mode,
+    };
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('El servicio de rutas tardó demasiado. Intenta de nuevo.');
+    }
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }
-
-  // Graceful Fallback: Generate curved street coordinates along Cali avenues
-  return generateRealisticCaliPolyline(origin, dest, mode);
 }
 
-/**
- * Generates an accurate road interpolation through Cali avenues when offline or API limit reached.
- */
-function generateRealisticCaliPolyline(origin, dest, mode) {
-  const [lat1, lng1] = origin;
-  const [lat2, lng2] = dest;
-
-  const R = 6371; // Earth radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  const directDist = +(R * c).toFixed(2);
-  const roadDist = +(directDist * 1.28).toFixed(2);
-
-  // Speed multiplier by mode
-  let speedKmH = 28;
-  if (mode === 'moto') speedKmH = 34;
-  if (mode === 'mio') speedKmH = 22;
-  if (mode === 'bike') speedKmH = 17;
-  if (mode === 'walk') speedKmH = 4.8;
-  if (mode === 'taxi') speedKmH = 30;
-
-  const durationMin = Math.max(3, Math.round((roadDist / speedKmH) * 60));
-
-  // Intermediate points simulating Cañasgordas / Calle 5 / Pasoancho grid
-  const steps = 7;
-  const polyline = [];
-  polyline.push([lat1, lng1]);
-
-  for (let i = 1; i < steps; i++) {
-    const fraction = i / steps;
-    const interpLat = lat1 + (lat2 - lat1) * fraction;
-    // Introduce slight curvature simulating avenue path
-    const curveOffset = Math.sin(fraction * Math.PI) * 0.0035;
-    const interpLng = lng1 + (lng2 - lng1) * fraction + curveOffset;
-    polyline.push([+interpLat.toFixed(5), +interpLng.toFixed(5)]);
+export async function searchAddressNominatim(query) {
+  if (typeof query !== 'string' || query.trim().length < 3) {
+    throw new Error('Escribe al menos 3 caracteres para buscar una dirección.');
   }
 
-  polyline.push([lat2, lng2]);
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    q: `${query.trim()}, Cali, Valle del Cauca, Colombia`,
+    limit: '6',
+    addressdetails: '1',
+    viewbox: '-76.80,3.65,-76.35,3.20',
+    bounded: '1',
+  });
+  const requestTime = Date.now();
+  const waitMs = Math.max(0, nextNominatimRequestAt - requestTime);
+  nextNominatimRequestAt = Math.max(requestTime, nextNominatimRequestAt) + NOMINATIM_MIN_INTERVAL_MS;
+  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
 
-  return {
-    polyline,
-    distanceKm: roadDist,
-    durationMin,
-    source: 'Cálculo de Precisión Vial (Cali Vía Abierta)'
-  };
-}
-
-/**
- * Search places, stations or addresses in Cali using free Nominatim API.
- * 
- * @param {string} query 
- * @returns {Promise<Array<{ name: string, lat: number, lng: number, type: string }>>}
- */
-export async function searchAddressNominatim(query) {
-  if (!query || query.trim().length < 3) return [];
-
-  const cleanQuery = encodeURIComponent(`${query.trim()}, Cali, Valle del Cauca, Colombia`);
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${cleanQuery}&limit=6&addressdetails=1`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const res = await fetch(url, {
-      headers: {
-        'Accept-Language': 'es-CO,es;q=0.9',
-        // Good citizenship for Nominatim usage
-        'User-Agent': 'ViajaU-Cali-OpenTransit/1.0 (edu-app)'
-      }
+    const response = await fetch(`${NOMINATIM_BASE_URL}/search?${params}`, {
+      signal: controller.signal,
+      headers: { 'Accept-Language': 'es-CO,es;q=0.9' },
     });
+    if (!response.ok) {
+      throw new Error(`El buscador de direcciones respondió con el estado ${response.status}.`);
+    }
 
-    if (!res.ok) return [];
-    const results = await res.json();
+    const results = await response.json();
+    if (!Array.isArray(results)) {
+      throw new Error('El buscador devolvió una respuesta inválida.');
+    }
 
-    return results.map(item => ({
-      id: item.place_id,
-      name: item.display_name.split(',')[0],
-      fullName: item.display_name,
-      lat: parseFloat(item.lat),
-      lng: parseFloat(item.lon),
-      type: item.type || 'lugar'
-    }));
-  } catch {
-    return [];
+    return results
+      .filter((item) => item && typeof item.display_name === 'string')
+      .map((item) => ({
+        id: item.place_id,
+        name: item.display_name.split(',')[0],
+        fullName: item.display_name,
+        lat: Number.parseFloat(item.lat),
+        lng: Number.parseFloat(item.lon),
+        type: item.type || 'lugar',
+      }))
+      .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('La búsqueda de direcciones tardó demasiado. Intenta de nuevo.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-/**
- * Calculate multi-modal comparison data for any origin-destination pair in Cali.
- */
 export function calculateMultimodalDetails(distanceKm) {
-  const d = Math.max(1.0, distanceKm);
+  const distance = Math.max(1.0, distanceKm);
 
   return [
     {
       id: 'car',
-      name: 'Carro Compartido (Carpooling)',
+      name: 'Carro Compartido (estimación)',
       mode: 'car',
-      timeMin: Math.round(d * 1.9 + 5),
+      timeMin: Math.round(distance * 1.9 + 5),
       costCop: 3500,
-      safetyScore: '98% (Seguro AXA + Carnet Verificado)',
-      co2Kg: +(d * 0.17).toFixed(2),
-      co2SavedKg: +(d * 0.14).toFixed(2),
-      recommendation: 'Ideal para trayectos largos nocturnos dividiendo gasolina.',
-      badgeClass: 'badge-sapphire'
+      safetyScore: 'No evaluado',
+      co2Kg: +(distance * 0.17).toFixed(2),
+      co2SavedKg: +(distance * 0.14).toFixed(2),
+      recommendation: 'Estimación orientativa; no es una ruta verificada.',
+      badgeClass: 'badge-sapphire',
     },
     {
       id: 'moto',
-      name: 'Moto-Cupo Universitario',
+      name: 'Moto (estimación)',
       mode: 'moto',
-      timeMin: Math.round(d * 1.4 + 4),
+      timeMin: Math.round(distance * 1.4 + 4),
       costCop: 3000,
-      safetyScore: '92% (Casco Certificado + Chaleco)',
-      co2Kg: +(d * 0.08).toFixed(2),
-      co2SavedKg: +(d * 0.09).toFixed(2),
-      recommendation: 'La opción más rápida para evitar trancones en horas pico.',
-      badgeClass: 'badge-amber'
+      safetyScore: 'No evaluado',
+      co2Kg: +(distance * 0.08).toFixed(2),
+      co2SavedKg: +(distance * 0.09).toFixed(2),
+      recommendation: 'Estimación orientativa; no es una ruta verificada.',
+      badgeClass: 'badge-amber',
     },
     {
       id: 'mio',
-      name: 'Parche MIO Metrocali',
+      name: 'MIO (estimación)',
       mode: 'mio',
-      timeMin: Math.round(d * 3.2 + 10),
+      timeMin: Math.round(distance * 3.2 + 10),
       costCop: 3000,
-      safetyScore: '90% (En grupo por troncales iluminadas)',
-      co2Kg: +(d * 0.04).toFixed(2),
-      co2SavedKg: +(d * 0.19).toFixed(2),
-      recommendation: 'Acompañamiento en estaciones y troncales T31, E21, T50.',
-      badgeClass: 'badge-emerald'
+      safetyScore: 'No evaluado',
+      co2Kg: +(distance * 0.04).toFixed(2),
+      co2SavedKg: +(distance * 0.19).toFixed(2),
+      recommendation: 'Sin integración GTFS: no incluye paradas ni horarios reales.',
+      badgeClass: 'badge-emerald',
     },
     {
       id: 'bike',
-      name: 'Bici-Ruta Universitaria',
+      name: 'Bicicleta (estimación)',
       mode: 'bike',
-      timeMin: Math.round(d * 3.6 + 6),
+      timeMin: Math.round(distance * 3.6 + 6),
       costCop: 0,
-      safetyScore: '89% (Ciclo-caravana con luces LED)',
+      safetyScore: 'No evaluado',
       co2Kg: 0,
-      co2SavedKg: +(d * 0.23).toFixed(2),
-      recommendation: 'Cero emisiones por la red de ciclorrutas de Cañasgordas/Pasoancho.',
-      badgeClass: 'badge-emerald'
+      co2SavedKg: +(distance * 0.23).toFixed(2),
+      recommendation: 'Estimación orientativa; no es una ruta verificada.',
+      badgeClass: 'badge-emerald',
     },
     {
       id: 'walk',
-      name: 'Caminata Segura en Parche',
+      name: 'Caminata (estimación)',
       mode: 'walk',
-      timeMin: Math.round(d * 12.0 + 4),
+      timeMin: Math.round(distance * 12 + 4),
       costCop: 0,
-      safetyScore: '88% (En grupo compacto con linternas)',
+      safetyScore: 'No evaluado',
       co2Kg: 0,
-      co2SavedKg: +(d * 0.23).toFixed(2),
-      recommendation: 'Para conectar el campus con paradas del MIO y barrios contiguos.',
-      badgeClass: 'badge-purple'
+      co2SavedKg: +(distance * 0.23).toFixed(2),
+      recommendation: 'Estimación orientativa; no es una ruta verificada.',
+      badgeClass: 'badge-purple',
     },
     {
       id: 'taxi',
-      name: 'Taxi / App Grupal (4 estudiantes)',
+      name: 'Taxi / App grupal (estimación)',
       mode: 'taxi',
-      timeMin: Math.round(d * 2.0 + 4),
-      costCop: Math.round((d * 1900 + 7500) / 4),
-      safetyScore: '96% (Vehículo verificado en grupo)',
-      co2Kg: +(d * 0.16).toFixed(2),
-      co2SavedKg: +(d * 0.11).toFixed(2),
-      recommendation: 'Comodidad puerta a puerta dividiendo tarifa entre cuatro.',
-      badgeClass: 'badge-amber'
+      timeMin: Math.round(distance * 2 + 4),
+      costCop: Math.round((distance * 1900 + 7500) / 4),
+      safetyScore: 'No evaluado',
+      co2Kg: +(distance * 0.16).toFixed(2),
+      co2SavedKg: +(distance * 0.11).toFixed(2),
+      recommendation: 'Estimación orientativa; no es una ruta verificada.',
+      badgeClass: 'badge-amber',
     },
     {
       id: 'intermunicipal',
-      name: 'Expreso Foráneo a Terminal',
+      name: 'Intermunicipal (estimación)',
       mode: 'intermunicipal',
-      timeMin: Math.round(d * 2.2 + 8),
-      costCop: 4500,
-      safetyScore: '95% (Conexión coordinada y puntual)',
-      co2Kg: +(d * 0.12).toFixed(2),
-      co2SavedKg: +(d * 0.15).toFixed(2),
-      recommendation: 'Para no perder el bus hacia Palmira, Buga, Yumbo o Jamundí.',
-      badgeClass: 'badge-sapphire'
-    }
+      timeMin: Math.round(distance * 2.5 + 12),
+      costCop: Math.round(distance * 1500),
+      safetyScore: 'No evaluado',
+      co2Kg: +(distance * 0.12).toFixed(2),
+      co2SavedKg: +(distance * 0.1).toFixed(2),
+      recommendation: 'Estimación orientativa; no es una ruta verificada.',
+      badgeClass: 'badge-purple',
+    },
   ];
 }

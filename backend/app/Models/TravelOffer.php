@@ -24,4 +24,19 @@ class TravelOffer extends Model
     {
         return $this->belongsTo(StudentProfile::class);
     }
+
+    public function requests()
+    {
+        return $this->hasMany(TripRequest::class);
+    }
+
+    public function locations()
+    {
+        return $this->hasMany(TripLocation::class);
+    }
+
+    public function checkIns()
+    {
+        return $this->hasMany(TripCheckIn::class);
+    }
 }

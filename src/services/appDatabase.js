@@ -26,22 +26,21 @@ export const DEFAULT_APP_DATA = {
     time: '9:45 PM'
   },
   searchState: {
-    zone: 'El Caney',
-    time: '19:45',
-    faculty: 'Ingeniería',
-    transport: 'MIO',
-    confidence: '4.8+',
-    gender: 'Cualquiera',
+    zone: '',
+    time: '',
+    faculty: '',
+    university: 'Cualquiera',
+    transport: 'Cualquiera',
     sort: 'Compatibilidad'
   },
   notifications: [
-    { title: 'Salida en 15 min', channel: 'Push', active: true },
-    { title: 'Check-in de llegada pendiente', channel: 'SMS', active: true },
-    { title: 'Cambio de ruta detectado', channel: 'Alerta', active: false },
-    { title: 'Contacto de confianza notificado', channel: 'WhatsApp', active: true }
+    { title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
+    { title: 'Check-in de llegada', channel: 'En la app', active: false },
+    { title: 'Cambio de ruta', channel: 'No configurado', active: false },
+    { title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false }
   ],
   advancedMode: { night: true, safeties: true, hotspots: true, recommendations: true },
-  safetyState: { panic: false, geofence: true, emergency: true, arrival: false },
+  safetyState: { panic: false, geofence: false, emergency: false, arrival: false },
   adminState: { users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' },
   pricing: { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 },
   executionState: [
@@ -50,7 +49,7 @@ export const DEFAULT_APP_DATA = {
     { id: 'search-filter', label: 'Buscar viajes por zona, horario y facultad con filtros', done: true },
     { id: 'match-score', label: 'Asignar puntaje de compatibilidad por zona, ruta y confianza', done: true },
     { id: 'trip-management', label: 'Crear oferta, aceptar pasajero y cerrar trayecto', done: true },
-    { id: 'safety-alerts', label: 'Mantener geocerca, botones de emergencia y alertas de llegada', done: true },
+    { id: 'safety-alerts', label: 'Completar seguimiento seguro y conectar alertas externas', done: false },
     { id: 'payment-coverage', label: 'Cobrar por trayecto y activar seguro con cobertura', done: true },
     { id: 'analytics-ops', label: 'Monitorear métricas, logs y salud del sistema', done: false },
     { id: 'backend-sync', label: 'Sincronizar GTFS y caché de rutas en backend real', done: false },
@@ -71,6 +70,10 @@ export function readAppData() {
     }
 
     const parsed = JSON.parse(raw);
+    const savedExecutionState = Array.isArray(parsed.executionState)
+      ? parsed.executionState
+      : DEFAULT_APP_DATA.executionState;
+    const safetyTask = DEFAULT_APP_DATA.executionState.find((task) => task.id === 'safety-alerts');
     return {
       ...DEFAULT_APP_DATA,
       ...parsed,
@@ -78,12 +81,22 @@ export function readAppData() {
       university: { ...DEFAULT_APP_DATA.university, ...(parsed.university || {}) },
       route: { ...DEFAULT_APP_DATA.route, ...(parsed.route || {}) },
       searchState: { ...DEFAULT_APP_DATA.searchState, ...(parsed.searchState || {}) },
-      notifications: parsed.notifications || DEFAULT_APP_DATA.notifications,
+      notifications: (Array.isArray(parsed.notifications) ? parsed.notifications : DEFAULT_APP_DATA.notifications)
+        .map((item) => ['SMS', 'WhatsApp'].includes(item?.channel)
+          ? { ...item, title: 'Notificación externa no configurada', channel: 'No configurado', active: false }
+          : item),
       advancedMode: { ...DEFAULT_APP_DATA.advancedMode, ...(parsed.advancedMode || {}) },
-      safetyState: { ...DEFAULT_APP_DATA.safetyState, ...(parsed.safetyState || {}) },
+      safetyState: {
+        ...DEFAULT_APP_DATA.safetyState,
+        ...(parsed.safetyState || {}),
+        geofence: false,
+        emergency: false
+      },
       adminState: { ...DEFAULT_APP_DATA.adminState, ...(parsed.adminState || {}) },
       pricing: { ...DEFAULT_APP_DATA.pricing, ...(parsed.pricing || {}) },
-      executionState: parsed.executionState || DEFAULT_APP_DATA.executionState
+      executionState: savedExecutionState.map((task) => task?.id === 'safety-alerts'
+        ? { ...task, ...safetyTask, done: false }
+        : task)
     };
   } catch {
     return DEFAULT_APP_DATA;

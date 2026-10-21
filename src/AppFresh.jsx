@@ -1,16 +1,44 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUSINESS_MODULES } from './data/businessModules';
-import { getOsrmRoute, searchAddressNominatim, calculateMultimodalDetails } from './services/routingApi';
+import { getOsrmRoute, searchAddressNominatim } from './services/routingApi';
+import { getMioRoute } from './services/mioRoutingApi';
+import { getCurrentDeviceLocation } from './services/locationApi';
+import RouteMap from './components/RouteMap';
 import { readAppData, writeAppData } from './services/appDatabase';
 import {
+  clearAuthToken,
+  changePassword,
+  getAuthToken,
+  getCurrentAccount,
+  getTravelMatches,
+  getTravelOffers,
+  getMyTrips,
+  createTripCheckIn,
+  publishTravelOffer,
+  requestTravelSeat,
+  updateTravelRequest,
+  updateTravelOfferStatus,
+  shareTripLocation,
+  stopSharingTripLocation,
+  getTripSafetyStatus,
+  createSafetyAlert,
+  getSafetyAlerts,
+  resolveSafetyAlert,
+  loginAccount,
+  logoutAccount,
+  requestPasswordReset,
+  resendVerification,
+  registerAccount,
+  resetPassword,
+  storeAuthToken,
+  updateCurrentProfile,
+  uploadProfilePhoto,
+} from './services/authApi';
+import {
   validateInstitutionalEmail,
-  createStudentProfile,
   filterTravelMatches,
-  createTravelOffer,
-  requestTripSeat,
   calculateTripCost,
-  createEmergencyAlert,
-  updateTravelStatus,
+  calculateTravelAffinityScore,
   buildRouteSummary,
   buildTravelSearchCandidates,
   buildSafetyOverview,
@@ -20,12 +48,7 @@ import {
   buildDashboardMetrics,
   buildSafetyMatrix,
   getRouteModeKey,
-  getCurrentStudentLocation,
-  searchZoneByText,
-  suggestMeetingPoint,
-  evaluateTripRisk,
-  buildTrustSummary,
-  buildSafetyAlert
+  buildTrustSummary
 } from './services/viajauCore';
 
 const modules = [
@@ -47,6 +70,17 @@ const modules = [
   { key: 'roadmap', title: '16. Roadmap de implementación', color: '#67e8f9' },
 ];
 
+const tripStatusLabels = {
+  pending: 'Pendiente',
+  accepted: 'Aceptada',
+  rejected: 'Rechazada',
+  cancelled: 'Cancelada',
+  'oferta-activa': 'Activa',
+  'en-curso': 'En curso',
+  completada: 'Completada',
+  cancelada: 'Cancelada',
+};
+
 const universities = [
   { id: 'uniajc', name: 'UNIAJC', domain: '@uniajc.edu.co' },
   { id: 'univalle', name: 'Univalle', domain: '@correounivalle.edu.co' },
@@ -61,42 +95,17 @@ const authFns = [
   'activarCompartirUbicación()', 'definirNivelDePrivacidad()', 'activarNotificacionesSeguridad()', 'configurarEmergencia()'
 ];
 
-const routeFns = [
-  'obtenerUbicacionActual()', 'obtenerUbicacionBarrio()', 'buscarZonaPorTexto()', 'geocodificarDireccion()', 'calcularDistanciaEntrePuntos()',
-  'calcularRutaACaminando()', 'calcularRutaEnBici()', 'calcularRutaEnMoto()', 'calcularRutaEnCarro()', 'calcularRutaEnTaxi()',
-  'calcularRutaEnMIO()', 'calcularRutaTransportePublico()', 'calcularRutaMixta()', 'calcularRutaCasaUniversidad()', 'calcularRutaUniversidadCasa()',
-  'calcularRutaAParada()', 'calcularRutaAlPuntoEncuentro()', 'calcularTiempoEstimadoLlegada()', 'cargarGTFSMetroCali()', 'leerParadasMIO()',
-  'leerRutasMIO()', 'mapearParadasCercanas()', 'detectarRutaCompatible()', 'construirItinerarioMultimodal()', 'calcularRutaConDatosAbiertos()', 'fallbackRouting()'
-];
-
 const searchFns = [
-  'buscarViajesPorZona()', 'buscarViajesPorHora()', 'buscarViajesPorJornada()', 'buscarViajesPorUniversidad()', 'buscarViajesPorRuta()', 'buscarViajesPorFacultad()',
-  'filtrarPorSexo()', 'filtrarPorConfianza()', 'filtrarPorTransporte()', 'filtrarPorSeguridad()',
-  'ordenarPorDistancia()', 'ordenarPorTiempo()', 'ordenarPorCompatibilidad()'
+  'buscarViajesPorZona()', 'buscarViajesPorHora()', 'buscarViajesPorUniversidad()', 'buscarViajesPorFacultad()',
+  'filtrarPorTransporte()', 'filtrarPorVerificacionInstitucional()',
+  'ordenarPorCompatibilidad()', 'ordenarPorHora()', 'ordenarPorFecha()'
 ];
 
 const routingApis = ['OSRM', 'Nominatim', 'OpenStreetMap', 'OpenTripPlanner', 'Fallback routing'];
 
 const matchFns = [
-  'encontrarCompatiblesPorZona()', 'encontrarCompatiblesPorHorario()', 'encontrarCompatiblesPorRuta()', 'encontrarCompatiblesPorJornada()', 'encontrarCompatiblesPorFacultad()',
-  'encontrarCompatiblesPorSector()', 'calcularPuntajeCoincidencia()', 'evaluarDistanciaZona()', 'evaluarTiempoSalida()', 'evaluarRutaCompatible()',
-  'evaluarNivelDeConfianza()', 'evaluarSeguridad()', 'recomendarViaje()', 'sugerirPuntoEncuentro()', 'calcularPuntoMedio()', 'elegirParadaSegura()',
-  'sugerirRutaDeAcercamiento()', 'validarPuntoSeguro()', 'crearGrupoViaje()', 'unirEstudianteAGrupo()', 'recomendarGrupo()', 'ajustarGrupoPorHora()', 'detectarViajeCombinado()'
-];
-
-const tripFns = [
-  'crearOfertaViaje()', 'crearSolicitudViaje()', 'publicarDisponibilidad()', 'activarViajeEnTiempoReal()', 'confirmarTrayecto()',
-  'aceptarPasajero()', 'rechazarPasajero()', 'invitarEstudiante()', 'dejarGrupo()', 'cancelarViaje()', 'cancelarParticipacion()',
-  'iniciarViaje()', 'confirmarSalida()', 'confirmarLlegada()', 'marcarViajeCompletado()', 'marcarViajeEnCurso()', 'marcarViajeCancelado()',
-  'calcularCostoEstimado()', 'dividirCosto()', 'establecerAportePorTrayecto()', 'pagarPorTrayecto()', 'registrarCobro()'
-];
-
-const safetyFns = [
-  'compartirUbicacion()', 'actualizarUbicacion()', 'verUbicacionGrupo()', 'verRutaEnTiempoReal()', 'notificarCambioDeUbicacion()',
-  'confirmarLlegadaSegura()', 'enviarRecordatorioLlegada()', 'activarCheckIn()', 'verificarLlegadaAlumno()', 'activarBotonPanico()',
-  'enviarAlertaContacto()', 'enviarAlertaAutoridades()', 'pedirAyuda()', 'activarModoEmergencia()', 'compartirUbicacionConContacto()',
-  'monitorearGeocerca()', 'detectarSalidaDeRuta()', 'detectarDesviacion()', 'detectarInactividad()', 'alertarViajeAnormal()',
-  'valorarConductor()', 'valorarPasajero()', 'registrarIncidente()', 'reportarUsuario()', 'bloquearUsuario()', 'listarUsuariosBloqueados()'
+  'consultarOfertasVerificadas()', 'compararZonaDeclarada()', 'compararJornadaConHora()',
+  'compararTransportePreferido()', 'explicarPuntajeCoincidencia()', 'ordenarRecomendaciones()'
 ];
 
 const adminFns = [
@@ -170,36 +179,18 @@ const roadmapPhases = [
 
 const executionChecklist = [
   { id: 'domain-validation', label: 'Validar dominio universitario y perfil del estudiante', done: true },
-  { id: 'route-fallback', label: 'Calcular ruta principal con fallback a OpenStreetMap/OSRM', done: true },
-  { id: 'search-filter', label: 'Buscar viajes por zona, horario y facultad con filtros', done: true },
-  { id: 'match-score', label: 'Asignar puntaje de compatibilidad por zona, ruta y confianza', done: true },
+  { id: 'route-fallback', label: 'Calcular ruta vial con OSRM y mostrar errores sin inventar recorridos', done: true },
+  { id: 'search-filter', label: 'Buscar viajes por zona, horario, universidad y carrera', done: true },
+  { id: 'match-score', label: 'Calcular coincidencias explicables por zona, jornada y transporte', done: true },
   { id: 'trip-management', label: 'Crear oferta, aceptar pasajero y cerrar trayecto', done: true },
-  { id: 'safety-alerts', label: 'Mantener geocerca, botones de emergencia y alertas de llegada', done: true },
-  { id: 'payment-coverage', label: 'Cobrar por trayecto y activar seguro con cobertura', done: true },
+  { id: 'safety-alerts', label: 'Compartir ubicación en vivo y atender alertas de emergencia', done: false },
+  { id: 'payment-coverage', label: 'Procesar pagos y confirmar cobertura de seguro', done: false },
   { id: 'analytics-ops', label: 'Monitorear métricas, logs y salud del sistema', done: false },
   { id: 'backend-sync', label: 'Sincronizar GTFS y caché de rutas en backend real', done: false },
   { id: 'prod-hardening', label: 'Cuarentena de producción, auditoría y escalamiento', done: false },
 ];
 
 const initialStudent = { name: 'Kevin González', email: 'kevin.gonzalez@uniajc.edu.co', career: 'Ingeniería de Sistemas', semester: '8vo Semestre', shift: 'Nocturna', neighborhood: 'El Caney', transport: 'MIO + caminata', emergency: 'María González', privacy: 'Zona aproximada' };
-
-const matches = [
-  { traveler: 'Ana Vélez', score: 96, zone: 'El Caney', time: '9:45 PM', mode: 'MIO + caminata' },
-  { traveler: 'Daniela Carmona', score: 92, zone: 'Pance', time: '9:50 PM', mode: 'Moto segura' },
-  { traveler: 'Santiago Rojas', score: 88, zone: 'Valle del Lili', time: '10:00 PM', mode: 'Carro compartido' },
-];
-
-const trips = [
-  { driver: 'Claudia Aranda', route: 'UNIAJC → Pance', seats: 2, cost: '3500 COP', status: 'Verificado' },
-  { driver: 'David Restrepo', route: 'Univalle → El Caney', seats: 1, cost: '3000 COP', status: 'Seguro activo' },
-  { driver: 'Santiago Morales', route: 'UNIAJC → Capri', seats: 3, cost: '0 COP', status: 'Grupo seguro' },
-];
-
-const alerts = [
-  { type: 'Geocerca', detail: 'Salida de ruta detectada en Pance', state: 'Monitoreando' },
-  { type: 'Check-in', detail: 'Llegada segura confirmada por Ana', state: 'OK' },
-  { type: 'Emergencia', detail: 'Alerta enviada a contacto de confianza', state: 'Activo' },
-];
 
 const kpis = [
   ['Usuarios registrados', '18.4K'], ['Viajes activos', '2.1K'], ['Tasa de coincidencia', '89%'], ['Viajes seguros', '96%']
@@ -209,7 +200,7 @@ const overviewCards = [
   { key: 'validacion', title: 'Validación institucional', value: '100%', detail: 'Correo universitario validado', tone: '#34d399' },
   { key: 'ruta', title: 'Ruta más segura', value: '18 min', detail: 'UNIAJC → El Caney', tone: '#60a5fa' },
   { key: 'compatibilidad', title: 'Compatibilidad media', value: '92%', detail: 'Coincidencia con zona y horario', tone: '#a7f3d0' },
-  { key: 'seguridad', title: 'Seguimiento activo', value: '24/7', detail: 'Geocerca y check-in funcionando', tone: '#fca5a5' }
+  { key: 'seguridad', title: 'Seguridad del viaje', value: 'GPS optativo', detail: 'Ubicación y check-in durante viajes activos', tone: '#fca5a5' }
 ];
 
 const field = { padding: '12px 14px', borderRadius: 12, background: '#0f172a', border: '1px solid rgba(148,163,184,0.25)', color: '#fff' };
@@ -228,51 +219,170 @@ export default function AppFresh() {
   const [privacy, setPrivacy] = useState(persisted.privacy || 'Zona aproximada');
   const [toast, setToast] = useState('');
   const [route, setRoute] = useState(persisted.route || { origin: 'UNIAJC Sede Sur', destination: 'El Caney', mode: 'MIO + caminata', time: '9:45 PM' });
-  const [searchState, setSearchState] = useState(persisted.searchState || { zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO', confidence: '4.8+', gender: 'Cualquiera', sort: 'Compatibilidad' });
-  const [searchResults, setSearchResults] = useState([
-    { name: 'Ana Vélez', zone: 'El Caney', time: '19:45', faculty: 'Ingeniería', transport: 'MIO + caminata', score: 96, safety: 'Alta', gender: 'Mujer' },
-    { name: 'Daniela Carmona', zone: 'El Caney', time: '19:50', faculty: 'Ingeniería', transport: 'MIO', score: 92, safety: 'Alta', gender: 'Mujer' },
-    { name: 'Santiago Rojas', zone: 'Pance', time: '20:10', faculty: 'Diseño', transport: 'Carro', score: 86, safety: 'Media', gender: 'Hombre' },
-  ]);
+  const [searchState, setSearchState] = useState({
+    zone: '',
+    time: '',
+    faculty: '',
+    university: 'Cualquiera',
+    transport: 'Cualquiera',
+    sort: 'Compatibilidad',
+  });
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchLoaded, setSearchLoaded] = useState(false);
+  const [searchTruncated, setSearchTruncated] = useState(false);
+  const [matchResults, setMatchResults] = useState([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState('');
+  const [matchLoaded, setMatchLoaded] = useState(false);
+  const [matchProfileAvailable, setMatchProfileAvailable] = useState(true);
+  const [matchTruncated, setMatchTruncated] = useState(false);
+  const [myTripData, setMyTripData] = useState({ offers: [], requests: [] });
+  const [tripLoading, setTripLoading] = useState(false);
+  const [tripError, setTripError] = useState('');
+  const [tripActionLoading, setTripActionLoading] = useState('');
+  const [tripRefreshKey, setTripRefreshKey] = useState(0);
   const [notifications, setNotifications] = useState(persisted.notifications || [
-    { title: 'Salida en 15 min', channel: 'Push', active: true },
-    { title: 'Check-in de llegada pendiente', channel: 'SMS', active: true },
-    { title: 'Cambio de ruta detectado', channel: 'Alerta', active: false },
-    { title: 'Contacto de confianza notificado', channel: 'WhatsApp', active: true },
+    { title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
+    { title: 'Check-in de llegada', channel: 'En la app', active: false },
+    { title: 'Cambio de ruta', channel: 'No configurado', active: false },
+    { title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false },
   ]);
   const [advancedMode, setAdvancedMode] = useState(persisted.advancedMode || { night: true, safeties: true, hotspots: true, recommendations: true });
-  const [safetyState, setSafetyState] = useState(persisted.safetyState || { panic: false, geofence: true, emergency: true, arrival: false });
   const [adminState, setAdminState] = useState(persisted.adminState || { users: '18.4K', trips: '2.1K', matchRate: '89%', safeTrips: '96%' });
   const [pricing, setPricing] = useState(persisted.pricing || { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
   const [executionState, setExecutionState] = useState(persisted.executionState || executionChecklist);
   const [routeResult, setRouteResult] = useState(null);
-  const [routeOptions, setRouteOptions] = useState([]);
-  const [tripCards, setTripCards] = useState(trips);
-  const [alertFeed, setAlertFeed] = useState(alerts);
+  const [routeLocations, setRouteLocations] = useState({ origin: null, destination: null });
+  const [routeSearchResults, setRouteSearchResults] = useState({ origin: [], destination: [] });
+  const [routeSearchLoading, setRouteSearchLoading] = useState('');
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState('');
+  const [deviceLocation, setDeviceLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [tripCards, setTripCards] = useState([]);
+  const [tripOfferForm, setTripOfferForm] = useState({
+    origin: 'UNIAJC Sede Sur',
+    destination: 'El Caney',
+    departure_time: '19:45',
+    mode: 'MIO + caminata',
+    seats: '2',
+    cost: '2500 COP',
+  });
+  const [alertFeed, setAlertFeed] = useState([]);
+  const [safetyActionLoading, setSafetyActionLoading] = useState('');
+  const [safetyError, setSafetyError] = useState('');
+  const [safetyLocationError, setSafetyLocationError] = useState('');
+  const [includeSafetyLocation, setIncludeSafetyLocation] = useState(false);
+  const [safetyRefreshKey, setSafetyRefreshKey] = useState(0);
+  const [safetyAlertsLoading, setSafetyAlertsLoading] = useState(false);
+  const [safetyTripData, setSafetyTripData] = useState({ offers: [], requests: [] });
+  const [selectedSafetyTripId, setSelectedSafetyTripId] = useState('');
+  const [tripSafetyStatus, setTripSafetyStatus] = useState({ locations: [], check_ins: [] });
+  const [sharingTripLocation, setSharingTripLocation] = useState(false);
+  const tripLocationUpdateRef = useRef(Promise.resolve());
   const [modal, setModal] = useState(null);
   const [isBooting, setIsBooting] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [authMode, setAuthMode] = useState('login');
-  const [loginForm, setLoginForm] = useState({ email: initialStudent.email, password: 'ViajaU2026*', remember: true });
-  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
+  const resetParams = new URLSearchParams(window.location.search);
+  const [authMode, setAuthMode] = useState(resetParams.has('reset_token') ? 'reset' : 'login');
+  const [loginForm, setLoginForm] = useState({
+    name: '',
+    email: resetParams.get('email') || '',
+    password: '',
+    password_confirmation: '',
+    career: '',
+    semester: '',
+    shift: '',
+    neighborhood: '',
+    emergency_contact: '',
+    remember: false,
+  });
   const [profilePhoto, setProfilePhoto] = useState('KG');
+  const [passwordForm, setPasswordForm] = useState({ current_password: '', password: '', password_confirmation: '' });
+  const [profilePhotoFile, setProfilePhotoFile] = useState(null);
 
   const validEmail = useMemo(() => validateInstitutionalEmail(email, uni.domain), [email, uni]);
+  const safetyTripOptions = useMemo(() => [
+    ...safetyTripData.offers
+      .filter((trip) => trip.status === 'en-curso')
+      .map((trip) => ({ id: trip.id, label: `${trip.origin} → ${trip.destination} (responsable)` })),
+    ...safetyTripData.requests
+      .filter((request) => request.status === 'accepted' && request.offer.status === 'en-curso')
+      .map((request) => ({
+        id: request.offer.id,
+        label: `${request.offer.origin} → ${request.offer.destination} (${request.offer.owner})`,
+      })),
+  ], [safetyTripData]);
 
   const readiness = useMemo(() => calculateTravelReadiness(student, route), [student, route]);
   const dashboardMetrics = useMemo(() => buildDashboardMetrics(student, route, tripCards, alertFeed), [student, route, tripCards, alertFeed]);
   const safetyMatrix = useMemo(() => buildSafetyMatrix(student), [student]);
-  const currentLocation = useMemo(() => getCurrentStudentLocation(student), [student]);
-  const zoneMatches = useMemo(() => searchZoneByText(student.neighborhood || 'El Caney', ['El Caney', 'Pance', 'Valle del Lili', 'Jardín del Sol', 'Santiago de Cali']), [student.neighborhood]);
-  const safeMeetingPoint = useMemo(() => suggestMeetingPoint(route.origin, route.destination, zoneMatches), [route.origin, route.destination, zoneMatches]);
-  const tripRisk = useMemo(() => evaluateTripRisk({ route: route.origin }, student), [route.origin, student]);
   const trustSummary = useMemo(() => buildTrustSummary([{ rating: 4.8 }, { rating: 4.9 }, { rating: 4.7 }, { rating: 4.8 }]), []);
-  const safetyAlert = useMemo(() => buildSafetyAlert('Check-in', `Ruta segura en ${route.origin} hacia ${route.destination}. Peligro bajo.`, 'low'), [route.origin, route.destination]);
+
+  const applyAuthenticatedUser = useCallback((user) => {
+    setAuthUser(user);
+    const matchingUniversity = universities.find((item) => item.name === user.university);
+    if (matchingUniversity) setUni(matchingUniversity);
+    setStudent((current) => ({
+      ...current,
+      name: user.name,
+      email: user.email,
+      career: user.career || '',
+      semester: user.semester || '',
+      shift: user.shift || '',
+      neighborhood: user.neighborhood || '',
+      emergency: user.emergency_contact || '',
+    }));
+    setEmail(user.email);
+    setIsEmailVerified(Boolean(user.email_verified_at));
+    if (user.role === 'security') setActive('safety');
+    else if (!['admin', 'university'].includes(user.role)) setActive('auth');
+  }, []);
+
+  const searchFilters = useMemo(() => ({
+    zone: searchState.zone,
+    time: searchState.time,
+    faculty: searchState.faculty,
+    university: searchState.university,
+    transport: searchState.transport,
+  }), [
+    searchState.faculty,
+    searchState.time,
+    searchState.transport,
+    searchState.university,
+    searchState.zone,
+  ]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setIsBooting(false), 1200);
-    return () => window.clearTimeout(timer);
-  }, []);
+    let cancelled = false;
+    const restoreSession = async () => {
+      if (new URLSearchParams(window.location.search).get('verified') === '1') {
+        setToast('Correo institucional verificado. Ya puedes iniciar sesión.');
+      }
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const { user } = await getCurrentAccount(token);
+          if (!cancelled) {
+            applyAuthenticatedUser(user);
+            setIsLoggedIn(true);
+          }
+        } catch (error) {
+          if (!cancelled) {
+            if (error.status === 401) clearAuthToken();
+            else setToast(error.message);
+          }
+        }
+      }
+      if (!cancelled) setIsBooting(false);
+    };
+    restoreSession();
+    return () => { cancelled = true; };
+  }, [applyAuthenticatedUser]);
 
   useEffect(() => {
     writeAppData({
@@ -284,53 +394,432 @@ export default function AppFresh() {
       searchState,
       notifications,
       advancedMode,
-      safetyState,
       adminState,
       pricing,
       executionState,
       activeTab: active
     });
-  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, safetyState, adminState, pricing, executionState, active]);
+  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, adminState, pricing, executionState, active]);
+
+  useEffect(() => {
+    if (active !== 'search' || !isLoggedIn || !isEmailVerified) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const timeoutId = setTimeout(async () => {
+      setSearchLoading(true);
+      setSearchError('');
+      setSearchLoaded(false);
+      try {
+        const response = await getTravelOffers(searchFilters, getAuthToken(), controller.signal);
+        if (!Array.isArray(response.data)) {
+          throw new Error('El servidor devolvió una lista de ofertas inválida.');
+        }
+        if (!cancelled) {
+          setSearchResults(response.data);
+          setSearchLoaded(true);
+          setSearchTruncated(Boolean(response.meta?.truncated));
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setSearchResults([]);
+          setSearchTruncated(false);
+          setSearchError(error.message || 'No fue posible buscar ofertas de viaje.');
+        }
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [
+    active,
+    isEmailVerified,
+    isLoggedIn,
+    searchFilters,
+  ]);
+
+  useEffect(() => {
+    if (active !== 'match' || !isLoggedIn || !isEmailVerified) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const timeoutId = setTimeout(async () => {
+      setMatchLoading(true);
+      setMatchError('');
+      setMatchLoaded(false);
+      try {
+        const response = await getTravelMatches(getAuthToken(), controller.signal);
+        if (!Array.isArray(response.data)) {
+          throw new Error('El servidor devolvió una lista de coincidencias inválida.');
+        }
+        if (!cancelled) {
+          setMatchResults(response.data);
+          setMatchProfileAvailable(response.meta?.profile_available !== false);
+          setMatchTruncated(Boolean(response.meta?.truncated));
+          setMatchLoaded(true);
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setMatchResults([]);
+          setMatchTruncated(false);
+          setMatchError(error.message || 'No fue posible calcular coincidencias de viaje.');
+        }
+      } finally {
+        if (!cancelled) setMatchLoading(false);
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [active, isEmailVerified, isLoggedIn]);
+
+  useEffect(() => {
+    if (
+      active !== 'safety'
+      || !isLoggedIn
+      || !isEmailVerified
+      || !['admin', 'security'].includes(authUser?.role)
+    ) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadAlerts = async () => {
+      setSafetyAlertsLoading(true);
+      setSafetyError('');
+      try {
+        const response = await getSafetyAlerts(getAuthToken(), controller.signal);
+        if (!Array.isArray(response.data)) {
+          throw new Error('El servidor devolvió una lista de alertas inválida.');
+        }
+        if (!cancelled) setAlertFeed(response.data);
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setAlertFeed([]);
+          setSafetyError(error.message || 'No fue posible cargar las alertas de seguridad.');
+        }
+      } finally {
+        if (!cancelled) setSafetyAlertsLoading(false);
+      }
+    };
+    loadAlerts();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, authUser?.role, isEmailVerified, isLoggedIn, safetyRefreshKey]);
+
+  useEffect(() => {
+    if (active !== 'safety' || !isLoggedIn || !isEmailVerified || authUser?.role !== 'student') {
+      setSafetyTripData({ offers: [], requests: [] });
+      setSelectedSafetyTripId('');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadSafetyTrips = async () => {
+      try {
+        const response = await getMyTrips(getAuthToken(), controller.signal);
+        if (!Array.isArray(response.data?.offers) || !Array.isArray(response.data?.requests)) {
+          throw new Error('El servidor devolvió viajes activos inválidos.');
+        }
+        if (!cancelled) setSafetyTripData(response.data);
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setSafetyTripData({ offers: [], requests: [] });
+          setSafetyError(error.message || 'No fue posible cargar tus viajes activos.');
+        }
+      }
+    };
+    loadSafetyTrips();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, authUser?.role, isEmailVerified, isLoggedIn, tripRefreshKey]);
+
+  useEffect(() => {
+    if (!safetyTripOptions.some((trip) => String(trip.id) === String(selectedSafetyTripId))) {
+      setSelectedSafetyTripId(safetyTripOptions[0] ? String(safetyTripOptions[0].id) : '');
+    }
+  }, [safetyTripOptions, selectedSafetyTripId]);
+
+  useEffect(() => {
+    setSharingTripLocation(false);
+    setTripSafetyStatus({ locations: [], check_ins: [] });
+  }, [selectedSafetyTripId]);
+
+  useEffect(() => {
+    if (active === 'safety' || !sharingTripLocation || !selectedSafetyTripId) return undefined;
+
+    setSharingTripLocation(false);
+    const stopSharing = async () => {
+      try {
+        await tripLocationUpdateRef.current;
+      } catch (error) {
+        setSafetyError(error.message || 'No fue posible actualizar la ubicación antes de detenerla.');
+      }
+      try {
+        await stopSharingTripLocation(selectedSafetyTripId);
+        setSafetyRefreshKey((current) => current + 1);
+      } catch (error) {
+        setSafetyError(error.message || 'No fue posible retirar tu ubicación del viaje.');
+      }
+    };
+    stopSharing();
+
+    return undefined;
+  }, [active, selectedSafetyTripId, sharingTripLocation]);
+
+  useEffect(() => {
+    if (active !== 'safety' || !isLoggedIn || !isEmailVerified || !selectedSafetyTripId) {
+      setTripSafetyStatus({ locations: [], check_ins: [] });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    let loading = false;
+    const loadTripSafetyStatus = async () => {
+      if (loading) return;
+      loading = true;
+      try {
+        const response = await getTripSafetyStatus(selectedSafetyTripId, getAuthToken(), controller.signal);
+        if (!Array.isArray(response.data?.locations) || !Array.isArray(response.data?.check_ins)) {
+          throw new Error('El servidor devolvió el estado de seguridad del viaje inválido.');
+        }
+        if (!cancelled) setTripSafetyStatus(response.data);
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setTripSafetyStatus({ locations: [], check_ins: [] });
+          setSafetyError(error.message || 'No fue posible consultar el viaje activo.');
+        }
+      } finally {
+        loading = false;
+      }
+    };
+    loadTripSafetyStatus();
+    const intervalId = window.setInterval(loadTripSafetyStatus, 15000);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [active, isEmailVerified, isLoggedIn, safetyRefreshKey, selectedSafetyTripId]);
+
+  useEffect(() => {
+    if (active !== 'safety' || !isLoggedIn || !isEmailVerified || !selectedSafetyTripId || !sharingTripLocation) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let updating = false;
+    const updateLocation = async () => {
+      if (cancelled || updating) return;
+      updating = true;
+      const update = (async () => {
+        try {
+          const location = await getCurrentDeviceLocation();
+          if (cancelled) return;
+          await shareTripLocation(selectedSafetyTripId, {
+            latitude: location.lat,
+            longitude: location.lng,
+            ...(location.accuracy !== null && location.accuracy <= 100000
+              ? { accuracy_meters: Math.round(location.accuracy) }
+              : {}),
+          });
+          if (!cancelled) setSafetyError('');
+        } catch (error) {
+          if (!cancelled) {
+            setSharingTripLocation(false);
+            setSafetyError(error.message || 'No fue posible actualizar tu ubicación compartida.');
+          }
+        }
+      })();
+      tripLocationUpdateRef.current = update;
+      try {
+        await update;
+      } finally {
+        updating = false;
+      }
+    };
+    updateLocation();
+    const intervalId = window.setInterval(updateLocation, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [active, isEmailVerified, isLoggedIn, selectedSafetyTripId, sharingTripLocation]);
+
+  useEffect(() => {
+    if (active !== 'trips' || !isLoggedIn || !isEmailVerified) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadTrips = async () => {
+      setTripLoading(true);
+      setTripError('');
+      try {
+        const token = getAuthToken();
+        const [offersResponse, myTripsResponse] = await Promise.all([
+          getTravelOffers({}, token, controller.signal),
+          getMyTrips(token, controller.signal),
+        ]);
+        if (!Array.isArray(offersResponse.data) || !Array.isArray(myTripsResponse.data?.offers) || !Array.isArray(myTripsResponse.data?.requests)) {
+          throw new Error('El servidor devolvió datos de viajes inválidos.');
+        }
+        if (!cancelled) {
+          setTripCards(offersResponse.data);
+          setMyTripData(myTripsResponse.data);
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setTripCards([]);
+          setMyTripData({ offers: [], requests: [] });
+          setTripError(error.message || 'No fue posible cargar la gestión de viajes.');
+        }
+      } finally {
+        if (!cancelled) setTripLoading(false);
+      }
+    };
+    loadTrips();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, isEmailVerified, isLoggedIn, tripRefreshKey]);
 
   const summary = useMemo(() => {
     if (routeResult) {
-      return buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult });
+      const routeSummary = buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult });
+      return {
+        ...routeSummary,
+        duration: Number.isFinite(routeResult.durationMin) ? routeSummary.duration : 'Horario no disponible',
+      };
     }
-    const mins = route.mode === 'Moto' ? 18 : route.mode === 'Carro' ? 24 : route.mode === 'Bicicleta' ? 30 : 35;
-    return { duration: `${mins + (route.mode.includes('caminata') ? 12 : 0)} min`, distance: route.mode === 'Moto' ? '5.8 km' : route.mode === 'Carro' ? '7.1 km' : '6.4 km', safety: route.mode === 'Moto' ? '78/100' : '90/100' };
+    return { duration: 'Pendiente', distance: 'Pendiente', safety: 'No evaluado' };
   }, [route, routeResult]);
 
-  const filteredResults = useMemo(() => filterTravelMatches(searchState, searchResults), [searchResults, searchState]);
+  const searchCandidates = useMemo(() => searchResults.map((offer) => ({
+    ...offer,
+    score: calculateTravelAffinityScore(student, offer),
+  })), [searchResults, student]);
+  const filteredResults = useMemo(() => filterTravelMatches(searchState, searchCandidates), [searchCandidates, searchState]);
 
-  const register = () => {
-    if (!validEmail) {
-      setToast('Error: el correo no pertenece al dominio universitario seleccionado.');
-      return;
+  const saveProfile = async () => {
+    try {
+      const { user, message } = await updateCurrentProfile({
+        name: student.name,
+        career: student.career,
+        semester: student.semester,
+        shift: student.shift,
+        neighborhood: student.neighborhood,
+        transport: student.transport,
+        emergency_contact: student.emergency,
+        privacy,
+      });
+      applyAuthenticatedUser(user);
+      setToast(message);
+    } catch (error) {
+      setToast(error.message);
     }
-    const profile = createStudentProfile({ ...student, email, privacy, university: uni.name, emergency: student.emergency, neighborhood: student.neighborhood });
-    setStudent(profile);
-    setToast('Registro universitario validado correctamente y perfil creado.');
+  };
+
+  const updateSearchFilter = (key, value) => {
+    setSearchState((current) => ({ ...current, [key]: value }));
+    setSearchLoading(true);
+    setSearchError('');
+    setSearchLoaded(false);
   };
 
   const calculateRouteNow = async () => {
+    if (!routeLocations.origin || !routeLocations.destination) {
+      setRouteError('Busca y selecciona un resultado para el origen y el destino antes de calcular.');
+      return;
+    }
+
+    const mode = route.mode.toLowerCase().includes('carro') ? 'car'
+      : route.mode.toLowerCase().includes('moto') ? 'moto'
+        : route.mode.toLowerCase().includes('taxi') ? 'taxi'
+          : route.mode.toLowerCase().includes('bici') ? 'bike'
+            : route.mode.toLowerCase().includes('caminata') ? 'walk'
+            : 'mio';
+    setRouteLoading(true);
+    setRouteError('');
     try {
-      const originResults = await searchAddressNominatim(route.origin || 'UNIAJC Sede Sur, Cali');
-      const destinationResults = await searchAddressNominatim(route.destination || 'El Caney, Cali');
-      const originCoords = originResults[0] ? [originResults[0].lat, originResults[0].lng] : [3.3518, -76.5338];
-      const destinationCoords = destinationResults[0] ? [destinationResults[0].lat, destinationResults[0].lng] : [3.378, -76.524];
-      const routeMode = route.mode.toLowerCase().includes('mio') ? 'mio' : route.mode.toLowerCase().includes('carro') ? 'car' : route.mode.toLowerCase().includes('moto') ? 'moto' : route.mode.toLowerCase().includes('bici') ? 'bike' : route.mode.toLowerCase().includes('taxi') ? 'taxi' : 'walk';
-      const result = await getOsrmRoute(originCoords, destinationCoords, routeMode);
+      const result = mode === 'mio'
+        ? await getMioRoute(routeLocations.origin, routeLocations.destination)
+        : await getOsrmRoute(routeLocations.origin, routeLocations.destination, mode);
       const summary = buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult: result });
       setRouteResult(result);
-      setRouteOptions(calculateMultimodalDetails(result?.distanceKm ?? 8));
-      setToast(`Ruta recalculada con ${result?.source ?? 'fallback local'} y modo ${routeMode.toUpperCase()}. ${summary.distance} / ${summary.duration}.`);
-    } catch {
-      setToast('No fue posible recalcular la ruta en este momento; se aplicó una estimación local segura.');
-      const fallback = { distanceKm: 8.6, durationMin: 26, source: 'Fallback local' };
-      const summary = buildRouteSummary({ origin: route.origin, destination: route.destination, mode: route.mode, routeResult: fallback });
-      setRouteResult(fallback);
-      setRouteOptions(calculateMultimodalDetails(8.6));
-      setToast(`Ruta estimada segura: ${summary.distance} / ${summary.duration}.`);
+      setToast(`Ruta calculada con ${result.source}: ${summary.distance} / ${summary.duration}.`);
+    } catch (error) {
+      setRouteResult(null);
+      setRouteError(error.message || 'No fue posible calcular una ruta real.');
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  const searchRouteLocation = async (fieldName) => {
+    setRouteSearchLoading(fieldName);
+    setRouteError('');
+    setRouteSearchResults((current) => ({ ...current, [fieldName]: [] }));
+    try {
+      const results = await searchAddressNominatim(route[fieldName]);
+      setRouteSearchResults((current) => ({ ...current, [fieldName]: results }));
+      if (!results.length) setRouteError('No se encontraron lugares. Prueba con otra dirección o un barrio de Cali.');
+    } catch (error) {
+      setRouteError(error.message || 'No fue posible buscar esa dirección.');
+    } finally {
+      setRouteSearchLoading('');
+    }
+  };
+
+  const selectRouteLocation = (fieldName, result) => {
+    setRoute((current) => ({ ...current, [fieldName]: result.name }));
+    setRouteLocations((current) => ({
+      ...current,
+      [fieldName]: [result.lat, result.lng],
+    }));
+    setRouteSearchResults((current) => ({ ...current, [fieldName]: [] }));
+    setRouteResult(null);
+    setRouteError('');
+  };
+
+  const useDeviceLocation = async () => {
+    setLocationLoading(true);
+    setRouteError('');
+    try {
+      const location = await getCurrentDeviceLocation();
+      const coordinates = [location.lat, location.lng];
+      setDeviceLocation(coordinates);
+      setRouteLocations((current) => ({ ...current, origin: coordinates }));
+      setRoute((current) => ({ ...current, origin: 'Mi ubicación actual' }));
+      setRouteSearchResults((current) => ({ ...current, origin: [] }));
+      setRouteResult(null);
+      setToast(
+        location.accuracy
+          ? `Ubicación obtenida con precisión aproximada de ${Math.round(location.accuracy)} m. Solo se conserva durante esta sesión.`
+          : 'Ubicación obtenida. Solo se conserva durante esta sesión.',
+      );
+    } catch (error) {
+      setRouteError(error.message);
+    } finally {
+      setLocationLoading(false);
     }
   };
 
@@ -343,10 +832,6 @@ export default function AppFresh() {
     setAdvancedMode((current) => ({ ...current, [key]: !current[key] }));
     setToast('Configuración de recomendación avanzada actualizada.');
   };
-  const toggleSafetyFeature = (key) => {
-    setSafetyState((current) => ({ ...current, [key]: !current[key] }));
-    setToast('Estado de seguridad actualizado.');
-  };
   const toggleInsurance = () => {
     setPricing((current) => ({ ...current, insured: !current.insured }));
     setToast('Cobertura de seguro actualizada.');
@@ -355,39 +840,154 @@ export default function AppFresh() {
     setExecutionState((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
     setToast('Estado del checklist actualizado.');
   };
-  const createTripOffer = () => {
-    const offer = createTravelOffer(student, route);
-    setTripCards((current) => [offer, ...current]);
-    setToast('Oferta de viaje creada y publicada para el grupo adecuado.');
-  };
-  const requestSeat = () => {
-    setTripCards((current) => requestTripSeat(current, 0));
-    setToast('Solicitud de cupo enviada y registrada para revisión.');
-  };
   const calculateTravelCost = () => {
     const { premium } = calculateTripCost(routeResult?.distanceKm ?? 8.4);
     setPricing((current) => ({ ...current, premium }));
     setToast(`Costo estimado actualizado: ${premium} por trayecto.`);
   };
-  const updateTripStatus = (index, nextStatus) => {
-    setTripCards((current) => updateTravelStatus(current, index, nextStatus));
-    setToast(`Estado del viaje actualizado a: ${nextStatus}.`);
+  const runTripAction = async (loadingKey, operation, successMessage) => {
+    setTripActionLoading(loadingKey);
+    setTripError('');
+    try {
+      await operation();
+      setTripRefreshKey((current) => current + 1);
+      setToast(successMessage);
+    } catch (error) {
+      setTripError(error.message || 'No se pudo actualizar el viaje.');
+    } finally {
+      setTripActionLoading('');
+    }
   };
-  const activatePanic = () => {
-    setSafetyState((current) => ({ ...current, panic: true, emergency: true, arrival: true }));
-    const alert = createEmergencyAlert('Botón de pánico', student.name);
-    setAlertFeed((current) => [alert, ...current.slice(0, 2)]);
-    setToast('Botón de pánico activado. Contacto de confianza y autoridades notificadas.');
+  const submitTripOffer = async (event) => {
+    event.preventDefault();
+    setTripActionLoading('create');
+    setTripError('');
+    try {
+      await publishTravelOffer({
+        ...tripOfferForm,
+        seats: Number(tripOfferForm.seats),
+      });
+      setTripRefreshKey((current) => current + 1);
+      setToast('Oferta de viaje publicada.');
+    } catch (error) {
+      setTripError(error.message || 'No se pudo publicar la oferta.');
+    } finally {
+      setTripActionLoading('');
+    }
   };
-  const confirmSafeArrival = () => {
-    setSafetyState((current) => ({ ...current, arrival: true }));
-    setAlertFeed((current) => [{ type: 'Check-in', detail: 'Llegada segura confirmada por el grupo.', state: 'OK' }, ...current.slice(0, 2)]);
-    setToast('Llegada segura confirmada y notificación enviada al grupo.');
+  const stopTripLocationSharing = async (tripId = selectedSafetyTripId) => {
+    if (!tripId) return;
+    setSharingTripLocation(false);
+    setSafetyActionLoading('stop-sharing');
+    setSafetyError('');
+    try {
+      try {
+        await tripLocationUpdateRef.current;
+      } catch (error) {
+        setSafetyError(error.message || 'No fue posible actualizar la ubicación antes de detenerla.');
+      }
+      await stopSharingTripLocation(tripId);
+      setSafetyRefreshKey((current) => current + 1);
+      setToast('Tu ubicación fue retirada del viaje.');
+    } catch (error) {
+      setSafetyError(error.message || 'No fue posible retirar tu ubicación del viaje.');
+    } finally {
+      setSafetyActionLoading('');
+    }
   };
-  const monitorGeographicFence = () => {
-    setSafetyState((current) => ({ ...current, geofence: true }));
-    setAlertFeed((current) => [{ type: 'Geocerca', detail: 'Monitoreo geográfico activo y ruta segura verificada.', state: 'Monitoreando' }, ...current.slice(0, 2)]);
-    setToast('Geocerca en seguimiento y ruta verificada dentro del perímetro seguro.');
+  const startTripLocationSharing = async () => {
+    if (!selectedSafetyTripId) return;
+    const tripId = selectedSafetyTripId;
+    setSafetyActionLoading('share-location');
+    setSafetyError('');
+    try {
+      const location = await getCurrentDeviceLocation();
+      if (tripId !== selectedSafetyTripId || active !== 'safety') return;
+      await shareTripLocation(tripId, {
+        latitude: location.lat,
+        longitude: location.lng,
+        ...(location.accuracy !== null && location.accuracy <= 100000
+          ? { accuracy_meters: Math.round(location.accuracy) }
+          : {}),
+      });
+      setSharingTripLocation(true);
+      setSafetyRefreshKey((current) => current + 1);
+      setToast('Ubicación compartida con los participantes de este viaje mientras mantengas el seguimiento activo.');
+    } catch (error) {
+      setSafetyError(error.message || 'No fue posible iniciar el seguimiento de ubicación.');
+    } finally {
+      setSafetyActionLoading('');
+    }
+  };
+  const recordTripCheckIn = async (type) => {
+    if (!selectedSafetyTripId) return;
+    setSafetyActionLoading(`check-in-${type}`);
+    setSafetyError('');
+    try {
+      await createTripCheckIn(selectedSafetyTripId, type);
+      setSafetyRefreshKey((current) => current + 1);
+      setToast(type === 'departure' ? 'Salida confirmada para los participantes del viaje.' : 'Llegada segura registrada para los participantes del viaje.');
+    } catch (error) {
+      setSafetyError(error.message || 'No fue posible registrar el check-in.');
+    } finally {
+      setSafetyActionLoading('');
+    }
+  };
+  const activatePanic = async (attachLocation = includeSafetyLocation) => {
+    setSafetyActionLoading('panic');
+    setSafetyError('');
+    try {
+      let location = {};
+      if (attachLocation) {
+        try {
+          const currentLocation = await getCurrentDeviceLocation();
+          location = {
+            latitude: currentLocation.lat,
+            longitude: currentLocation.lng,
+            ...(currentLocation.accuracy !== null && currentLocation.accuracy <= 100000
+              ? { accuracy_meters: Math.round(currentLocation.accuracy) }
+              : {}),
+          };
+          setSafetyLocationError('');
+        } catch (error) {
+          setSafetyLocationError(error.message || 'No fue posible obtener el GPS.');
+          return false;
+        }
+      }
+
+      const response = await createSafetyAlert(location);
+      setAlertFeed((current) => [response.data, ...current]);
+      setToast(location.latitude
+        ? 'SOS registrado con las coordenadas GPS que autorizaste. No se notificó automáticamente a autoridades ni contactos.'
+        : 'SOS registrado para el equipo de seguridad. No se notificó automáticamente a autoridades ni contactos.');
+      return true;
+    } catch (error) {
+      setSafetyError(error.message || 'No fue posible registrar la alerta de emergencia.');
+      throw error;
+    } finally {
+      setSafetyActionLoading('');
+    }
+  };
+  const confirmEmergency = async (sendWithoutLocation = false) => {
+    try {
+      const registered = await activatePanic(sendWithoutLocation ? false : includeSafetyLocation);
+      if (registered) closeModal();
+    } catch {
+      setToast('No se pudo registrar el SOS. Revisa el error mostrado en Seguridad.');
+    }
+  };
+  const handleResolveSafetyAlert = async (alertId) => {
+    setSafetyActionLoading(`resolve-${alertId}`);
+    setSafetyError('');
+    try {
+      await resolveSafetyAlert(alertId);
+      setSafetyRefreshKey((current) => current + 1);
+      setToast('Alerta marcada como atendida.');
+    } catch (error) {
+      setSafetyError(error.message || 'No fue posible actualizar la alerta.');
+    } finally {
+      setSafetyActionLoading('');
+    }
   };
 
   const completedTasks = executionState.filter((item) => item.done).length;
@@ -403,51 +1003,127 @@ export default function AppFresh() {
   const closeModal = () => setModal(null);
 
   const confirmProfile = () => {
-    register();
-    closeModal();
+    void saveProfile().then(closeModal);
   };
 
-  const confirmRoute = async () => {
-    await calculateRouteNow();
-    closeModal();
-  };
-
-  const confirmTripOffer = () => {
-    createTripOffer();
-    closeModal();
-  };
-
-  const confirmSeatRequest = () => {
-    requestSeat();
-    closeModal();
-  };
-
-  const confirmEmergency = () => {
-    activatePanic();
-    closeModal();
-  };
-
-  const confirmArrival = () => {
-    confirmSafeArrival();
-    closeModal();
-  };
-
-  const handleAuthSubmit = () => {
-    if (!loginForm.email || !loginForm.password) {
-      setToast('Completa el correo institucional y la contraseña para continuar.');
+  const handleChangePassword = async () => {
+    if (passwordForm.password !== passwordForm.password_confirmation) {
+      setToast('Las contraseñas nuevas no coinciden.');
       return;
     }
-    if (authMode === 'register' && !loginForm.name) {
+    try {
+      const response = await changePassword(passwordForm);
+      setPasswordForm({ current_password: '', password: '', password_confirmation: '' });
+      setToast(response.message);
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
+  const handleProfilePhotoUpload = async () => {
+    if (!profilePhotoFile) {
+      setToast('Selecciona una imagen para subir.');
+      return;
+    }
+    try {
+      const { user, message } = await uploadProfilePhoto(profilePhotoFile);
+      applyAuthenticatedUser(user);
+      setProfilePhotoFile(null);
+      setToast(message);
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
+  const handleAuthSubmit = async () => {
+    if (!loginForm.email || !loginForm.password) {
+      if (authMode !== 'forgot') {
+        setToast('Completa el correo institucional y la contraseña para continuar.');
+        return;
+      }
+    }
+    if (authMode === 'forgot') {
+      if (!loginForm.email) {
+        setToast('Escribe tu correo institucional para enviarte instrucciones.');
+        return;
+      }
+      try {
+        const response = await requestPasswordReset(loginForm.email);
+        setToast(response.message);
+      } catch (error) {
+        setToast(error.message);
+      }
+      return;
+    }
+    if (authMode === 'register' && !loginForm.name.trim()) {
       setToast('Agrega tu nombre para crear tu perfil universitario.');
       return;
     }
-    setIsLoggedIn(true);
-    setToast(authMode === 'register' ? 'Cuenta creada con validación universitaria completada.' : 'Inicio de sesión correcto. Bienvenido a ViajaU.');
+    if (['register', 'reset'].includes(authMode) && loginForm.password !== loginForm.password_confirmation) {
+      setToast('Las contraseñas no coinciden.');
+      return;
+    }
+
+    try {
+      if (authMode === 'reset') {
+        const response = await resetPassword({
+          token: resetParams.get('reset_token'),
+          email: loginForm.email,
+          password: loginForm.password,
+          password_confirmation: loginForm.password_confirmation,
+        });
+        setToast(response.message);
+        setAuthMode('login');
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
+      const response = authMode === 'register'
+        ? await registerAccount({
+          name: loginForm.name,
+          email: loginForm.email,
+          password: loginForm.password,
+          password_confirmation: loginForm.password_confirmation,
+          university: uni.id,
+          career: loginForm.career || undefined,
+          semester: loginForm.semester || undefined,
+          shift: loginForm.shift || undefined,
+          neighborhood: loginForm.neighborhood || undefined,
+          emergency_contact: loginForm.emergency_contact || undefined,
+        })
+        : await loginAccount({ email: loginForm.email, password: loginForm.password });
+
+      storeAuthToken(response.token, loginForm.remember);
+      applyAuthenticatedUser(response.user);
+      setIsLoggedIn(true);
+      setToast(response.message);
+    } catch (error) {
+      setToast(error.message);
+    }
   };
 
   const handlePasswordRecovery = () => {
-    setRecoveryOpen(true);
-    setToast('Se ha enviado un enlace de recuperación a tu correo institucional.');
+    setToast('');
+    setAuthMode('forgot');
+  };
+
+  const refreshEmailVerification = async () => {
+    try {
+      const { user } = await getCurrentAccount();
+      applyAuthenticatedUser(user);
+      setToast(user.email_verified_at ? 'Correo verificado. Tu cuenta ya está activa.' : 'El correo aún no aparece como verificado.');
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
+  const sendVerificationEmail = async () => {
+    try {
+      const response = await resendVerification();
+      setToast(response.message);
+    } catch (error) {
+      setToast(error.message);
+    }
   };
 
   return (
@@ -486,13 +1162,36 @@ export default function AppFresh() {
                 </div>
 
                 <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 20, padding: 22 }}>
-                  <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 16 }}>{authMode === 'login' ? 'Acceso a la cuenta' : 'Crear cuenta universitaria'}</div>
+                  <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 16 }}>
+                    {authMode === 'login' ? 'Acceso a la cuenta' : authMode === 'forgot' ? 'Recuperar cuenta' : authMode === 'reset' ? 'Nueva contraseña' : 'Crear cuenta universitaria'}
+                  </div>
+                  {toast && <div role="alert" style={{ color: '#fecaca', fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>{toast}</div>}
 
                   {authMode === 'register' && (
-                    <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
-                      <span style={{ color: '#dbeafe', fontWeight: 700 }}>Nombre completo</span>
-                      <input value={loginForm.name || ''} onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="Tu nombre" />
-                    </label>
+                    <>
+                      <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                        <span style={{ color: '#dbeafe', fontWeight: 700 }}>Nombre completo</span>
+                        <input value={loginForm.name} onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="Tu nombre" />
+                      </label>
+                      <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                        <span style={{ color: '#dbeafe', fontWeight: 700 }}>Universidad</span>
+                        <select value={uni.id} onChange={(e) => setUni(universities.find((item) => item.id === e.target.value) || universities[0])} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }}>
+                          {universities.map((university) => <option key={university.id} value={university.id}>{university.name}</option>)}
+                        </select>
+                      </label>
+                      {[
+                        ['career', 'Carrera', 'Tu carrera'],
+                        ['semester', 'Semestre', 'Ej. 8vo semestre'],
+                        ['shift', 'Jornada', 'Ej. Nocturna'],
+                        ['neighborhood', 'Barrio', 'Tu barrio'],
+                        ['emergency_contact', 'Contacto de emergencia', 'Nombre y teléfono'],
+                      ].map(([key, label, placeholder]) => (
+                        <label key={key} style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                          <span style={{ color: '#dbeafe', fontWeight: 700 }}>{label}</span>
+                          <input value={loginForm[key]} onChange={(e) => setLoginForm({ ...loginForm, [key]: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder={placeholder} />
+                        </label>
+                      ))}
+                    </>
                   )}
 
                   <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
@@ -500,10 +1199,12 @@ export default function AppFresh() {
                     <input value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="usuario@uniajc.edu.co" />
                   </label>
 
-                  <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
-                    <span style={{ color: '#dbeafe', fontWeight: 700 }}>Contraseña</span>
-                    <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="••••••••" />
-                  </label>
+                  {authMode !== 'forgot' && (
+                    <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                      <span style={{ color: '#dbeafe', fontWeight: 700 }}>{authMode === 'reset' ? 'Nueva contraseña' : 'Contraseña'}</span>
+                      <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="••••••••" />
+                    </label>
+                  )}
 
                   {authMode === 'login' && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
@@ -515,12 +1216,19 @@ export default function AppFresh() {
                     </div>
                   )}
 
+                  {['register', 'reset'].includes(authMode) && (
+                    <label style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                      <span style={{ color: '#dbeafe', fontWeight: 700 }}>Confirmar contraseña</span>
+                      <input type="password" value={loginForm.password_confirmation} onChange={(e) => setLoginForm({ ...loginForm, password_confirmation: e.target.value })} style={{ ...field, borderColor: 'rgba(148,163,184,.3)' }} placeholder="Repite tu contraseña" />
+                    </label>
+                  )}
+
                   <button onClick={handleAuthSubmit} style={{ width: '100%', border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #34d399, #10b981)', color: '#052e16', padding: '12px 18px', fontWeight: 900, marginBottom: 10 }}>
-                    {authMode === 'login' ? 'Entrar a ViajaU' : 'Crear perfil universitario'}
+                    {authMode === 'login' ? 'Entrar a ViajaU' : authMode === 'forgot' ? 'Enviar instrucciones' : authMode === 'reset' ? 'Actualizar contraseña' : 'Crear perfil universitario'}
                   </button>
 
                   <div style={{ color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 }}>
-                    {authMode === 'login' ? '¿No tienes cuenta? Crea tu perfil con tu correo universitario.' : 'Al registrarte, validamos el dominio institucional y protegemos tu ubicación por barrio.'}
+                    {authMode === 'login' ? '¿No tienes cuenta? Crea tu perfil con tu correo universitario.' : authMode === 'forgot' ? 'Si el correo está registrado, recibirás un enlace para recuperar la cuenta.' : authMode === 'reset' ? 'Usa una contraseña nueva de al menos 12 caracteres, con letras y números.' : 'Usa 12 caracteres o más. Para entrar, también deberás verificar tu correo institucional.'}
                   </div>
                 </div>
               </div>
@@ -529,7 +1237,33 @@ export default function AppFresh() {
         </div>
       )}
 
-      {!isBooting && isLoggedIn && (
+      {!isBooting && isLoggedIn && !isEmailVerified && (
+        <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+          <div style={{ width: '100%', maxWidth: 520, background: 'rgba(15,23,42,.9)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 24, padding: 32 }}>
+            <h1 style={{ marginTop: 0 }}>Verifica tu correo institucional</h1>
+            <p style={{ color: '#cbd5e1', lineHeight: 1.6 }}>Enviamos un enlace a {email}. Verifica el buzón antes de acceder a las funciones de ViajaU.</p>
+            {toast && <div role="status" style={{ color: '#a7f3d0', marginBottom: 16 }}>{toast}</div>}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={sendVerificationEmail} style={{ ...field, cursor: 'pointer' }}>Reenviar verificación</button>
+              <button onClick={refreshEmailVerification} style={{ ...field, cursor: 'pointer' }}>Ya verifiqué mi correo</button>
+              <button onClick={async () => {
+                try {
+                  await logoutAccount();
+                  clearAuthToken();
+                  setIsLoggedIn(false);
+                  setAlertFeed([]);
+                  setSafetyError('');
+                  setActive('auth');
+                } catch (error) {
+                  setToast(error.message);
+                }
+              }} style={{ ...field, cursor: 'pointer' }}>Cerrar sesión</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isBooting && isLoggedIn && isEmailVerified && (
         <>
       <div style={{ borderBottom: '1px solid rgba(148,163,184,.2)', padding: 18, position: 'sticky', top: 0, background: 'rgba(2,11,16,.75)', backdropFilter: 'blur(8px)' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -538,11 +1272,32 @@ export default function AppFresh() {
             <div style={{ fontSize: 24, fontWeight: 800 }}>Movilidad segura universitaria</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {modules.map((m) => (
+            {modules.filter((module) => {
+              if (module.key === 'admin') return ['admin', 'university'].includes(authUser?.role);
+              if (authUser?.role === 'security') return ['auth', 'safety'].includes(module.key);
+              return true;
+            }).map((m) => (
               <button key={m.key} onClick={() => setActive(m.key)} style={{ border: active === m.key ? '1px solid rgba(52,211,153,.5)' : '1px solid rgba(148,163,184,.2)', background: active === m.key ? 'rgba(16,185,129,.12)' : 'rgba(10,15,20,.75)', color: '#fff', borderRadius: 10, padding: '10px 12px', fontWeight: 700, transition: 'all 0.2s ease', transform: active === m.key ? 'translateY(-1px)' : 'none', boxShadow: active === m.key ? '0 8px 24px rgba(16,185,129,0.18)' : 'none' }}>
                 {m.title}
               </button>
             ))}
+            <button
+              onClick={async () => {
+                try {
+                  await logoutAccount();
+                  clearAuthToken();
+                  setIsLoggedIn(false);
+                  setAlertFeed([]);
+                  setSafetyError('');
+                  setActive('auth');
+                } catch (error) {
+                  setToast(error.message);
+                }
+              }}
+              style={{ border: '1px solid rgba(248,113,113,.35)', background: 'rgba(127,29,29,.2)', color: '#fecaca', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }}
+            >
+              Cerrar sesión
+            </button>
           </div>
         </div>
       </div>
@@ -559,7 +1314,7 @@ export default function AppFresh() {
               </div>
               <h2 style={{ margin: 0, fontSize: 38, lineHeight: 1.1, maxWidth: 700 }}>ViajaU: movilidad segura para estudiantes universitarios</h2>
               <p style={{ marginTop: 12, color: '#dbeafe', fontSize: 15, maxWidth: 660, lineHeight: 1.7 }}>
-                Plataforma de viajes compartidos por zona, jornada y confianza con validación universitaria, rutas inteligentes, geocerca y alertas de seguridad para la comunidad estudiantil.
+                Plataforma de viajes compartidos por zona y jornada, con validación universitaria, rutas y alertas SOS registradas para el equipo de seguridad.
               </p>
             </div>
             <div style={{ background: 'rgba(15,23,42,0.62)', border: '1px solid rgba(148,163,184,.22)', borderRadius: 18, padding: 18 }}>
@@ -614,9 +1369,40 @@ export default function AppFresh() {
                 <p style={{ color: '#dbeafe', lineHeight: 1.6, margin: 0 }}>{modal.message}</p>
               </div>
 
+              {modal.type === 'panic' && (
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: '#dbeafe' }}>
+                    <input
+                      type="checkbox"
+                      checked={includeSafetyLocation}
+                      onChange={(event) => {
+                        setIncludeSafetyLocation(event.target.checked);
+                        setSafetyLocationError('');
+                      }}
+                    />
+                    Incluir mi ubicación GPS actual en esta alerta (el navegador solicitará permiso y las coordenadas se enviarán al servidor).
+                  </label>
+                  {safetyLocationError && (
+                    <div role="alert" style={{ color: '#fecaca', marginTop: 10 }}>
+                      {safetyLocationError}
+                      <button
+                        type="button"
+                        disabled={safetyActionLoading === 'panic'}
+                        onClick={() => void confirmEmergency(true)}
+                        style={{ ...field, display: 'block', marginTop: 8, padding: '7px 10px', cursor: 'pointer' }}
+                      >
+                        Enviar SOS sin ubicación GPS
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button className="btn-secondary" onClick={closeModal}>Cancelar</button>
-                <button className="btn-primary" onClick={modal.onConfirm}>{modal.confirmText}</button>
+                <button className="btn-primary" disabled={safetyActionLoading === 'panic'} onClick={modal.onConfirm}>
+                  {safetyActionLoading === 'panic' ? 'Registrando SOS…' : modal.confirmText}
+                </button>
               </div>
             </div>
           </div>
@@ -628,8 +1414,8 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#86efac', fontWeight: 800 }}>MÓDULO 1</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Autenticación y registro universitario</h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <label style={{ display: 'grid', gap: 8 }}><span>Universidad</span><select value={uni.id} onChange={(e) => setUni(universities.find(u => u.id === e.target.value))} style={field}>{universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Correo institucional</span><input value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...field, borderColor: validEmail ? 'rgba(52,211,153,.5)' : 'rgba(239,68,68,.55)' }} /></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Universidad</span><select value={uni.id} disabled style={field}>{universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Correo institucional</span><input value={email} readOnly style={{ ...field, borderColor: validEmail ? 'rgba(52,211,153,.5)' : 'rgba(239,68,68,.55)' }} /></label>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
                 <label style={{ display: 'grid', gap: 8 }}><span>Nombre</span><input value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} style={field} /></label>
@@ -648,12 +1434,29 @@ export default function AppFresh() {
                 <div style={{ color: validEmail ? '#86efac' : '#fca5a5', fontWeight: 800 }}>Dominio requerido: {uni.domain}</div>
                 <button onClick={() => openModal({
                   type: 'profile',
-                  title: 'Verificación universitaria',
+                  title: 'Guardar perfil',
                   accent: '#10b981',
-                  message: `Se validará el dominio ${uni.domain} para ${student.name} y se creará el perfil con jornada ${student.shift}, barrio ${student.neighborhood} y contacto ${student.emergency}.`,
-                  confirmText: 'Confirmar perfil',
+                  message: `Se guardarán los datos de perfil de ${student.name}, incluida la jornada ${student.shift}, el barrio ${student.neighborhood} y el contacto de emergencia.`,
+                  confirmText: 'Guardar cambios',
                   onConfirm: confirmProfile,
-                })} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Crear perfil universitario</button>
+                })} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Guardar perfil</button>
+              </div>
+              <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 24, paddingTop: 20 }}>
+                <h3 style={{ marginTop: 0 }}>Foto de perfil</h3>
+                {authUser?.photo_url && <img src={authUser.photo_url} alt="Foto de perfil" width="80" height="80" style={{ borderRadius: '50%', objectFit: 'cover', marginBottom: 12 }} />}
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input aria-label="Foto de perfil" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setProfilePhotoFile(event.target.files?.[0] || null)} />
+                  <button onClick={handleProfilePhotoUpload} style={{ ...field, cursor: 'pointer' }}>Subir foto</button>
+                </div>
+              </div>
+              <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 24, paddingTop: 20 }}>
+                <h3 style={{ marginTop: 0 }}>Cambiar contraseña</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <input aria-label="Contraseña actual" type="password" value={passwordForm.current_password} onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })} style={field} placeholder="Contraseña actual" />
+                  <input aria-label="Nueva contraseña" type="password" value={passwordForm.password} onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })} style={field} placeholder="Nueva contraseña (12+)" />
+                  <input aria-label="Confirmar nueva contraseña" type="password" value={passwordForm.password_confirmation} onChange={(e) => setPasswordForm({ ...passwordForm, password_confirmation: e.target.value })} style={field} placeholder="Confirmar nueva contraseña" />
+                  <button onClick={handleChangePassword} style={{ ...field, cursor: 'pointer' }}>Actualizar contraseña</button>
+                </div>
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
@@ -674,22 +1477,116 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#7dd3fc', fontWeight: 800 }}>MÓDULO 2</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Mapa, geolocalización y rutas</h2>
               <div style={{ display: 'grid', gap: 16 }}>
-                <label style={{ display: 'grid', gap: 8 }}><span>Origen</span><input value={route.origin} onChange={(e) => setRoute({ ...route, origin: e.target.value })} style={field} /></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Destino</span><input value={route.destination} onChange={(e) => setRoute({ ...route, destination: e.target.value })} style={field} /></label>
+                {(['origin', 'destination']).map((fieldName) => (
+                  <div key={fieldName} style={{ display: 'grid', gap: 8 }}>
+                    <label htmlFor={`route-${fieldName}`} style={{ fontWeight: 700 }}>
+                      {fieldName === 'origin' ? 'Origen' : 'Destino'}
+                    </label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <input
+                        id={`route-${fieldName}`}
+                        value={route[fieldName]}
+                        onChange={(event) => {
+                          setRoute((current) => ({ ...current, [fieldName]: event.target.value }));
+                          setRouteLocations((current) => ({ ...current, [fieldName]: null }));
+                          setRouteSearchResults((current) => ({ ...current, [fieldName]: [] }));
+                          setRouteResult(null);
+                        }}
+                        style={{ ...field, flex: '1 1 230px' }}
+                        placeholder="Busca un lugar en Cali"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => searchRouteLocation(fieldName)}
+                        disabled={routeSearchLoading === fieldName}
+                        style={{ ...field, cursor: 'pointer' }}
+                      >
+                        {routeSearchLoading === fieldName ? 'Buscando…' : 'Buscar lugar'}
+                      </button>
+                      {fieldName === 'origin' && (
+                        <button
+                          type="button"
+                          onClick={useDeviceLocation}
+                          disabled={locationLoading}
+                          style={{ ...field, cursor: 'pointer' }}
+                        >
+                          {locationLoading ? 'Obteniendo GPS…' : 'Usar mi ubicación'}
+                        </button>
+                      )}
+                    </div>
+                    {routeSearchResults[fieldName].length > 0 && (
+                      <div role="listbox" aria-label={`Resultados para ${fieldName === 'origin' ? 'origen' : 'destino'}`} style={{ display: 'grid', gap: 6 }}>
+                        {routeSearchResults[fieldName].map((result) => (
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected="false"
+                            key={result.id}
+                            onClick={() => selectRouteLocation(fieldName, result)}
+                            style={{ ...field, textAlign: 'left', cursor: 'pointer' }}
+                          >
+                            {result.fullName}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <small style={{ color: '#94a3b8' }}>Búsqueda geográfica: © OpenStreetMap contributors (Nominatim).</small>
+                    <small style={{ color: routeLocations[fieldName] ? '#86efac' : '#fbbf24' }}>
+                      {routeLocations[fieldName] ? 'Coordenadas seleccionadas' : 'Selecciona un resultado para fijar las coordenadas'}
+                    </small>
+                  </div>
+                ))}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <label style={{ display: 'grid', gap: 8 }}><span>Modo</span><select value={route.mode} onChange={(e) => setRoute({ ...route, mode: e.target.value })} style={field}><option>MIO + caminata</option><option>Carro</option><option>Moto</option><option>Bicicleta</option><option>Taxi</option></select></label>
+                  <label style={{ display: 'grid', gap: 8 }}><span>Modo</span><select value={route.mode} onChange={(e) => { setRoute((current) => ({ ...current, mode: e.target.value })); setRouteResult(null); }} style={field}><option value="MIO + caminata">MIO (paradas y trazados oficiales)</option><option>Carro</option><option>Moto (usa ruta vial genérica)</option><option>Bicicleta</option><option>Caminata</option><option>Taxi</option></select></label>
                   <label style={{ display: 'grid', gap: 8 }}><span>Hora</span><input value={route.time} onChange={(e) => setRoute({ ...route, time: e.target.value })} style={field} /></label>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                  <div style={{ color: '#93c5fd', fontWeight: 700 }}>Ruta sugerida con OpenStreetMap + GTFS</div>
-                  <button onClick={() => openModal({
-                    type: 'route',
-                    title: 'Ruta segura sugerida',
-                    accent: '#3b82f6',
-                    message: `Se calculará la ruta de ${route.origin} hacia ${route.destination} en modo ${route.mode}. La app evaluará seguridad, tiempo y puntos de encuentro más seguros para la jornada actual.`,
-                    confirmText: 'Calcular ruta',
-                    onConfirm: confirmRoute,
-                  })} style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800 }}>Calcular ruta</button>
+                  <div style={{ color: '#93c5fd', fontWeight: 700 }}>Ruta real según el perfil de transporte seleccionado</div>
+                  <button
+                    onClick={calculateRouteNow}
+                    disabled={routeLoading}
+                    style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', border: 'none', color: '#fff', borderRadius: 12, padding: '12px 18px', fontWeight: 800, cursor: routeLoading ? 'wait' : 'pointer' }}
+                  >
+                    {routeLoading ? 'Calculando…' : 'Calcular ruta'}
+                  </button>
+                </div>
+                {routeError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10 }}>{routeError}</div>}
+                {routeResult?.mode === 'mio' && (
+                  <div style={{ color: '#fde68a', background: 'rgba(120,53,15,.25)', padding: 12, borderRadius: 10 }}>
+                    El trazado y las paradas provienen de datos públicos de Metro Cali. Este servicio no ofrece un calendario activo para verificar próximas salidas; por eso no se muestra una hora de llegada ni una frecuencia.
+                    {routeResult.routes?.length > 0 && ` Línea(s): ${routeResult.routes.join(', ')}.`}
+                    {routeResult.stopDetails?.length > 0 &&
+                      ` Paradas: ${routeResult.stopDetails.map(({ role, code }) => `${role} ${code}`).join(' · ')}.`}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, color: '#cbd5e1' }}>
+                  Tu ubicación solo se obtiene con permiso y no se guarda en la app. Al calcular, las coordenadas se envían al proveedor correspondiente. Se ofrecen rutas viales para carro/taxi, rutas peatonales/ciclistas de OpenStreetMap y rutas genéricas de carro para moto. MIO usa paradas y trazados del servicio público de Metro Cali; no hay un calendario activo verificable, así que no se muestran horarios ni frecuencias.
+                </div>
+                <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 14 }}>
+                  <strong>Checklist del módulo 2</strong>
+                  <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                    {[
+                      { label: '2.1 Obtener ubicación actual con permiso del usuario', done: Boolean(deviceLocation) },
+                      { label: '2.2 Buscar y seleccionar coordenadas de origen y destino', done: Boolean(routeLocations.origin && routeLocations.destination) },
+                      { label: '2.3 Calcular una ruta real con un proveedor compatible', done: Boolean(routeResult) },
+                      { label: '2.4 Mostrar la ruta calculada sobre el mapa', done: Boolean(routeResult) },
+                      { label: '2.5 Calcular una ruta real a pie', done: Boolean(routeResult?.mode === 'walk') },
+                      { label: '2.6 Calcular una ruta real en bicicleta', done: Boolean(routeResult?.mode === 'bike') },
+                      { label: '2.7 Integrar el trazado y las paradas oficiales del MIO', done: Boolean(routeResult?.mode === 'mio') },
+                    ].map((item) => (
+                      <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1', fontSize: 13 }}>
+                        {item.done ? '☑' : '☐'} {item.label}
+                      </div>
+                    ))}
+                  </div>
+                  <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>
+                    {Number(Boolean(deviceLocation)) +
+                      Number(Boolean(routeLocations.origin && routeLocations.destination)) +
+                      Number(Boolean(routeResult)) * 2 +
+                      Number(routeResult?.mode === 'walk') +
+                      Number(routeResult?.mode === 'bike') +
+                      Number(routeResult?.mode === 'mio')}/7 completados
+                  </small>
                 </div>
               </div>
             </div>
@@ -698,26 +1595,23 @@ export default function AppFresh() {
               <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
                 <Metric label='Tiempo estimado' value={summary.duration} color='#7dd3fc' />
                 <Metric label='Distancia' value={summary.distance} color='#86efac' />
-                <Metric label='Seguridad' value={summary.safety} color='#fbbf24' />
-                <Metric label='Punto seguro' value={safeMeetingPoint.name} color='#c4b5fd' />
-                <Metric label='Ubicación' value={currentLocation.zone} color='#67e8f9' />
+                <Metric label='Fuente' value={routeResult?.source || 'Sin ruta calculada'} color='#c4b5fd' />
+                <Metric label='Origen' value={route.origin} color='#67e8f9' />
               </div>
               <div style={{ marginTop: 14, background: 'rgba(103,232,249,0.08)', border: '1px solid rgba(103,232,249,0.24)', borderRadius: 12, padding: 12, color: '#dbeafe' }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Evaluación de riesgo</div>
-                <div>{tripRisk.risk} • {tripRisk.recommendation}</div>
+                {routeResult
+                  ? `Ruta recibida de ${routeResult.source}. La seguridad del trayecto no ha sido evaluada.`
+                  : 'Las distancias y tiempos aparecerán cuando elijas origen y destino y se calcule una ruta real.'}
               </div>
-              <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
-                {routeOptions.slice(0, 3).map((option) => (
-                  <div key={option.id} style={{ background: 'rgba(59,130,246,.08)', border: '1px solid rgba(96,165,250,.24)', borderRadius: 10, padding: 10, color: '#dbeafe' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 800 }}>{option.name}</span>
-                      <span>{option.timeMin} min</span>
-                    </div>
-                    <div style={{ marginTop: 4, fontSize: 12, color: '#bfdbfe' }}>{option.costCop.toLocaleString('es-CO')} COP • {option.safetyScore}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{routeFns.map(f => <span key={f} style={{ color: '#dbeafe', fontSize: 10, background: 'rgba(59,130,246,.12)', borderRadius: 999, padding: '6px 8px' }}>{f}</span>)}</div>
+            </div>
+            <div style={{ gridColumn: '1 / -1', background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 16 }}>
+              <RouteMap
+                origin={routeLocations.origin}
+                destination={routeLocations.destination}
+                route={routeResult}
+                userLocation={deviceLocation}
+              />
+              <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>Mapa © OpenStreetMap contributors</small>
             </div>
           </section>
         )}
@@ -728,29 +1622,64 @@ export default function AppFresh() {
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#7dd3fc', fontWeight: 800 }}>MÓDULO 3</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Búsqueda, filtros y ordenamiento</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
-                <label style={{ display: 'grid', gap: 8 }}><span>Zona</span><input value={searchState.zone} onChange={(e) => setSearchState({ ...searchState, zone: e.target.value })} style={field} /></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Hora</span><input value={searchState.time} onChange={(e) => setSearchState({ ...searchState, time: e.target.value })} style={field} /></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Facultad</span><input value={searchState.faculty} onChange={(e) => setSearchState({ ...searchState, faculty: e.target.value })} style={field} /></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Transporte</span><select value={searchState.transport} onChange={(e) => setSearchState({ ...searchState, transport: e.target.value })} style={field}><option>MIO</option><option>Carro</option><option>Moto</option><option>Caminata</option><option>Cualquiera</option></select></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Confianza mínima</span><select value={searchState.confidence} onChange={(e) => setSearchState({ ...searchState, confidence: e.target.value })} style={field}><option>4.8+</option><option>4.5+</option><option>4.0+</option><option>Cualquiera</option></select></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Género</span><select value={searchState.gender} onChange={(e) => setSearchState({ ...searchState, gender: e.target.value })} style={field}><option>Cualquiera</option><option>Hombre</option><option>Mujer</option></select></label>
-                <label style={{ display: 'grid', gap: 8 }}><span>Orden</span><select value={searchState.sort} onChange={(e) => setSearchState({ ...searchState, sort: e.target.value })} style={field}><option>Compatibilidad</option><option>Distancia</option><option>Tiempo</option></select></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Zona de origen o destino</span><input value={searchState.zone} onChange={(event) => updateSearchFilter('zone', event.target.value)} style={field} /></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Hora de salida</span><input type="time" value={searchState.time} onChange={(event) => updateSearchFilter('time', event.target.value)} style={field} /></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Programa o carrera</span><input value={searchState.faculty} onChange={(event) => updateSearchFilter('faculty', event.target.value)} style={field} /></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Universidad</span><select value={searchState.university} onChange={(event) => updateSearchFilter('university', event.target.value)} style={field}><option>Cualquiera</option>{universities.map((university) => <option key={university.id}>{university.name}</option>)}</select></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Transporte</span><select value={searchState.transport} onChange={(event) => updateSearchFilter('transport', event.target.value)} style={field}><option>Cualquiera</option><option>MIO</option><option>Carro</option><option>Moto</option><option>Bicicleta</option><option>Caminata</option><option>Taxi</option></select></label>
+                <label style={{ display: 'grid', gap: 8 }}><span>Orden</span><select value={searchState.sort} onChange={(event) => setSearchState((current) => ({ ...current, sort: event.target.value }))} style={field}><option>Compatibilidad</option><option>Hora de salida</option><option>Más recientes</option></select></label>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 14 }}>
+                <small style={{ color: '#94a3b8' }}>La hora filtra dentro de la misma hora. Solo aparecen ofertas activas de perfiles con correo verificado.</small>
+                <button onClick={() => {
+                  setSearchState({ zone: '', time: '', faculty: '', university: 'Cualquiera', transport: 'Cualquiera', sort: 'Compatibilidad' });
+                  setSearchLoading(true);
+                  setSearchError('');
+                  setSearchLoaded(false);
+                }} style={{ ...field, padding: '8px 12px', cursor: 'pointer' }}>Limpiar filtros</button>
               </div>
               <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
-                {filteredResults.map((item) => (
-                  <div key={item.name} style={{ background: 'rgba(59,130,246,.08)', border: '1px solid rgba(96,165,250,.28)', borderRadius: 12, padding: 16 }}>
+                {searchLoading && <div role="status" style={{ color: '#bae6fd' }}>Buscando ofertas publicadas…</div>}
+                {searchError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10 }}>{searchError}</div>}
+                {!searchLoading && !searchError && searchLoaded && filteredResults.length === 0 && (
+                  <div role="status" style={{ color: '#cbd5e1', background: 'rgba(148,163,184,.08)', padding: 16, borderRadius: 12 }}>
+                    No hay ofertas activas que coincidan con estos filtros. Prueba otra zona, hora o transporte.
+                  </div>
+                )}
+                {!searchLoading && !searchError && filteredResults.map((item) => (
+                  <div key={item.id} style={{ background: 'rgba(59,130,246,.08)', border: '1px solid rgba(96,165,250,.28)', borderRadius: 12, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <div style={{ fontWeight: 800, fontSize: 18 }}>{item.name}</div>
-                      <div style={{ color: '#93c5fd', fontWeight: 800 }}>{item.score}% compatibilidad</div>
+                      <div style={{ color: '#93c5fd', fontWeight: 800 }}>{item.score}% afinidad estimada</div>
                     </div>
-                    <div style={{ marginTop: 6, color: '#dbeafe' }}>{item.zone} • {item.time} • {item.faculty} • {item.transport} • {item.safety}</div>
+                    <div style={{ marginTop: 6, color: '#dbeafe' }}>{item.origin} → {item.destination} • {item.time} • {item.transport}</div>
+                    <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 13 }}>{item.university}{item.faculty ? ` • ${item.faculty}` : ''} • {item.seats} cupo(s) • {item.cost}</div>
                   </div>
                 ))}
+                {!searchLoading && searchLoaded && searchTruncated && (
+                  <div role="status" style={{ color: '#fde68a' }}>Hay más de 100 ofertas coincidentes. Ajusta los filtros para acotar la búsqueda.</div>
+                )}
               </div>
+              <small style={{ display: 'block', marginTop: 12, color: '#94a3b8' }}>La afinidad estima coincidencias de barrio, transporte y jornada declarados; no representa una calificación de seguridad ni reputación.</small>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>FILTROS</div>
               <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{searchFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(125,211,252,.12)', color: '#dbeafe' }}>{f}</span>)}</div>
+              <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 20, paddingTop: 16 }}>
+                <strong>Checklist del módulo 3</strong>
+                <div style={{ display: 'grid', gap: 8, marginTop: 10, color: '#cbd5e1', fontSize: 13 }}>
+                  {[
+                    { label: '3.1 Consultar ofertas activas de la API con sesión verificada', done: searchLoaded && !searchError },
+                    { label: '3.2 Filtrar por zona, hora y transporte', done: true },
+                    { label: '3.3 Filtrar por carrera y universidad del perfil', done: true },
+                    { label: '3.4 Ordenar por afinidad estimada, hora y fecha', done: true },
+                    { label: '3.5 Mostrar carga, error y resultados vacíos', done: true },
+                    { label: '3.6 Limitar resultados a ofertas activas de usuarios verificados', done: true },
+                    { label: '3.7 Probar filtros, orden y protección de datos', done: true },
+                  ].map((item) => <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>{item.done ? '☑' : '☐'} {item.label}</div>)}
+                </div>
+                <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>{6 + Number(searchLoaded && !searchError)}/7 completados. Reputación, género y distancia no se filtran: requieren valoraciones confiables, preferencias voluntarias y coordenadas consentidas que el modelo actual no almacena.</small>
+              </div>
             </div>
           </section>
         )}
@@ -760,17 +1689,78 @@ export default function AppFresh() {
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#a7f3d0', fontWeight: 800 }}>MÓDULO 4</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Emparejamiento de viajes</h2>
+              <p style={{ color: '#cbd5e1', lineHeight: 1.6 }}>Recomendaciones calculadas desde ofertas activas y verificadas, comparando tu zona, jornada y transporte. No son una garantía de seguridad.</p>
+              {matchLoading && <div role="status" style={{ color: '#bae6fd', marginTop: 16 }}>Buscando viajes compatibles…</div>}
+              {matchError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10, marginTop: 16 }}>{matchError}</div>}
+              {!matchLoading && !matchError && matchLoaded && !matchProfileAvailable && (
+                <div role="status" style={{ color: '#fde68a', background: 'rgba(120,53,15,.25)', padding: 12, borderRadius: 10, marginTop: 16 }}>
+                  Completa y verifica tu perfil de estudiante para recibir recomendaciones.
+                </div>
+              )}
+              {!matchLoading && !matchError && matchLoaded && matchProfileAvailable && matchResults.length === 0 && (
+                <div role="status" style={{ color: '#cbd5e1', background: 'rgba(148,163,184,.08)', padding: 16, borderRadius: 12, marginTop: 16 }}>
+                  Aún no hay ofertas verificadas que coincidan con tu zona, jornada o transporte.
+                  <button onClick={() => setActive('search')} style={{ ...field, display: 'block', marginTop: 12, padding: '8px 12px', cursor: 'pointer' }}>Buscar todas las ofertas</button>
+                </div>
+              )}
               <div style={{ display: 'grid', gap: 14 }}>
-                {matches.map((m) => <div key={m.traveler} style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}><div><div style={{ fontSize: 22, fontWeight: 800 }}>{m.traveler}</div><div style={{ color: '#cbd5e1' }}>{m.zone} • {m.time}</div></div><div style={{ background: 'rgba(16,185,129,.14)', borderRadius: 999, padding: '8px 12px', fontWeight: 800, color: '#a7f3d0' }}>{m.score}%</div></div><div style={{ marginTop: 8, color: '#dbeafe' }}>Modo: {m.mode}</div></div>)}
+                {!matchLoading && matchResults.map((match) => (
+                  <div key={match.id} style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 800 }}>{match.traveler}</div>
+                        <div style={{ color: '#cbd5e1' }}>{match.zone} • {match.time}</div>
+                      </div>
+                      <div style={{ background: 'rgba(16,185,129,.14)', borderRadius: 999, padding: '8px 12px', fontWeight: 800, color: '#a7f3d0' }}>{match.score}% coincidencia</div>
+                    </div>
+                    <div style={{ marginTop: 8, color: '#dbeafe' }}>Modo: {match.mode} • {match.seats} cupo(s) • {match.cost}</div>
+                    <ul style={{ margin: '10px 0', paddingLeft: 20, color: '#bbf7d0' }}>
+                      {match.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                    </ul>
+                    <button
+                      onClick={() => {
+                        setSearchState((current) => ({
+                          ...current,
+                          zone: student.neighborhood || '',
+                          time: '',
+                          transport: 'Cualquiera',
+                          sort: 'Compatibilidad',
+                        }));
+                        setSearchLoading(true);
+                        setSearchError('');
+                        setSearchLoaded(false);
+                        setActive('search');
+                      }}
+                      style={{ ...field, padding: '8px 12px', cursor: 'pointer' }}
+                    >
+                      Ver ofertas
+                    </button>
+                  </div>
+                ))}
               </div>
+              {!matchLoading && matchLoaded && matchTruncated && (
+                <div role="status" style={{ color: '#fde68a', marginTop: 12 }}>Se evaluaron las 200 ofertas más recientes. La lista puede estar incompleta; revisa las ofertas en Búsqueda.</div>
+              )}
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>RECOMENDACIÓN</div>
-              <div style={{ marginTop: 18, background: 'linear-gradient(135deg, rgba(16,185,129,.12), rgba(59,130,246,.12))', borderRadius: 16, padding: 18, border: '1px solid rgba(52,211,153,.2)' }}>
-                <div style={{ fontSize: 26, fontWeight: 800 }}>Ana Vélez</div>
-                <div style={{ marginTop: 8, color: '#dbeafe' }}>Coincidencia 96% por zona, horario y nivel de confianza. Ruta recomendada segura desde El Caney hacia la universidad.</div>
-              </div>
+              <div style={{ marginTop: 12, color: '#cbd5e1' }}>El puntaje es explicable: zona 50%, jornada 35% y transporte 15%. Solo se consideran datos declarados y ofertas publicadas; se muestran coincidencias desde 30 puntos.</div>
               <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{matchFns.map(f => <span key={f} style={{ padding: '6px 8px', fontSize: 10, borderRadius: 999, background: 'rgba(16,185,129,.12)', color: '#d1fae5' }}>{f}</span>)}</div>
+              <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 20, paddingTop: 16 }}>
+                <strong>Checklist del módulo 4</strong>
+                <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13 }}>
+                  {[
+                    { label: '4.1 Leer perfil propio verificado sin usar datos de demostración', done: matchLoaded && matchProfileAvailable },
+                    { label: '4.2 Encontrar ofertas activas de otros estudiantes verificados', done: true },
+                    { label: '4.3 Comparar barrio con origen y destino publicados', done: true },
+                    { label: '4.4 Comparar hora con la jornada declarada', done: true },
+                    { label: '4.5 Comparar transporte declarado con el de la oferta', done: true },
+                    { label: '4.6 Mostrar puntaje explicable y motivos de coincidencia', done: true },
+                    { label: '4.7 Proteger datos privados y probar acceso y filtros', done: true },
+                  ].map((item) => <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>{item.done ? '☑' : '☐'} {item.label}</div>)}
+                </div>
+                <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>{6 + Number(matchLoaded && matchProfileAvailable)}/7 completados. El paso pendiente es cargar las recomendaciones del perfil actual; los controles de cupo pertenecen al módulo de gestión de viajes.</small>
+              </div>
             </div>
           </section>
         )}
@@ -778,47 +1768,197 @@ export default function AppFresh() {
         {active === 'trips' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fbbf24', fontWeight: 800 }}>MÓDULO 4</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fbbf24', fontWeight: 800 }}>MÓDULO 5</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Gestión de viajes</h2>
-              <div style={{ display: 'grid', gap: 14 }}>
-                {tripCards.map((t, index) => (
-                  <div key={`${t.driver}-${index}`} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}>
+              <p style={{ color: '#cbd5e1' }}>Publica ofertas reales, solicita cupos y administra las respuestas desde tu cuenta verificada.</p>
+              {tripLoading && <div role="status" style={{ color: '#bae6fd' }}>Cargando ofertas y solicitudes…</div>}
+              {tripError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10, margin: '12px 0' }}>{tripError}</div>}
+
+              <h3 style={{ marginTop: 20 }}>Ofertas disponibles</h3>
+              {!tripLoading && !tripError && tripCards.length === 0 && <div role="status" style={{ color: '#cbd5e1' }}>No hay ofertas activas disponibles en este momento.</div>}
+              <div style={{ display: 'grid', gap: 12 }}>
+                {tripCards.map((offer) => (
+                  <div key={offer.id} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                      <div><div style={{ fontSize: 20, fontWeight: 800 }}>{t.driver}</div><div style={{ color: '#dbeafe' }}>{t.route}</div></div>
-                      <div style={{ color: '#fbbf24', fontWeight: 800 }}>{t.status}</div>
+                      <div><div style={{ fontSize: 20, fontWeight: 800 }}>{offer.name}</div><div style={{ color: '#dbeafe' }}>{offer.origin} → {offer.destination} • {offer.time}</div></div>
+                      <div style={{ color: '#fbbf24', fontWeight: 800 }}>{offer.university}</div>
                     </div>
-                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', color: '#dbeafe' }}><span>Asientos: {t.seats}</span><span>Costo: {t.cost}</span></div>
-                    <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button onClick={() => updateTripStatus(index, 'Viaje en curso')} style={{ border: '1px solid rgba(251,191,36,.3)', background: 'rgba(245,158,11,.12)', color: '#fff', borderRadius: 10, padding: '7px 10px', fontWeight: 700 }}>Iniciar</button>
-                      <button onClick={() => updateTripStatus(index, 'Salida confirmada')} style={{ border: '1px solid rgba(59,130,246,.3)', background: 'rgba(59,130,246,.12)', color: '#fff', borderRadius: 10, padding: '7px 10px', fontWeight: 700 }}>Salida</button>
-                      <button onClick={() => updateTripStatus(index, 'Llegada segura')} style={{ border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.12)', color: '#fff', borderRadius: 10, padding: '7px 10px', fontWeight: 700 }}>Llegada</button>
+                    <div style={{ marginTop: 8, color: '#dbeafe' }}>Modo: {offer.transport} • {offer.seats} cupo(s) • {offer.cost}</div>
+                    <button
+                      disabled={tripActionLoading === `request-${offer.id}` || offer.seats < 1 || myTripData.requests.some((item) => item.offer.id === offer.id)}
+                      onClick={() => runTripAction(`request-${offer.id}`, () => requestTravelSeat(offer.id), 'Solicitud enviada al responsable de la oferta.')}
+                      style={{ marginTop: 12, border: '1px solid rgba(251,191,36,.3)', background: 'rgba(245,158,11,.12)', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      {tripActionLoading === `request-${offer.id}` ? 'Enviando…' : myTripData.requests.some((item) => item.offer.id === offer.id) ? 'Solicitud registrada' : 'Solicitar cupo'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <h3 style={{ marginTop: 24 }}>Mis ofertas y solicitudes entrantes</h3>
+              {!tripLoading && !tripError && myTripData.offers.length === 0 && <div style={{ color: '#cbd5e1' }}>Aún no has publicado ofertas.</div>}
+              <div style={{ display: 'grid', gap: 12 }}>
+                {myTripData.offers.map((offer) => (
+                  <div key={offer.id} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}>
+                    <div style={{ fontWeight: 800 }}>{offer.origin} → {offer.destination} • {offer.departure_time}</div>
+                    <div style={{ marginTop: 4, color: '#cbd5e1' }}>{tripStatusLabels[offer.status] || offer.status} • {offer.seats} cupo(s) disponibles • {offer.cost}</div>
+                    {offer.requests.map((tripRequest) => (
+                      <div key={tripRequest.id} style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(148,163,184,.18)' }}>
+                        <div>{tripRequest.requester.name} • {tripRequest.requester.university} • {tripStatusLabels[tripRequest.status] || tripRequest.status}</div>
+                        {tripRequest.status === 'pending' && (
+                          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            <button disabled={tripActionLoading === `accept-${tripRequest.id}`} onClick={() => runTripAction(`accept-${tripRequest.id}`, () => updateTravelRequest(tripRequest.id, 'accepted'), 'Solicitud aceptada y cupo reservado.')} style={{ ...field, padding: '7px 10px', cursor: 'pointer' }}>Aceptar</button>
+                            <button disabled={tripActionLoading === `reject-${tripRequest.id}`} onClick={() => runTripAction(`reject-${tripRequest.id}`, () => updateTravelRequest(tripRequest.id, 'rejected'), 'Solicitud rechazada.')} style={{ ...field, padding: '7px 10px', cursor: 'pointer' }}>Rechazar</button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                      {offer.status === 'oferta-activa' && offer.requests.some((item) => item.status === 'accepted') && (
+                        <button onClick={() => runTripAction(`start-${offer.id}`, () => updateTravelOfferStatus(offer.id, 'en-curso'), 'Viaje iniciado.')} style={{ ...field, padding: '7px 10px', cursor: 'pointer' }}>Iniciar viaje</button>
+                      )}
+                      {offer.status === 'en-curso' && (
+                        <button onClick={() => runTripAction(`complete-${offer.id}`, () => updateTravelOfferStatus(offer.id, 'completada'), 'Viaje marcado como completado.')} style={{ ...field, padding: '7px 10px', cursor: 'pointer' }}>Completar viaje</button>
+                      )}
+                      {offer.status === 'oferta-activa' && (
+                        <button onClick={() => runTripAction(`cancel-${offer.id}`, () => updateTravelOfferStatus(offer.id, 'cancelada'), 'Oferta cancelada.')} style={{ ...field, padding: '7px 10px', cursor: 'pointer' }}>Cancelar oferta</button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
+
+              <h3 style={{ marginTop: 24 }}>Mis solicitudes</h3>
+              {!tripLoading && !tripError && myTripData.requests.length === 0 && <div style={{ color: '#cbd5e1' }}>No has solicitado cupos.</div>}
+              <div style={{ display: 'grid', gap: 10 }}>
+                {myTripData.requests.map((tripRequest) => (
+                  <div key={tripRequest.id} style={{ background: 'rgba(59,130,246,.08)', borderRadius: 12, padding: 14 }}>
+                    <div>{tripRequest.offer.owner} • {tripRequest.offer.origin} → {tripRequest.offer.destination} • {tripRequest.offer.departure_time}</div>
+                    <div style={{ color: '#cbd5e1', marginTop: 4 }}>Solicitud: {tripStatusLabels[tripRequest.status] || tripRequest.status} • Viaje: {tripStatusLabels[tripRequest.offer.status] || tripRequest.offer.status}</div>
+                    {['pending', 'accepted'].includes(tripRequest.status) && tripRequest.offer.status === 'oferta-activa' && (
+                      <button onClick={() => runTripAction(`withdraw-${tripRequest.id}`, () => updateTravelRequest(tripRequest.id, 'cancelled'), tripRequest.status === 'accepted' ? 'Participación cancelada y cupo liberado.' : 'Solicitud cancelada.')} style={{ ...field, marginTop: 8, padding: '7px 10px', cursor: 'pointer' }}>
+                        {tripRequest.status === 'accepted' ? 'Cancelar participación' : 'Cancelar solicitud'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {['admin', 'security'].includes(authUser?.role) && (
+                <div style={{ marginTop: 18, color: '#cbd5e1' }}>
+                  La vista de alertas de emergencia está disponible para cuentas de seguridad y administración activas.
+                </div>
+              )}
+              {authUser?.role === 'student' && (
+                <div style={{ marginTop: 22, borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 18 }}>
+                  <h3 style={{ marginTop: 0 }}>Seguridad del viaje en curso</h3>
+                  {safetyTripOptions.length === 0 ? (
+                    <div style={{ color: '#cbd5e1' }}>No tienes viajes en curso con participantes aceptados.</div>
+                  ) : (
+                    <>
+                      <label style={{ display: 'grid', gap: 6, color: '#dbeafe' }}>
+                        Viaje
+                        <select
+                          value={selectedSafetyTripId}
+                          onChange={async (event) => {
+                            const nextTripId = event.target.value;
+                            if (sharingTripLocation && selectedSafetyTripId) {
+                              try {
+                                await tripLocationUpdateRef.current;
+                                await stopSharingTripLocation(selectedSafetyTripId);
+                                setSharingTripLocation(false);
+                              } catch (error) {
+                                setSafetyError(error.message || 'No fue posible detener el GPS antes de cambiar de viaje.');
+                                return;
+                              }
+                            }
+                            setSelectedSafetyTripId(nextTripId);
+                          }}
+                          style={field}
+                        >
+                          {safetyTripOptions.map((trip) => <option key={`${trip.id}-${trip.label}`} value={trip.id}>{trip.label}</option>)}
+                        </select>
+                      </label>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                        <button
+                          disabled={safetyActionLoading === 'share-location'}
+                          onClick={sharingTripLocation ? stopTripLocationSharing : startTripLocationSharing}
+                          style={{ ...field, cursor: 'pointer' }}
+                        >
+                          {safetyActionLoading === 'share-location'
+                            ? 'Obteniendo GPS…'
+                            : safetyActionLoading === 'stop-sharing'
+                              ? 'Retirando ubicación…'
+                            : sharingTripLocation
+                              ? 'Dejar de compartir ubicación'
+                              : 'Compartir mi ubicación con este viaje'}
+                        </button>
+                        <button
+                          disabled={safetyActionLoading === 'check-in-departure' || tripSafetyStatus.check_ins.some((item) => item.user_id === authUser.id && item.type === 'departure')}
+                          onClick={() => recordTripCheckIn('departure')}
+                          style={{ ...field, cursor: 'pointer' }}
+                        >
+                          Confirmar salida
+                        </button>
+                        <button
+                          disabled={safetyActionLoading === 'check-in-arrival' || tripSafetyStatus.check_ins.some((item) => item.user_id === authUser.id && item.type === 'arrival')}
+                          onClick={() => recordTripCheckIn('arrival')}
+                          style={{ ...field, cursor: 'pointer' }}
+                        >
+                          Confirmar llegada
+                        </button>
+                      </div>
+                      <p style={{ color: '#94a3b8', fontSize: 12 }}>
+                        El GPS se comparte solo mientras esta pantalla está abierta y el seguimiento está activo. Se actualiza cada 15 segundos, desaparece del panel tras 2 minutos sin actualización y se elimina al completar o cancelar el viaje.
+                      </p>
+                      <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                        {tripSafetyStatus.locations.map((location) => (
+                          <div key={location.user_id} style={{ borderRadius: 10, padding: 10, background: 'rgba(59,130,246,.08)' }}>
+                            <div>{location.name} • ubicación actual</div>
+                            <a href={`https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=17/${location.latitude}/${location.longitude}`} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>
+                              Ver ubicación en el mapa
+                            </a>
+                            <div style={{ color: '#94a3b8', fontSize: 11 }}>Actualizada: {new Date(location.captured_at).toLocaleTimeString()}</div>
+                          </div>
+                        ))}
+                        {tripSafetyStatus.check_ins.map((checkIn) => (
+                          <div key={`${checkIn.user_id}-${checkIn.type}`} style={{ borderRadius: 10, padding: 10, background: 'rgba(16,185,129,.08)' }}>
+                            {checkIn.name} • {checkIn.type === 'departure' ? 'Salida confirmada' : 'Llegada confirmada'} • {new Date(checkIn.checked_in_at).toLocaleTimeString()}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>ACCIONES</div>
-              <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-                <button onClick={() => openModal({
-                  type: 'trip',
-                  title: 'Publicar oferta de viaje',
-                  accent: '#f59e0b',
-                  message: `Se publicará una nueva oferta desde ${route.origin || 'UNIAJC'} hacia ${route.destination || 'El Caney'} para la jornada ${route.time || '19:45'} con la estructura de seguridad y costos del trayecto actual.`,
-                  confirmText: 'Publicar viaje',
-                  onConfirm: confirmTripOffer,
-                })} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Crear oferta</button>
-                <button onClick={() => openModal({
-                  type: 'seat',
-                  title: 'Solicitar cupo en viaje',
-                  accent: '#60a5fa',
-                  message: `Solicitarás un asiento para ${student.name} en el trayecto sugerido. El sistema confirmará la compatibilidad, punto de encuentro y seguridad del conductor.`,
-                  confirmText: 'Solicitar cupo',
-                  onConfirm: confirmSeatRequest,
-                })} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Solicitar cupo</button>
-                <button onClick={calculateTravelCost} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Calcular costo</button>
+              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>PUBLICAR OFERTA</div>
+              <form onSubmit={submitTripOffer} style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+                <label style={{ display: 'grid', gap: 6 }}>Origen<input required maxLength={120} value={tripOfferForm.origin} onChange={(event) => setTripOfferForm((current) => ({ ...current, origin: event.target.value }))} style={field} /></label>
+                <label style={{ display: 'grid', gap: 6 }}>Destino<input required maxLength={120} value={tripOfferForm.destination} onChange={(event) => setTripOfferForm((current) => ({ ...current, destination: event.target.value }))} style={field} /></label>
+                <label style={{ display: 'grid', gap: 6 }}>Hora de salida<input required type="time" value={tripOfferForm.departure_time} onChange={(event) => setTripOfferForm((current) => ({ ...current, departure_time: event.target.value }))} style={field} /></label>
+                <label style={{ display: 'grid', gap: 6 }}>Transporte<input required maxLength={80} value={tripOfferForm.mode} onChange={(event) => setTripOfferForm((current) => ({ ...current, mode: event.target.value }))} style={field} /></label>
+                <label style={{ display: 'grid', gap: 6 }}>Cupos<input required type="number" min="1" max="20" value={tripOfferForm.seats} onChange={(event) => setTripOfferForm((current) => ({ ...current, seats: event.target.value }))} style={field} /></label>
+                <label style={{ display: 'grid', gap: 6 }}>Aporte por persona<input required maxLength={40} value={tripOfferForm.cost} onChange={(event) => setTripOfferForm((current) => ({ ...current, cost: event.target.value }))} style={field} /></label>
+                <button disabled={tripActionLoading === 'create'} type="submit" style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800, cursor: 'pointer' }}>
+                  {tripActionLoading === 'create' ? 'Publicando…' : 'Publicar oferta'}
+                </button>
+              </form>
+              <button onClick={calculateTravelCost} style={{ marginTop: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '10px 12px', fontWeight: 800 }}>Calcular costo estimado de ruta</button>
+              <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 20, paddingTop: 16 }}>
+                <strong>Checklist del módulo 5</strong>
+                <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13, color: '#86efac' }}>
+                  {[
+                    '5.1 Publicar ofertas desde un perfil verificado',
+                    '5.2 Consultar ofertas activas y sus cupos reales',
+                    '5.3 Solicitar cupo y consultar su estado',
+                    '5.4 Aceptar o rechazar solicitudes como responsable',
+                    '5.5 Evitar sobreventa al confirmar cupos',
+                    '5.6 Cancelar ofertas, solicitudes y participaciones previas al inicio',
+                    '5.7 Iniciar y completar viajes con transiciones válidas',
+                  ].map((item) => <div key={item}>☑ {item}</div>)}
+                </div>
               </div>
-              <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{tripFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(245,158,11,.12)', color: '#fef3c7' }}>{f}</span>)}</div>
             </div>
           </section>
         )}
@@ -826,56 +1966,74 @@ export default function AppFresh() {
         {active === 'safety' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fca5a5', fontWeight: 800 }}>MÓDULO 5</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#fca5a5', fontWeight: 800 }}>MÓDULO 6</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Seguridad y ubicación real</h2>
+              <p style={{ color: '#cbd5e1' }}>Las alertas SOS quedan registradas para personal autorizado. Los participantes de viajes en curso pueden compartir GPS y registrar check-in. No se contacta automáticamente a autoridades ni contactos de confianza.</p>
+              {safetyError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10, margin: '12px 0' }}>{safetyError}</div>}
+              {safetyAlertsLoading && <div role="status" style={{ color: '#bae6fd' }}>Cargando alertas activas…</div>}
+              {!safetyAlertsLoading && alertFeed.length === 0 && (
+                <div role="status" style={{ color: '#cbd5e1' }}>
+                  {['admin', 'security'].includes(authUser?.role)
+                    ? 'No hay alertas SOS activas.'
+                    : 'Todavía no hay alertas SOS registradas durante esta sesión.'}
+                </div>
+              )}
               <div style={{ display: 'grid', gap: 14 }}>
                 {alertFeed.map((a) => (
-                  <div key={`${a.type}-${a.detail}`} style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 14, padding: 16 }}>
+                  <div key={a.id} style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 14, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                       <div style={{ fontWeight: 800 }}>{a.type}</div>
-                      <div style={{ color: '#fca5a5', fontWeight: 700 }}>{a.state}</div>
+                      <div style={{ color: '#fca5a5', fontWeight: 700 }}>{a.active ? 'Activa' : 'Atendida'}</div>
                     </div>
-                    <div style={{ marginTop: 6, color: '#fecaca' }}>{a.detail}</div>
+                    <div style={{ marginTop: 6, color: '#fecaca' }}>{a.message}</div>
+                    {a.student_profile?.name && <div style={{ marginTop: 6, color: '#cbd5e1' }}>Estudiante: {a.student_profile.name} • {a.student_profile.university}</div>}
+                    {a.latitude !== null && a.latitude !== undefined && a.longitude !== null && a.longitude !== undefined && (
+                      <a href={`https://www.openstreetmap.org/?mlat=${a.latitude}&mlon=${a.longitude}#map=17/${a.latitude}/${a.longitude}`} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 8, color: '#93c5fd' }}>
+                        Ver ubicación GPS{a.accuracy_meters ? ` (±${a.accuracy_meters} m)` : ''}
+                      </a>
+                    )}
+                    {['admin', 'security'].includes(authUser?.role) && a.active && (
+                      <button
+                        disabled={safetyActionLoading === `resolve-${a.id}`}
+                        onClick={() => handleResolveSafetyAlert(a.id)}
+                        style={{ display: 'block', ...field, marginTop: 10, padding: '7px 10px', cursor: 'pointer' }}
+                      >
+                        {safetyActionLoading === `resolve-${a.id}` ? 'Actualizando…' : 'Marcar como atendida'}
+                      </button>
+                    )}
                   </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
-                {Object.entries({ panic: 'Botón de pánico', geofence: 'Geocerca activa', emergency: 'Modo emergencia', arrival: 'Check-in de llegada' }).map(([key, label]) => (
-                  <button key={key} onClick={() => toggleSafetyFeature(key)} style={{ border: safetyState[key] ? '1px solid rgba(239,68,68,.5)' : '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: safetyState[key] ? 'rgba(239,68,68,.12)' : 'rgba(15,23,42,.8)', color: '#fff', padding: '12px 16px', fontWeight: 800, textAlign: 'left' }}>
-                    {label} • {safetyState[key] ? 'ON' : 'OFF'}
-                  </button>
                 ))}
               </div>
             </div>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>EMERGENCIA</div>
               <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-                <button onClick={() => openModal({
-                  type: 'panic',
-                  title: 'Botón de pánico activo',
-                  accent: '#ef4444',
-                  message: `Se activará la alerta de seguridad para ${student.name}. El sistema enviará aviso a contacto de confianza, autoridades y grupos cercanos para activar apoyo inmediato.`,
-                  confirmText: 'Activar SOS',
-                  onConfirm: confirmEmergency,
-                })} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
-                <button onClick={() => openModal({
-                  type: 'arrival',
-                  title: 'Confirmar llegada segura',
-                  accent: '#10b981',
-                  message: `El sistema registrará la llegada segura de ${student.name} y enviará confirmación al grupo, contacto de confianza y panel de seguridad.`,
-                  confirmText: 'Confirmar salida',
-                  onConfirm: confirmArrival,
-                })} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(148,163,184,.12)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Confirmar llegada segura</button>
-                <button onClick={() => openModal({
-                  type: 'geo',
-                  title: 'Monitoreo geográfico',
-                  accent: '#60a5fa',
-                  message: 'Se revisará la ruta, geocerca y desviaciones del trayecto para validar que el viaje sigue dentro de los parámetros seguros.',
-                  confirmText: 'Revisar geocerca',
-                  onConfirm: monitorGeographicFence,
-                })} style={{ border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Monitorear geocerca</button>
+                <button onClick={() => {
+                  setIncludeSafetyLocation(false);
+                  setSafetyLocationError('');
+                  openModal({
+                    type: 'panic',
+                    title: 'Registrar alerta SOS',
+                    accent: '#ef4444',
+                    message: `Se registrará una alerta SOS de ${student.name} para el equipo de seguridad. Si eliges incluir tu GPS, el navegador pedirá permiso y las coordenadas se enviarán junto con la alerta. La app no avisará automáticamente a autoridades ni contactos.`,
+                    confirmText: 'Activar SOS',
+                    onConfirm: confirmEmergency,
+                  });
+                }} disabled={safetyActionLoading === 'panic'} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
+                <div style={{ color: '#cbd5e1', background: 'rgba(148,163,184,.08)', borderRadius: 12, padding: 12 }}>
+                  El GPS del viaje requiere activación voluntaria y se detiene al salir de esta pantalla. No hay geocerca ni atención externa automática. Ante peligro inmediato, contacta directamente los servicios locales de emergencia.
+                </div>
+                <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 8, paddingTop: 14 }}>
+                  <strong>Checklist del módulo 6</strong>
+                  <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13 }}>
+                    <div style={{ color: '#86efac' }}>☑ 6.1 Registrar una alerta SOS persistente</div>
+                    <div style={{ color: '#86efac' }}>☑ 6.2 Consultar y atender alertas con rol autorizado</div>
+                    <div style={{ color: '#86efac' }}>☑ 6.3 Adjuntar ubicación GPS actual si el estudiante lo autoriza</div>
+                    <div style={{ color: '#86efac' }}>☑ 6.4 Ubicación compartida y check-in durante el viaje activo</div>
+                    <div style={{ color: '#cbd5e1' }}>☐ 6.5 Notificaciones reales a contactos o servicios externos</div>
+                  </div>
+                </div>
               </div>
-              <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{safetyFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(239,68,68,.12)', color: '#fecaca' }}>{f}</span>)}</div>
             </div>
           </section>
         )}
@@ -883,7 +2041,7 @@ export default function AppFresh() {
         {active === 'admin' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 6</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 7</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Administración, analytics y moderación</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(160px,1fr))', gap: 16 }}>
                 {Object.entries(adminState).map(([label, value]) => <div key={label} style={{ background: 'rgba(139,92,246,.08)', border: '1px solid rgba(196,181,253,.3)', borderRadius: 14, padding: 18 }}><div style={{ color: '#d8b4fe', fontWeight: 700 }}>{label}</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 8 }}>{value}</div></div>)}
@@ -899,7 +2057,7 @@ export default function AppFresh() {
         {active === 'trust' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 7</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#c4b5fd', fontWeight: 800 }}>MÓDULO 8</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Confiabilidad y reputación</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 16 }}>
                 <Metric label='Rating promedio' value='4.8/5' color='#a78bfa' />
@@ -922,7 +2080,7 @@ export default function AppFresh() {
         {active === 'payments' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#5eead4', fontWeight: 800 }}>MÓDULO 8</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#5eead4', fontWeight: 800 }}>MÓDULO 9</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Pago y seguro por trayecto</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
                 <Metric label='Prima estimada' value={pricing.premium} color='#5eead4' />
@@ -945,7 +2103,7 @@ export default function AppFresh() {
         {active === 'dashboard' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f472b6', fontWeight: 800 }}>MÓDULO 9</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f472b6', fontWeight: 800 }}>MÓDULO 10</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Dashboard y comunicación</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
                 <Metric label='Viajes próximos' value='3' color='#f472b6' />
@@ -963,6 +2121,7 @@ export default function AppFresh() {
               <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{dashboardFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(244,114,182,.12)', color: '#fbcfe8' }}>{f}</span>)}</div>
               <div style={{ marginTop: 20, background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
                 <div style={{ fontWeight: 800, marginBottom: 10 }}>Cobertura funcional por módulo</div>
+                <small style={{ display: 'block', marginBottom: 12, color: '#cbd5e1' }}>Inventario de alcance. La cantidad de funciones listadas no significa que todas estén implementadas; revisa el estado de cada módulo.</small>
                 <div style={{ display: 'grid', gap: 10 }}>
                   {functionCoverage.map((module) => (
                     <div key={module.id} style={{ background: 'rgba(15,23,42,.72)', border: '1px solid rgba(148,163,184,.15)', borderRadius: 10, padding: 10 }}>
@@ -970,6 +2129,7 @@ export default function AppFresh() {
                         <span style={{ fontWeight: 800, fontSize: 12 }}>{module.title}</span>
                         <span style={{ color: '#f9a8d4', fontWeight: 800, fontSize: 11 }}>{module.count}</span>
                       </div>
+                      <div style={{ marginTop: 5, color: '#cbd5e1', fontSize: 11 }}>{module.status}</div>
                       <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {module.sample.map((func) => <span key={`${module.id}-${func}`} style={{ background: 'rgba(244,114,182,.08)', color: '#fbcfe8', borderRadius: 999, padding: '4px 6px', fontSize: 9 }}>{func}</span>)}
                       </div>
@@ -984,7 +2144,7 @@ export default function AppFresh() {
         {active === 'privacy' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#7dd3fc', fontWeight: 800 }}>MÓDULO 10</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#7dd3fc', fontWeight: 800 }}>MÓDULO 11</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Privacidad y seguridad del backend</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
                 <Metric label='JWT activo' value='Sí' color='#38bdf8' />
@@ -1006,7 +2166,7 @@ export default function AppFresh() {
         {active === 'alerts' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f59e0b', fontWeight: 800 }}>MÓDULO 11</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f59e0b', fontWeight: 800 }}>MÓDULO 12</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Notificaciones y recordatorios</h2>
               <div style={{ display: 'grid', gap: 12 }}>
                 {notifications.map((item, index) => (
@@ -1030,7 +2190,7 @@ export default function AppFresh() {
         {active === 'advanced' && (
           <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#a3e635', fontWeight: 800 }}>MÓDULO 12</div>
+              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#a3e635', fontWeight: 800 }}>MÓDULO 13</div>
               <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Funcionalidades avanzadas</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
                 <Metric label='Modo nocturno' value={advancedMode.night ? 'Activo' : 'Inactivo'} color='#a3e635' />
