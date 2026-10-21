@@ -41,7 +41,6 @@ export const DEFAULT_APP_DATA = {
   ],
   advancedMode: { night: true, safeties: true, hotspots: true, recommendations: true },
   safetyState: { panic: false, geofence: false, emergency: false, arrival: false },
-  pricing: { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 },
   executionState: [
     { id: 'domain-validation', label: 'Validar dominio universitario y perfil del estudiante', done: true },
     { id: 'route-fallback', label: 'Calcular ruta principal con fallback a OpenStreetMap/OSRM', done: true },
@@ -49,7 +48,7 @@ export const DEFAULT_APP_DATA = {
     { id: 'match-score', label: 'Asignar puntaje de compatibilidad por zona, ruta y confianza', done: true },
     { id: 'trip-management', label: 'Crear oferta, aceptar pasajero y cerrar trayecto', done: true },
     { id: 'safety-alerts', label: 'Completar seguimiento seguro y conectar alertas externas', done: false },
-    { id: 'payment-coverage', label: 'Cobrar por trayecto y activar seguro con cobertura', done: true },
+    { id: 'payment-coverage', label: 'Procesar pagos y confirmar cobertura de seguro', done: false },
     { id: 'analytics-ops', label: 'Monitorear métricas, logs y salud del sistema', done: false },
     { id: 'backend-sync', label: 'Sincronizar GTFS y caché de rutas en backend real', done: false },
     { id: 'prod-hardening', label: 'Cuarentena de producción, auditoría y escalamiento', done: false }
@@ -70,10 +69,12 @@ export function readAppData() {
 
     const parsed = JSON.parse(raw);
     delete parsed.adminState;
+    delete parsed.pricing;
     const savedExecutionState = Array.isArray(parsed.executionState)
       ? parsed.executionState
       : DEFAULT_APP_DATA.executionState;
     const safetyTask = DEFAULT_APP_DATA.executionState.find((task) => task.id === 'safety-alerts');
+    const paymentTask = DEFAULT_APP_DATA.executionState.find((task) => task.id === 'payment-coverage');
     return {
       ...DEFAULT_APP_DATA,
       ...parsed,
@@ -92,10 +93,11 @@ export function readAppData() {
         geofence: false,
         emergency: false
       },
-      pricing: { ...DEFAULT_APP_DATA.pricing, ...(parsed.pricing || {}) },
-      executionState: savedExecutionState.map((task) => task?.id === 'safety-alerts'
-        ? { ...task, ...safetyTask, done: false }
-        : task)
+      executionState: savedExecutionState.map((task) => {
+        if (task?.id === 'safety-alerts') return { ...task, ...safetyTask, done: false };
+        if (task?.id === 'payment-coverage') return { ...task, ...paymentTask, done: false };
+        return task;
+      })
     };
   } catch {
     return DEFAULT_APP_DATA;

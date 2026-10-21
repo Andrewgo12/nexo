@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\InsuranceController;
+use App\Http\Controllers\Api\MembershipController;
 use App\Http\Controllers\Api\ReputationController;
 use App\Http\Controllers\Api\ViajauController;
 use Illuminate\Http\Request;
@@ -35,6 +37,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/students/{id}/profile', [ViajauController::class, 'updateProfile']);
 
     Route::middleware('verified')->group(function () {
+        Route::get('/membership', [MembershipController::class, 'show']);
+        Route::get('/insurance/products', [InsuranceController::class, 'products']);
+        Route::get('/insurance/enrollments/mine', [InsuranceController::class, 'mine']);
+        Route::post('/insurance/enrollments', [InsuranceController::class, 'requestQuote'])
+            ->middleware('throttle:5,1');
+        Route::post('/insurance/enrollments/{enrollment}/policy', [InsuranceController::class, 'submitPolicy'])
+            ->middleware('throttle:5,1');
         Route::get('/reputation/me', [ReputationController::class, 'mine']);
         Route::get('/reputation/profiles/{profile}', [ReputationController::class, 'profile']);
         Route::post('/trips/{trip}/reviews', [ReputationController::class, 'review'])
@@ -68,6 +77,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/catalog/{entry}', [AdminManagementController::class, 'deactivateCatalogEntry']);
     });
     Route::middleware(['verified', 'role:admin'])->prefix('admin')->group(function () {
+        Route::get('/insurance/enrollments', [InsuranceController::class, 'adminIndex']);
+        Route::patch('/insurance/enrollments/{enrollment}', [InsuranceController::class, 'updateEnrollment']);
+        Route::get('/insurance/enrollments/{enrollment}/document', [InsuranceController::class, 'downloadPolicy']);
         Route::get('/reports', [ReputationController::class, 'reports']);
         Route::patch('/reports/{report}', [ReputationController::class, 'moderateReport']);
         Route::post('/transit-feed/import', [AdminManagementController::class, 'importTransitFeed'])

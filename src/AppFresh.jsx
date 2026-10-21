@@ -23,6 +23,14 @@ import {
   getLatestTransitFeed,
   getMyReputation,
   getAdminReports,
+  getMyMembership,
+  getInsuranceProducts,
+  getMyInsuranceEnrollments,
+  requestInsuranceQuote,
+  submitInsurancePolicy,
+  getAdminInsuranceEnrollments,
+  updateAdminInsuranceEnrollment,
+  downloadAdminInsurancePolicy,
   submitTripReview,
   submitTripReport,
   moderateAdminReport,
@@ -139,12 +147,6 @@ const catalogTypes = [
   { value: 'period', label: 'Periodo académico' },
 ];
 
-const paymentFns = [
-  'activarSeguroViaje()', 'calcularPrima()', 'generarFactura()', 'procesarPago()', 'registrarPagoExitoso()', 'pagarSeguro()',
-  'activarCoberturaAsistencia()', 'verificarCoberturaActiva()', 'registrarIncidenteCobertura()', 'crearCasoSeguro()', 'consultarEstadoSeguro()',
-  'monetizarViajeSeguro()', 'aplicarDescuento()', 'generarReporteIngresos()', 'calcularIngresoPorTrayecto()'
-];
-
 const dashboardFns = [
   'mostrarResumenViajes()', 'mostrarProximosViajes()', 'mostrarTrayectosActivos()', 'mostrarNotificaciones()', 'mostrarRutasSugeridas()',
   'listarViajesAnteriores()', 'consultarTrayectosPasados()', 'verEstadisticasPersonales()', 'verCalificacionesObtenidas()',
@@ -183,7 +185,7 @@ const completionAreas = [
   { label: 'Usuarios y validación', progress: 100, status: 'Completado', items: 'Registro, perfil, correo institucional, privacidad, seguridad' },
   { label: 'Mapas, rutas y búsqueda', progress: 100, status: 'Completado', items: 'Geolocalización, routing, filtros, ordenamiento y matching' },
   { label: 'Gestión de viajes y seguridad', progress: 70, status: 'Parcial', items: 'Ofertas, SOS, GPS consentido, geocercas y avisos opt-in; falta integración con servicios de emergencia' },
-  { label: 'Pago, confianza y monetización', progress: 100, status: 'Completado', items: 'Cobros, seguros, reputación, moderación y dashboards' },
+  { label: 'Pago, confianza y monetización', progress: 55, status: 'Parcial', items: 'Reputación implementada; cotización y revisión manual de pólizas; pagos y activación automática pendientes' },
   { label: 'Infraestructura avanzada', progress: 92, status: 'Listo para producción', items: 'Logs, cache, sincronización GTFS, auditoría y monitoreo' },
 ];
 
@@ -221,6 +223,18 @@ const overviewCards = [
 ];
 
 const field = { padding: '12px 14px', borderRadius: 12, background: '#0f172a', border: '1px solid rgba(148,163,184,0.25)', color: '#fff' };
+const insuranceStatusLabel = (status) => ({
+  quote_requested: 'Cotización solicitada · pendiente de respuesta',
+  quoted: 'Cotización recibida · pendiente de compra externa',
+  pending_review: 'Póliza recibida · pendiente de validación',
+  active: 'Activa · póliza verificada por administración',
+  rejected: 'Rechazada · revisa la nota administrativa',
+}[status] || status);
+const formatInsurancePremium = (amount) => new Intl.NumberFormat('es-CO', {
+  style: 'currency',
+  currency: 'COP',
+  maximumFractionDigits: 0,
+}).format(amount);
 const functionCoverage = BUSINESS_MODULES.map((module) => ({
   ...module,
   count: module.functions.length,
@@ -297,9 +311,16 @@ export default function AppFresh() {
   const [adminReports, setAdminReports] = useState([]);
   const [adminReportsMeta, setAdminReportsMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [adminReportsPage, setAdminReportsPage] = useState(1);
+  const [insuranceProducts, setInsuranceProducts] = useState([]);
+  const [myInsuranceEnrollments, setMyInsuranceEnrollments] = useState([]);
+  const [adminInsuranceEnrollments, setAdminInsuranceEnrollments] = useState([]);
+  const [membershipInfo, setMembershipInfo] = useState(null);
+  const [insuranceLoading, setInsuranceLoading] = useState(false);
+  const [insuranceError, setInsuranceError] = useState('');
+  const [insuranceAction, setInsuranceAction] = useState('');
+  const [insuranceRefresh, setInsuranceRefresh] = useState(0);
   const [reviewForm, setReviewForm] = useState({ trip_id: '', reviewee_profile_id: '', rating: '5', comment: '' });
   const [reportForm, setReportForm] = useState({ trip_id: '', reported_profile_id: '', category: 'conduct', description: '' });
-  const [pricing, setPricing] = useState(persisted.pricing || { premium: '$4.800', coverage: '98.3%', insured: true, claim: 0 });
   const [executionState, setExecutionState] = useState(persisted.executionState || executionChecklist);
   const [routeResult, setRouteResult] = useState(null);
   const [routeLocations, setRouteLocations] = useState({ origin: null, destination: null });
@@ -357,6 +378,7 @@ export default function AppFresh() {
   const [profilePhotoFile, setProfilePhotoFile] = useState(null);
 
   const validEmail = useMemo(() => validateInstitutionalEmail(email, uni.domain), [email, uni]);
+  const insuranceMonthlyBudget = insuranceProducts[0]?.monthly_budget_cop ?? 30000;
   const safetyTripOptions = useMemo(() => [
     ...safetyTripData.offers
       .filter((trip) => trip.status === 'en-curso')
@@ -454,11 +476,10 @@ export default function AppFresh() {
       searchState,
       notifications,
       advancedMode,
-      pricing,
       executionState,
       activeTab: active
     });
-  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, pricing, executionState, active]);
+  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, executionState, active]);
 
   useEffect(() => {
     const canViewAdminDashboard = active === 'admin'
@@ -599,6 +620,50 @@ export default function AppFresh() {
       controller.abort();
     };
   }, [active, adminReportsPage, authUser?.role, isEmailVerified, isLoggedIn, reputationRefresh]);
+
+  useEffect(() => {
+    if (active !== 'payments' || !isLoggedIn || !isEmailVerified) return undefined;
+    if (!['student', 'admin'].includes(authUser?.role)) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadInsurance = async () => {
+      setInsuranceLoading(true);
+      setInsuranceError('');
+      try {
+        const [productsResponse, studentResponse, membershipResponse, adminResponse] = await Promise.all([
+          getInsuranceProducts(getAuthToken(), controller.signal),
+          authUser?.role === 'student'
+            ? getMyInsuranceEnrollments(getAuthToken(), controller.signal)
+            : Promise.resolve({ data: [] }),
+          authUser?.role === 'student'
+            ? getMyMembership(getAuthToken(), controller.signal)
+            : Promise.resolve({ data: null }),
+          authUser?.role === 'admin'
+            ? getAdminInsuranceEnrollments(getAuthToken(), controller.signal)
+            : Promise.resolve({ data: [] }),
+        ]);
+        if (!cancelled) {
+          setInsuranceProducts(productsResponse.data || []);
+          setMyInsuranceEnrollments(studentResponse.data || []);
+          setMembershipInfo(membershipResponse);
+          setAdminInsuranceEnrollments(authUser?.role === 'admin' ? adminResponse.data || [] : []);
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setInsuranceError(error.message || 'No fue posible cargar las cotizaciones de seguro.');
+        }
+      } finally {
+        if (!cancelled) setInsuranceLoading(false);
+      }
+    };
+    loadInsurance();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, authUser?.role, insuranceRefresh, isEmailVerified, isLoggedIn]);
 
   useEffect(() => {
     if (active !== 'admin' || authUser?.role !== 'admin' || !isLoggedIn || !isEmailVerified) return undefined;
@@ -1091,6 +1156,97 @@ export default function AppFresh() {
     }
   };
 
+  const submitInsuranceQuoteRequest = async (productKey) => {
+    setInsuranceAction(`quote-${productKey}`);
+    setInsuranceError('');
+    try {
+      await requestInsuranceQuote(productKey);
+      setInsuranceRefresh((value) => value + 1);
+      setToast('Solicitud de cotización enviada. No se ha activado ninguna cobertura.');
+    } catch (error) {
+      setInsuranceError(error.message || 'No fue posible solicitar la cotización.');
+    } finally {
+      setInsuranceAction('');
+    }
+  };
+
+  const submitInsurancePolicyForm = async (event, enrollmentId) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setInsuranceAction(`policy-${enrollmentId}`);
+    setInsuranceError('');
+    try {
+      await submitInsurancePolicy(enrollmentId, new FormData(form));
+      form.reset();
+      setInsuranceRefresh((value) => value + 1);
+      setToast('Documento recibido; la póliza aún requiere revisión administrativa.');
+    } catch (error) {
+      setInsuranceError(error.message || 'No fue posible enviar el documento de póliza.');
+    } finally {
+      setInsuranceAction('');
+    }
+  };
+
+  const submitAdminInsuranceQuote = async (event, enrollmentId) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setInsuranceAction(`admin-${enrollmentId}`);
+    setInsuranceError('');
+    try {
+      await updateAdminInsuranceEnrollment(enrollmentId, {
+        status: 'quoted',
+        monthly_premium_cop: Number(form.get('monthly_premium_cop')),
+        coverage_summary: String(form.get('coverage_summary') || '').trim(),
+      });
+      setInsuranceRefresh((value) => value + 1);
+      setToast('Cotización registrada para revisión del estudiante.');
+    } catch (error) {
+      setInsuranceError(error.message || 'No fue posible registrar la cotización.');
+    } finally {
+      setInsuranceAction('');
+    }
+  };
+
+  const moderateInsuranceEnrollment = async (enrollmentId, status) => {
+    const reviewNote = status === 'rejected'
+      ? window.prompt('Motivo del rechazo (obligatorio):')
+      : '';
+    if (reviewNote === null) return;
+    if (status === 'rejected' && !reviewNote.trim()) {
+      setInsuranceError('Escribe el motivo del rechazo para informar al estudiante.');
+      return;
+    }
+    setInsuranceAction(`admin-${enrollmentId}`);
+    setInsuranceError('');
+    try {
+      await updateAdminInsuranceEnrollment(enrollmentId, { status, review_note: reviewNote.trim() });
+      setInsuranceRefresh((value) => value + 1);
+      setToast(status === 'active' ? 'Póliza validada y activada.' : 'Solicitud de seguro rechazada.');
+    } catch (error) {
+      setInsuranceError(error.message || 'No fue posible actualizar el estado de la póliza.');
+    } finally {
+      setInsuranceAction('');
+    }
+  };
+
+  const downloadInsurancePolicy = async (enrollmentId) => {
+    setInsuranceAction(`download-${enrollmentId}`);
+    setInsuranceError('');
+    try {
+      const file = await downloadAdminInsurancePolicy(enrollmentId);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `poliza-${enrollmentId}.pdf`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      setInsuranceError(error.message || 'No fue posible descargar la póliza.');
+    } finally {
+      setInsuranceAction('');
+    }
+  };
+
   const moderateReputationReport = async (reportId, status) => {
     const resolutionNote = window.prompt('Nota de resolución (opcional):');
     if (resolutionNote === null) return;
@@ -1219,17 +1375,12 @@ export default function AppFresh() {
     setAdvancedMode((current) => ({ ...current, [key]: !current[key] }));
     setToast('Configuración de recomendación avanzada actualizada.');
   };
-  const toggleInsurance = () => {
-    setPricing((current) => ({ ...current, insured: !current.insured }));
-    setToast('Cobertura de seguro actualizada.');
-  };
   const toggleExecutionTask = (id) => {
     setExecutionState((current) => current.map((item) => item.id === id ? { ...item, done: !item.done } : item));
     setToast('Estado del checklist actualizado.');
   };
   const calculateTravelCost = () => {
     const { premium } = calculateTripCost(routeResult?.distanceKm ?? 8.4);
-    setPricing((current) => ({ ...current, premium }));
     setToast(`Costo estimado actualizado: ${premium} por trayecto.`);
   };
   const runTripAction = async (loadingKey, operation, successMessage) => {
@@ -3045,24 +3196,141 @@ export default function AppFresh() {
         )}
 
         {active === 'payments' && (
-          <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
+          <section style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#5eead4', fontWeight: 800 }}>MÓDULO 9</div>
-              <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Pago y seguro por trayecto</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
-                <Metric label='Prima estimada' value={pricing.premium} color='#5eead4' />
-                <Metric label='Cobertura activa' value={pricing.coverage} color='#34d399' />
-                <Metric label='Pago realizado' value={pricing.insured ? 'OK' : 'Pendiente'} color='#fbbf24' />
-                <Metric label='Claim pendiente' value={pricing.claim} color='#fca5a5' />
-              </div>
-              <div style={{ marginTop: 20, background: 'rgba(45,212,191,.06)', border: '1px solid rgba(45,212,191,.2)', borderRadius: 14, padding: 16, color: '#ccfbf1' }}>
-                Seguro de viaje activo para el trayecto UNIAJC → El Caney. Cobertura por asistencia, soporte y alertas de emergencia incluida.
-              </div>
-              <div style={{ marginTop: 18 }}><button onClick={toggleInsurance} style={{ border: '1px solid rgba(45,212,191,.4)', borderRadius: 12, background: pricing.insured ? 'rgba(45,212,191,.12)' : 'rgba(15,23,42,.8)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>{pricing.insured ? 'Desactivar cobertura' : 'Activar cobertura'}</button></div>
-            </div>
-            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>MONETIZACIÓN</div>
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{paymentFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(45,212,191,.12)', color: '#ccfbf1' }}>{f}</span>)}</div>
+              <h2 style={{ margin: '10px 0 12px', fontSize: 34 }}>Cotización y registro manual de seguros</h2>
+              <p style={{ margin: '0 0 18px', color: '#cbd5e1', lineHeight: 1.6 }}>
+                No se confirmó una póliza integral ni un precio público que reúna salud, vida y hurto. Los productos son candidatos para cotizar; la prima debe ser de máximo {formatInsurancePremium(insuranceMonthlyBudget)} al mes. ViajaU no activa cobertura por solicitar una cotización ni por subir un documento: administración debe verificar la póliza.
+              </p>
+              {authUser?.role === 'student' && membershipInfo?.data && (
+                <div style={{ marginBottom: 20, background: 'rgba(45,212,191,.06)', border: '1px solid rgba(45,212,191,.2)', borderRadius: 14, padding: 16 }}>
+                  <strong>Membresía de ViajaU</strong>
+                  <p style={{ color: '#cbd5e1', margin: '8px 0' }}>{membershipInfo.message}</p>
+                  <p style={{ color: '#cbd5e1', margin: 0 }}>
+                    {membershipInfo.data.status === 'free_trial'
+                      ? `Periodo gratuito: ${membershipInfo.data.trial_starts_at} a ${membershipInfo.data.trial_ends_at} (${membershipInfo.data.days_remaining} días restantes).`
+                      : `Periodo gratuito finalizado el ${membershipInfo.data.trial_ends_at}. Precio previsto: ${formatInsurancePremium(membershipInfo.data.monthly_price_cop)} / mes.`}
+                  </p>
+                </div>
+              )}
+              {insuranceError && <p role="alert" style={{ color: '#fca5a5' }}>{insuranceError}</p>}
+              {insuranceLoading && <p role="status" style={{ color: '#cbd5e1' }}>Cargando información de seguros…</p>}
+
+              {authUser?.role === 'student' && (
+                <>
+                  <h3 style={{ margin: '24px 0 12px' }}>Productos candidatos · todos requieren cotización</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                    {insuranceProducts.map((product) => {
+                      const hasOpenRequest = myInsuranceEnrollments.some((item) => (
+                        item.product_key === product.key
+                        && ['quote_requested', 'quoted', 'pending_review', 'active'].includes(item.status)
+                      ));
+                      return (
+                        <article key={product.key} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
+                          <strong>{product.provider} · {product.name}</strong>
+                          <p style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.5 }}>{product.coverage_summary}</p>
+                          <a href={product.source_url} target="_blank" rel="noreferrer" style={{ color: '#5eead4', fontSize: 13 }}>Ver información del proveedor</a>
+                          <p style={{ color: '#fbbf24', fontSize: 13 }}>Precio: por cotizar · presupuesto máximo {formatInsurancePremium(product.monthly_budget_cop)} / mes · sin cobertura confirmada</p>
+                          <button
+                            type="button"
+                            disabled={hasOpenRequest || insuranceAction === `quote-${product.key}`}
+                            onClick={() => submitInsuranceQuoteRequest(product.key)}
+                            style={field}
+                          >
+                            {hasOpenRequest ? 'Solicitud en curso' : insuranceAction === `quote-${product.key}` ? 'Enviando…' : 'Solicitar cotización'}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  <h3 style={{ margin: '28px 0 12px' }}>Mis solicitudes y pólizas</h3>
+                  {!myInsuranceEnrollments.length && !insuranceLoading && <p style={{ color: '#94a3b8' }}>Aún no tienes solicitudes de seguro.</p>}
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    {myInsuranceEnrollments.map((enrollment) => (
+                      <article key={enrollment.id} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
+                        <strong>{enrollment.provider} · {enrollment.product_name}</strong>
+                        <p style={{ color: '#5eead4', margin: '8px 0' }}>Estado: {insuranceStatusLabel(enrollment.status)}</p>
+                        {enrollment.monthly_premium_cop != null && (
+                          <p>Prima cotizada: {formatInsurancePremium(enrollment.monthly_premium_cop)} / mes</p>
+                        )}
+                        {enrollment.coverage_summary && <p style={{ color: '#cbd5e1' }}>{enrollment.coverage_summary}</p>}
+                        {enrollment.review_note && <p role="note" style={{ color: '#fbbf24' }}>Nota administrativa: {enrollment.review_note}</p>}
+                        {enrollment.status === 'quoted' && enrollment.monthly_premium_cop <= insuranceMonthlyBudget && (
+                          <form onSubmit={(event) => submitInsurancePolicyForm(event, enrollment.id)} style={{ display: 'grid', gap: 10, maxWidth: 560, marginTop: 14 }}>
+                            <label style={{ display: 'grid', gap: 6 }}>Número de póliza
+                              <input name="policy_number" required maxLength={120} style={field} />
+                            </label>
+                            <label style={{ display: 'grid', gap: 6 }}>Inicio de cobertura
+                              <input name="coverage_starts_at" type="date" required style={field} />
+                            </label>
+                            <label style={{ display: 'grid', gap: 6 }}>Fin de cobertura
+                              <input name="coverage_ends_at" type="date" required style={field} />
+                            </label>
+                            <label style={{ display: 'grid', gap: 6 }}>Documento PDF de la póliza (máx. 5 MB)
+                              <input name="policy_document" type="file" accept="application/pdf,.pdf" required style={field} />
+                            </label>
+                            <button type="submit" disabled={insuranceAction === `policy-${enrollment.id}`} style={field}>
+                              {insuranceAction === `policy-${enrollment.id}` ? 'Enviando…' : 'Enviar póliza para verificación'}
+                            </button>
+                          </form>
+                        )}
+                        {enrollment.status === 'quoted' && enrollment.monthly_premium_cop > insuranceMonthlyBudget && (
+                          <p role="alert" style={{ color: '#fca5a5' }}>Esta cotización excede el presupuesto de {formatInsurancePremium(insuranceMonthlyBudget)}/mes y no puede registrarse como cobertura.</p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {authUser?.role === 'admin' && (
+                <>
+                  <h3 style={{ margin: '24px 0 12px' }}>Revisión administrativa</h3>
+                  {!adminInsuranceEnrollments.length && !insuranceLoading && <p style={{ color: '#94a3b8' }}>No hay solicitudes de seguro para revisar.</p>}
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    {adminInsuranceEnrollments.map((enrollment) => (
+                      <article key={enrollment.id} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
+                        <strong>{enrollment.provider} · {enrollment.product_name}</strong>
+                        <p style={{ color: '#cbd5e1' }}>Estudiante: {enrollment.user} · {enrollment.email}</p>
+                        <p style={{ color: '#5eead4' }}>Estado: {insuranceStatusLabel(enrollment.status)}</p>
+                        {enrollment.monthly_premium_cop != null && <p>Prima: {formatInsurancePremium(enrollment.monthly_premium_cop)} / mes</p>}
+                        {enrollment.coverage_summary && <p>{enrollment.coverage_summary}</p>}
+                        {enrollment.policy_number && <p>Póliza: {enrollment.policy_number} · Vigencia: {enrollment.coverage_starts_at} a {enrollment.coverage_ends_at}</p>}
+                        {enrollment.review_note && <p role="note">Nota: {enrollment.review_note}</p>}
+                        {enrollment.status === 'quote_requested' && (
+                          <>
+                            <form onSubmit={(event) => submitAdminInsuranceQuote(event, enrollment.id)} style={{ display: 'grid', gap: 10, maxWidth: 600 }}>
+                              <label style={{ display: 'grid', gap: 6 }}>Prima mensual cotizada (COP)
+                                <input name="monthly_premium_cop" type="number" min="1" max="1000000" required style={field} />
+                              </label>
+                              <label style={{ display: 'grid', gap: 6 }}>Coberturas y condiciones confirmadas por el proveedor
+                                <textarea name="coverage_summary" minLength={10} maxLength={2000} required style={{ ...field, minHeight: 90 }} />
+                              </label>
+                              <button type="submit" disabled={insuranceAction === `admin-${enrollment.id}`} style={field}>Registrar cotización verificada</button>
+                            </form>
+                            <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'rejected')} style={{ ...field, marginTop: 8 }}>Rechazar solicitud con motivo</button>
+                          </>
+                        )}
+                        {enrollment.status === 'quoted' && (
+                          <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'rejected')} style={{ ...field, marginTop: 8 }}>Rechazar cotización con motivo</button>
+                        )}
+                        {enrollment.status === 'pending_review' && (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {enrollment.has_policy_document && <button type="button" disabled={insuranceAction === `download-${enrollment.id}`} onClick={() => downloadInsurancePolicy(enrollment.id)} style={field}>Descargar póliza</button>}
+                            <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'active')} style={field}>Validar y activar póliza</button>
+                            <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'rejected')} style={field}>Rechazar con motivo</button>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
+              {!['student', 'admin'].includes(authUser?.role) && (
+                <p role="status" style={{ color: '#fbbf24' }}>Inicia sesión como estudiante verificado o administrador para usar este flujo.</p>
+              )}
             </div>
           </section>
         )}

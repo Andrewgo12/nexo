@@ -14,8 +14,9 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 | 6 | Seguridad y ubicación del viaje | Parcial: SOS, GPS consentido, geocercas y avisos opt-in; requiere SMTP/Twilio y cola configurados. No integra autoridades ni servicios de emergencia. |
 | 7 | Administración y analytics | Implementado: métricas agregadas, gestión institucional de cuentas/verificaciones, incidentes, catálogos e importación validada de paradas/rutas GTFS. |
 | 8 | Confiabilidad y reputación | Implementado: calificaciones entre participantes de viajes completados, promedios verificables e informes privados moderados por admin. |
+| 9 | Pago y seguro | Parcial: solicitudes de cotización y revisión manual de pólizas; pagos Wompi/Mercado Pago/PayU e integración con aseguradora aún pendientes. |
 
-El módulo 9, Pago y seguro, es el siguiente; aún no se ha iniciado. Los módulos 10–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
+Los módulos 10–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
 
 ## Cómo ejecutar y validar
 
@@ -95,9 +96,18 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 - Endpoints: `GET /api/reputation/me`, `GET /api/reputation/profiles/{profile}`, `POST /api/trips/{trip}/reviews`, `POST /api/trips/{trip}/reports`, `GET /api/admin/reports` y `PATCH /api/admin/reports/{report}`. Los endpoints requieren Sanctum y correo verificado; moderación requiere rol `admin`.
 - Migraciones: `backend/database/migrations/2026_10_21_000007_create_trip_reviews_and_user_reports.php` y `backend/database/migrations/2026_10_21_000008_remove_default_trust_score.php`. Cobertura feature: `backend/tests/Feature/ReputationTest.php` y `backend/tests/Feature/DashboardAnalyticsTest.php`.
 
+## Módulo 9: pagos y seguro (parcial)
+
+- Cada cuenta tiene seis meses gratuitos desde su fecha de creación. Después, el precio previsto es COP $9.000 mensuales; durante esta etapa no se cobra ni se restringe el acceso. `GET /api/membership` informa estado, fechas y precio previsto.
+- Los estudiantes activos y verificados pueden solicitar cotizaciones manuales de productos candidatos de MAPFRE y Seguros Mundial. Los precios se muestran como “por cotizar”; no se ha confirmado una póliza integral que cubra salud, vida y hurto por hasta COP $30.000 al mes.
+- Administración registra las condiciones y primas recibidas del proveedor. Solo se permite presentar la póliza para revisión si su prima no supera COP $30.000 al mes; una cotización más alta se conserva como cotización, pero no puede activarse en la plataforma.
+- El estudiante adjunta número, vigencia y documento PDF de la póliza comprada externamente. El archivo se almacena en disco privado; solo administración puede descargarlo y activar la cobertura tras verificar la documentación. Solicitar una cotización o subir una póliza no activa cobertura.
+- Endpoints de estudiante: `GET /api/insurance/products`, `GET /api/insurance/enrollments/mine`, `POST /api/insurance/enrollments` y `POST /api/insurance/enrollments/{id}/policy`. Administración: `GET /api/admin/insurance/enrollments`, `PATCH /api/admin/insurance/enrollments/{id}` y `GET /api/admin/insurance/enrollments/{id}/document`.
+- La pasarela Wompi en sandbox, Mercado Pago, PayU y la integración API de aseguradora todavía no están implementadas; la configuración mantiene los pagos deshabilitados hasta tener proveedor/operación aprobados. No configurar producción ni afirmar pólizas/precios hasta tener convenio y documentación verificable. Migración y pruebas: `backend/database/migrations/2026_10_21_000009_create_insurance_enrollments_table.php`, `backend/tests/Feature/InsuranceTest.php` y `backend/tests/Feature/MembershipTest.php`.
+
 ## Alineación del inventario adjunto
 
-El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. Ubicación en tiempo real, emergencias externas, chat y pagos permanecen pendientes.
+El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. Ubicación en tiempo real, emergencias externas, chat y pagos permanecen pendientes; el módulo 9 permite solicitar cotizaciones y revisar manualmente pólizas.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

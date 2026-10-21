@@ -125,7 +125,7 @@ export const BUSINESS_MODULES = [
     id: 'pago-seguro',
     title: '9. Pago, seguro y monetización',
     summary: 'Estimación y división de costos, procesamiento de pagos y cobertura de seguro.',
-    status: 'Pendiente: las cifras de la interfaz son demostrativas; no hay pagos ni pólizas reales.',
+    status: 'Parcial: cotización y validación manual de pólizas; aún no hay pasarela de pago ni integración de aseguradora.',
     functions: [
       'calcularCostoEstimado()', 'estimateRouteCost()', 'dividirCosto()',
       'establecerAportePorTrayecto()', 'pagarPorTrayecto()', 'registrarCobro()', 'activarSeguroViaje()',

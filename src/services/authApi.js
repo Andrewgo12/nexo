@@ -108,6 +108,60 @@ export function moderateAdminReport(reportId, data, token = getAuthToken()) {
   return request(`/admin/reports/${reportId}`, { method: 'PATCH', token, body: JSON.stringify(data) });
 }
 
+export function getInsuranceProducts(token = getAuthToken(), signal) {
+  return request('/insurance/products', { token, signal });
+}
+
+export function getMyMembership(token = getAuthToken(), signal) {
+  return request('/membership', { token, signal });
+}
+
+export function getMyInsuranceEnrollments(token = getAuthToken(), signal) {
+  return request('/insurance/enrollments/mine', { token, signal });
+}
+
+export function requestInsuranceQuote(productKey, token = getAuthToken()) {
+  return request('/insurance/enrollments', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ product_key: productKey }),
+  });
+}
+
+export function submitInsurancePolicy(enrollmentId, formData, token = getAuthToken()) {
+  return request(`/insurance/enrollments/${enrollmentId}/policy`, {
+    method: 'POST',
+    token,
+    body: formData,
+  });
+}
+
+export function getAdminInsuranceEnrollments(token = getAuthToken(), signal) {
+  return request('/admin/insurance/enrollments', { token, signal });
+}
+
+export function updateAdminInsuranceEnrollment(enrollmentId, data, token = getAuthToken()) {
+  return request(`/admin/insurance/enrollments/${enrollmentId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export async function downloadAdminInsurancePolicy(enrollmentId, token = getAuthToken()) {
+  const response = await fetch(`${API_BASE_URL}/admin/insurance/enrollments/${enrollmentId}/document`, {
+    headers: {
+      Accept: 'application/pdf',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || 'No fue posible descargar el documento de póliza.');
+  }
+  return response.blob();
+}
+
 export function publishTravelOffer(data, token = getAuthToken()) {
   return request('/trips', {
     method: 'POST',
