@@ -165,7 +165,7 @@ const backendFns = [
 const completionAreas = [
   { label: 'Usuarios y validación', progress: 100, status: 'Completado', items: 'Registro, perfil, correo institucional, privacidad, seguridad' },
   { label: 'Mapas, rutas y búsqueda', progress: 100, status: 'Completado', items: 'Geolocalización, routing, filtros, ordenamiento y matching' },
-  { label: 'Gestión de viajes y seguridad', progress: 100, status: 'Completado', items: 'Ofertas, aceptaciones, geocerca, notificaciones y emergencias' },
+  { label: 'Gestión de viajes y seguridad', progress: 70, status: 'Parcial', items: 'Ofertas, SOS, GPS consentido, geocercas y avisos opt-in; falta integración con servicios de emergencia' },
   { label: 'Pago, confianza y monetización', progress: 100, status: 'Completado', items: 'Cobros, seguros, reputación, moderación y dashboards' },
   { label: 'Infraestructura avanzada', progress: 92, status: 'Listo para producción', items: 'Logs, cache, sincronización GTFS, auditoría y monitoreo' },
 ];
@@ -269,7 +269,10 @@ export default function AppFresh() {
     mode: 'MIO + caminata',
     seats: '2',
     cost: '2500 COP',
+    safety_route_duration_minutes: '45',
   });
+  const [tripGeofenceConsent, setTripGeofenceConsent] = useState(false);
+  const [tripGeofencePreview, setTripGeofencePreview] = useState(null);
   const [alertFeed, setAlertFeed] = useState([]);
   const [safetyActionLoading, setSafetyActionLoading] = useState('');
   const [safetyError, setSafetyError] = useState('');
@@ -279,7 +282,7 @@ export default function AppFresh() {
   const [safetyAlertsLoading, setSafetyAlertsLoading] = useState(false);
   const [safetyTripData, setSafetyTripData] = useState({ offers: [], requests: [] });
   const [selectedSafetyTripId, setSelectedSafetyTripId] = useState('');
-  const [tripSafetyStatus, setTripSafetyStatus] = useState({ locations: [], check_ins: [] });
+  const [tripSafetyStatus, setTripSafetyStatus] = useState({ locations: [], check_ins: [], safety_events: [] });
   const [sharingTripLocation, setSharingTripLocation] = useState(false);
   const tripLocationUpdateRef = useRef(Promise.resolve());
   const [modal, setModal] = useState(null);
@@ -317,6 +320,13 @@ export default function AppFresh() {
         label: `${request.offer.origin} → ${request.offer.destination} (${request.offer.owner})`,
       })),
   ], [safetyTripData]);
+  const geofenceRouteFingerprint = JSON.stringify([
+    tripOfferForm.origin,
+    tripOfferForm.destination,
+    tripOfferForm.mode,
+    tripOfferForm.safety_route_duration_minutes,
+  ]);
+  const hasCurrentGeofencePreview = tripGeofencePreview?.fingerprint === geofenceRouteFingerprint;
 
   const readiness = useMemo(() => calculateTravelReadiness(student, route), [student, route]);
   const dashboardMetrics = useMemo(() => buildDashboardMetrics(student, route, tripCards, alertFeed), [student, route, tripCards, alertFeed]);
@@ -336,6 +346,9 @@ export default function AppFresh() {
       shift: user.shift || '',
       neighborhood: user.neighborhood || '',
       emergency: user.emergency_contact || '',
+      trusted_contact_email: user.trusted_contact_email || '',
+      trusted_contact_phone: user.trusted_contact_phone || '',
+      trusted_contact_consent: Boolean(user.trusted_contact_consent),
     }));
     setEmail(user.email);
     setIsEmailVerified(Boolean(user.email_verified_at));
@@ -556,7 +569,7 @@ export default function AppFresh() {
 
   useEffect(() => {
     setSharingTripLocation(false);
-    setTripSafetyStatus({ locations: [], check_ins: [] });
+    setTripSafetyStatus({ locations: [], check_ins: [], safety_events: [] });
   }, [selectedSafetyTripId]);
 
   useEffect(() => {
@@ -583,7 +596,7 @@ export default function AppFresh() {
 
   useEffect(() => {
     if (active !== 'safety' || !isLoggedIn || !isEmailVerified || !selectedSafetyTripId) {
-      setTripSafetyStatus({ locations: [], check_ins: [] });
+      setTripSafetyStatus({ locations: [], check_ins: [], safety_events: [] });
       return undefined;
     }
 
@@ -595,13 +608,17 @@ export default function AppFresh() {
       loading = true;
       try {
         const response = await getTripSafetyStatus(selectedSafetyTripId, getAuthToken(), controller.signal);
-        if (!Array.isArray(response.data?.locations) || !Array.isArray(response.data?.check_ins)) {
+        if (
+          !Array.isArray(response.data?.locations)
+          || !Array.isArray(response.data?.check_ins)
+          || !Array.isArray(response.data?.safety_events)
+        ) {
           throw new Error('El servidor devolvió el estado de seguridad del viaje inválido.');
         }
         if (!cancelled) setTripSafetyStatus(response.data);
       } catch (error) {
         if (!cancelled && error.name !== 'AbortError') {
-          setTripSafetyStatus({ locations: [], check_ins: [] });
+          setTripSafetyStatus({ locations: [], check_ins: [], safety_events: [] });
           setSafetyError(error.message || 'No fue posible consultar el viaje activo.');
         }
       } finally {
@@ -729,6 +746,9 @@ export default function AppFresh() {
         neighborhood: student.neighborhood,
         transport: student.transport,
         emergency_contact: student.emergency,
+        trusted_contact_consent: Boolean(student.trusted_contact_consent),
+        trusted_contact_email: student.trusted_contact_consent ? student.trusted_contact_email : null,
+        trusted_contact_phone: student.trusted_contact_consent ? student.trusted_contact_phone : null,
         privacy,
       });
       applyAuthenticatedUser(user);
@@ -863,12 +883,64 @@ export default function AppFresh() {
     setTripActionLoading('create');
     setTripError('');
     try {
+      let safetyRoute = {};
+      if (tripGeofenceConsent) {
+        if (!hasCurrentGeofencePreview) {
+          const [origins, destinations] = await Promise.all([
+            searchAddressNominatim(tripOfferForm.origin),
+            searchAddressNominatim(tripOfferForm.destination),
+          ]);
+          if (!origins.length || !destinations.length) {
+            throw new Error('No se pudo ubicar el origen o destino para configurar la geocerca.');
+          }
+          const origin = [origins[0].lat, origins[0].lng];
+          const destination = [destinations[0].lat, destinations[0].lng];
+          const mode = tripOfferForm.mode.toLocaleLowerCase();
+          const routeMode = mode.includes('mio')
+            ? 'mio'
+            : mode.includes('bici')
+              ? 'bike'
+              : mode.includes('caminata') || mode.includes('pie')
+                ? 'walk'
+                : mode.includes('moto')
+                  ? 'moto'
+                  : 'car';
+          const route = routeMode === 'mio'
+            ? await getMioRoute(origin, destination)
+            : await getOsrmRoute(origin, destination, routeMode);
+          if (!Array.isArray(route.polyline) || route.polyline.length < 2) {
+            throw new Error('El proveedor no devolvió un trazado válido para la geocerca.');
+          }
+          const polyline = route.polyline.length <= 500
+            ? route.polyline
+            : Array.from({ length: 500 }, (_, index) => (
+              route.polyline[Math.round(index * (route.polyline.length - 1) / 499)]
+            ));
+          setTripGeofencePreview({
+            fingerprint: geofenceRouteFingerprint,
+            origin: origins[0].fullName,
+            destination: destinations[0].fullName,
+            source: route.source,
+            polyline,
+          });
+          setToast('Revisa los resultados geocodificados y confirma la ruta antes de publicar.');
+          return;
+        }
+        safetyRoute = {
+          safety_route: tripGeofencePreview.polyline,
+          safety_route_duration_minutes: Number(tripOfferForm.safety_route_duration_minutes),
+        };
+      }
+      const { safety_route_duration_minutes: _duration, ...offerFields } = tripOfferForm;
       await publishTravelOffer({
-        ...tripOfferForm,
+        ...offerFields,
         seats: Number(tripOfferForm.seats),
+        ...(tripGeofenceConsent ? safetyRoute : {}),
       });
       setTripRefreshKey((current) => current + 1);
-      setToast('Oferta de viaje publicada.');
+      setToast(tripGeofenceConsent
+        ? 'Oferta publicada con geocerca; el trazado se usa para alertas y se elimina al cerrar el viaje. Solo se comparte el evento, no las coordenadas.'
+        : 'Oferta de viaje publicada.');
     } catch (error) {
       setTripError(error.message || 'No se pudo publicar la oferta.');
     } finally {
@@ -957,9 +1029,14 @@ export default function AppFresh() {
 
       const response = await createSafetyAlert(location);
       setAlertFeed((current) => [response.data, ...current]);
-      setToast(location.latitude
-        ? 'SOS registrado con las coordenadas GPS que autorizaste. No se notificó automáticamente a autoridades ni contactos.'
-        : 'SOS registrado para el equipo de seguridad. No se notificó automáticamente a autoridades ni contactos.');
+      const deliveryStatuses = response.data.notification_deliveries || [];
+      const pendingDeliveries = deliveryStatuses.filter((delivery) => delivery.status === 'pending').length;
+      const failedDeliveries = deliveryStatuses.filter((delivery) => ['failed', 'skipped'].includes(delivery.status)).length;
+      setToast(pendingDeliveries
+        ? `SOS registrado. ${pendingDeliveries} aviso(s) a tu contacto quedaron en cola.`
+        : failedDeliveries
+          ? `SOS registrado, pero ${failedDeliveries} canal(es) de contacto no están configurados o fallaron. El equipo de seguridad puede ver la alerta.`
+          : 'SOS registrado para el equipo de seguridad. La notificación externa requiere consentimiento del contacto y configuración de proveedores.');
       return true;
     } catch (error) {
       setSafetyError(error.message || 'No fue posible registrar la alerta de emergencia.');
@@ -1184,7 +1261,7 @@ export default function AppFresh() {
                         ['semester', 'Semestre', 'Ej. 8vo semestre'],
                         ['shift', 'Jornada', 'Ej. Nocturna'],
                         ['neighborhood', 'Barrio', 'Tu barrio'],
-                        ['emergency_contact', 'Contacto de emergencia', 'Nombre y teléfono'],
+                        ['emergency_contact', 'Contacto de confianza', 'Nombre del contacto (opcional)'],
                       ].map(([key, label, placeholder]) => (
                         <label key={key} style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
                           <span style={{ color: '#dbeafe', fontWeight: 700 }}>{label}</span>
@@ -1430,6 +1507,45 @@ export default function AppFresh() {
                 <label style={{ display: 'grid', gap: 8 }}><span>Transporte habitual</span><input value={student.transport} onChange={(e) => setStudent({ ...student, transport: e.target.value })} style={field} /></label>
                 <label style={{ display: 'grid', gap: 8 }}><span>Contacto de confianza</span><input value={student.emergency} onChange={(e) => setStudent({ ...student, emergency: e.target.value })} style={field} /></label>
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+                <label style={{ display: 'grid', gap: 8 }}>
+                  <span>Correo del contacto de confianza</span>
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    value={student.trusted_contact_email || ''}
+                    onChange={(event) => setStudent((current) => ({ ...current, trusted_contact_email: event.target.value }))}
+                    disabled={!student.trusted_contact_consent}
+                    style={field}
+                    placeholder="contacto@ejemplo.com"
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: 8 }}>
+                  <span>Teléfono del contacto (formato internacional)</span>
+                  <input
+                    type="tel"
+                    autoComplete="tel"
+                    value={student.trusted_contact_phone || ''}
+                    onChange={(event) => setStudent((current) => ({ ...current, trusted_contact_phone: event.target.value }))}
+                    disabled={!student.trusted_contact_consent}
+                    style={field}
+                    placeholder="+573001234567"
+                  />
+                </label>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12, color: '#cbd5e1', lineHeight: 1.5 }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(student.trusted_contact_consent)}
+                  onChange={(event) => setStudent((current) => ({
+                    ...current,
+                    trusted_contact_consent: event.target.checked,
+                    ...(event.target.checked ? {} : { trusted_contact_email: '', trusted_contact_phone: '' }),
+                  }))}
+                  style={{ marginTop: 4 }}
+                />
+                Autorizo alertas SOS y de seguridad por correo, SMS y WhatsApp a este contacto. Puedo retirar el consentimiento en cualquier momento; no se enviarán mis coordenadas exactas por esos canales.
+              </label>
               <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ color: validEmail ? '#86efac' : '#fca5a5', fontWeight: 800 }}>Dominio requerido: {uni.domain}</div>
                 <button onClick={() => openModal({
@@ -1925,6 +2041,24 @@ export default function AppFresh() {
                             {checkIn.name} • {checkIn.type === 'departure' ? 'Salida confirmada' : 'Llegada confirmada'} • {new Date(checkIn.checked_in_at).toLocaleTimeString()}
                           </div>
                         ))}
+                        {tripSafetyStatus.safety_events.map((safetyEvent) => (
+                          <div key={`${safetyEvent.user_id}-${safetyEvent.type}`} style={{ borderRadius: 10, padding: 10, background: 'rgba(245,158,11,.08)' }}>
+                            <div>
+                              {safetyEvent.type === 'route_deviation'
+                                ? 'Alerta: salida del corredor de ruta'
+                                : safetyEvent.type === 'arrival_geofence'
+                                  ? 'Participante dentro de la zona de llegada'
+                                  : 'Check-in de llegada vencido'}
+                              {' • '}{new Date(safetyEvent.occurred_at).toLocaleTimeString()}
+                            </div>
+                            {safetyEvent.notifications.map((delivery) => (
+                              <div key={delivery.channel} style={{ color: delivery.status === 'sent' ? '#86efac' : '#fcd34d', fontSize: 12 }}>
+                                Contacto {delivery.channel}: {delivery.status === 'sent' ? 'entregado por el proveedor' : delivery.status === 'pending' ? 'en cola' : delivery.status === 'failed' ? 'falló' : 'no configurado'}
+                                {delivery.failure_reason ? ` — ${delivery.failure_reason}` : ''}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
                       </div>
                     </>
                   )}
@@ -1940,8 +2074,53 @@ export default function AppFresh() {
                 <label style={{ display: 'grid', gap: 6 }}>Transporte<input required maxLength={80} value={tripOfferForm.mode} onChange={(event) => setTripOfferForm((current) => ({ ...current, mode: event.target.value }))} style={field} /></label>
                 <label style={{ display: 'grid', gap: 6 }}>Cupos<input required type="number" min="1" max="20" value={tripOfferForm.seats} onChange={(event) => setTripOfferForm((current) => ({ ...current, seats: event.target.value }))} style={field} /></label>
                 <label style={{ display: 'grid', gap: 6 }}>Aporte por persona<input required maxLength={40} value={tripOfferForm.cost} onChange={(event) => setTripOfferForm((current) => ({ ...current, cost: event.target.value }))} style={field} /></label>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: '#dbeafe', lineHeight: 1.5 }}>
+                <input
+                  type="checkbox"
+                  checked={tripGeofenceConsent}
+                  onChange={(event) => {
+                    setTripGeofenceConsent(event.target.checked);
+                    setTripGeofencePreview(null);
+                  }}
+                  style={{ marginTop: 4 }}
+                />
+                Configurar geocerca de este viaje. Se geocodificarán las direcciones y se guardará el trazado para alertas a los contactos que hayan dado consentimiento.
+                </label>
+                {tripGeofenceConsent && (
+                <>
+                  {hasCurrentGeofencePreview && (
+                    <div style={{ borderRadius: 10, padding: 10, background: 'rgba(59,130,246,.08)', color: '#dbeafe', fontSize: 12 }}>
+                      <div>Origen detectado: {tripGeofencePreview.origin}</div>
+                      <div>Destino detectado: {tripGeofencePreview.destination}</div>
+                      <div>Fuente de ruta: {tripGeofencePreview.source}</div>
+                      <div>Si un resultado no corresponde, ajusta la dirección antes de confirmar la oferta.</div>
+                    </div>
+                  )}
+                  <label style={{ display: 'grid', gap: 6 }}>
+                      Duración estimada del viaje (minutos)
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        max="600"
+                        value={tripOfferForm.safety_route_duration_minutes}
+                        onChange={(event) => setTripOfferForm((current) => ({ ...current, safety_route_duration_minutes: event.target.value }))}
+                        style={field}
+                      />
+                    </label>
+                    <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
+                      Origen/destino se consultan con OpenStreetMap y el trazado se calcula con OSRM o datos públicos del MIO. El backend activa una alerta al salir más de 500 m del corredor, entrar a 300 m del destino o no confirmar llegada 15 min después de la duración indicada. Solo funciona cuando cada participante comparte GPS expresamente; se notifica el evento, no las coordenadas.
+                    </p>
+                  </>
+                )}
                 <button disabled={tripActionLoading === 'create'} type="submit" style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800, cursor: 'pointer' }}>
-                  {tripActionLoading === 'create' ? 'Publicando…' : 'Publicar oferta'}
+                  {tripActionLoading === 'create'
+                    ? 'Configurando…'
+                    : tripGeofenceConsent && hasCurrentGeofencePreview
+                      ? 'Confirmar ruta y publicar'
+                      : tripGeofenceConsent
+                        ? 'Previsualizar geocerca'
+                        : 'Publicar oferta'}
                 </button>
               </form>
               <button onClick={calculateTravelCost} style={{ marginTop: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '10px 12px', fontWeight: 800 }}>Calcular costo estimado de ruta</button>
@@ -2021,7 +2200,7 @@ export default function AppFresh() {
                   });
                 }} disabled={safetyActionLoading === 'panic'} style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #b91c1c)', color: '#fff', padding: '12px 16px', fontWeight: 800 }}>Activar botón de pánico</button>
                 <div style={{ color: '#cbd5e1', background: 'rgba(148,163,184,.08)', borderRadius: 12, padding: 12 }}>
-                  El GPS del viaje requiere activación voluntaria y se detiene al salir de esta pantalla. No hay geocerca ni atención externa automática. Ante peligro inmediato, contacta directamente los servicios locales de emergencia.
+                  El GPS requiere activación voluntaria. Las alertas por correo/SMS/WhatsApp solo se envían con consentimiento del contacto y SMTP/Twilio configurados; no se notifican automáticamente autoridades ni servicios de emergencia.
                 </div>
                 <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 8, paddingTop: 14 }}>
                   <strong>Checklist del módulo 6</strong>
@@ -2030,7 +2209,9 @@ export default function AppFresh() {
                     <div style={{ color: '#86efac' }}>☑ 6.2 Consultar y atender alertas con rol autorizado</div>
                     <div style={{ color: '#86efac' }}>☑ 6.3 Adjuntar ubicación GPS actual si el estudiante lo autoriza</div>
                     <div style={{ color: '#86efac' }}>☑ 6.4 Ubicación compartida y check-in durante el viaje activo</div>
-                    <div style={{ color: '#cbd5e1' }}>☐ 6.5 Notificaciones reales a contactos o servicios externos</div>
+                    <div style={{ color: '#86efac' }}>☑ 6.5 Geocerca de ruta/destino y alertas por check-in vencido (si el viaje lo configura)</div>
+                    <div style={{ color: '#86efac' }}>☑ 6.6 Notificaciones opt-in a contactos por correo/SMS/WhatsApp (requiere configuración externa)</div>
+                    <div style={{ color: '#cbd5e1' }}>☐ 6.7 Integración con autoridades/servicios de emergencia</div>
                   </div>
                 </div>
               </div>

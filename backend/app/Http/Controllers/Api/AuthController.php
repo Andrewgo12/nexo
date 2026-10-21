@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Services\TrustedContactProfileService;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -149,7 +150,7 @@ class AuthController extends Controller
         return response()->json(['user' => $request->user()]);
     }
 
-    public function updateProfile(Request $request): JsonResponse
+    public function updateProfile(Request $request, TrustedContactProfileService $trustedContactProfile): JsonResponse
     {
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:120'],
@@ -159,6 +160,9 @@ class AuthController extends Controller
             'neighborhood' => ['sometimes', 'nullable', 'string', 'max:120'],
             'transport' => ['sometimes', 'nullable', 'string', 'max:120'],
             'emergency_contact' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'trusted_contact_email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'trusted_contact_phone' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
+            'trusted_contact_consent' => ['sometimes', 'boolean'],
             'privacy' => ['sometimes', 'nullable', 'string', 'max:120'],
             'photo' => ['sometimes', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
@@ -168,24 +172,27 @@ class AuthController extends Controller
             $oldPhotoPath = $user->profile_photo_path;
             $user->profile_photo_path = $newPhotoPath;
         }
-        $user->fill(collect($data)->only([
-            'name',
-            'career',
-            'semester',
-            'shift',
-            'neighborhood',
-            'emergency_contact',
-        ])->all())->save();
-        $user->studentProfile()->update(collect($data)->only([
-            'name',
-            'career',
-            'semester',
-            'shift',
-            'neighborhood',
-            'transport',
-            'emergency_contact',
-            'privacy',
-        ])->all());
+        DB::transaction(function () use ($user, $data, $trustedContactProfile): void {
+            $trustedContactProfile->update($user, $data);
+            $user->fill(collect($data)->only([
+                'name',
+                'career',
+                'semester',
+                'shift',
+                'neighborhood',
+                'emergency_contact',
+            ])->all())->save();
+            $user->studentProfile()->update(collect($data)->only([
+                'name',
+                'career',
+                'semester',
+                'shift',
+                'neighborhood',
+                'transport',
+                'emergency_contact',
+                'privacy',
+            ])->all());
+        });
         if (isset($newPhotoPath) && $oldPhotoPath) {
             Storage::disk('public')->delete($oldPhotoPath);
         }

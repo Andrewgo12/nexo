@@ -27,6 +27,10 @@ use Laravel\Sanctum\HasApiTokens;
     'shift',
     'neighborhood',
     'emergency_contact',
+    'trusted_contact_email',
+    'trusted_contact_phone',
+    'trusted_contact_consent',
+    'trusted_contact_consent_at',
     'profile_photo_path',
     'role',
     'status',
@@ -82,6 +86,8 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'trusted_contact_consent' => 'boolean',
+            'trusted_contact_consent_at' => 'datetime',
         ];
     }
 }

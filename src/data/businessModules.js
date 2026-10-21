@@ -82,7 +82,7 @@ export const BUSINESS_MODULES = [
     id: 'seguridad-viajes',
     title: '6. Seguridad y ubicación del viaje',
     summary: 'Ubicación en vivo, check-in, emergencias, geocercas e incidentes.',
-    status: 'Parcial: SOS, GPS puntual optativo, ubicación compartida en viaje activo y check-in; geocercas y respuesta externa pendientes.',
+    status: 'Parcial: SOS, GPS optativo, geocercas y avisos opt-in a contactos; requiere SMTP/Twilio y cola configurados. No integra servicios de emergencia.',
     functions: [
       'compartirUbicacion()', 'actualizarUbicacion()', 'verUbicacionGrupo()', 'verRutaEnTiempoReal()',
       'notificarCambioDeUbicacion()', 'confirmarLlegadaSegura()', 'enviarRecordatorioLlegada()',

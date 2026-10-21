@@ -8,4 +8,9 @@ return [
         'javeriana' => ['name' => 'Javeriana Cali', 'domain' => 'javerianacali.edu.co'],
         'icesi' => ['name' => 'Icesi', 'domain' => 'icesi.edu.co'],
     ],
+    'safety' => [
+        'route_corridor_meters' => (int) env('SAFETY_ROUTE_CORRIDOR_METERS', 500),
+        'arrival_radius_meters' => (int) env('SAFETY_ARRIVAL_RADIUS_METERS', 300),
+        'checkin_grace_minutes' => (int) env('SAFETY_CHECKIN_GRACE_MINUTES', 15),
+    ],
 ];

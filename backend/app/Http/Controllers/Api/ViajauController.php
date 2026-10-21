@@ -10,8 +10,11 @@ use App\Models\TripCheckIn;
 use App\Models\TripLocation;
 use App\Models\TripMatch;
 use App\Models\TripRequest;
+use App\Models\TripSafetyEvent;
 use App\Models\TrustLedger;
 use App\Models\User;
+use App\Services\SafetyNotificationService;
+use App\Services\TrustedContactProfileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -37,7 +40,7 @@ class ViajauController extends Controller
         return response()->json(['data' => $profile]);
     }
 
-    public function updateProfile(Request $request, string $id)
+    public function updateProfile(Request $request, string $id, TrustedContactProfileService $trustedContactProfile)
     {
         $profile = StudentProfile::where('user_id', $request->user()->id)->findOrFail($id);
         $data = $request->validate([
@@ -48,20 +51,34 @@ class ViajauController extends Controller
             'neighborhood' => 'sometimes|nullable|string|max:120',
             'transport' => 'sometimes|nullable|string|max:120',
             'emergency_contact' => 'sometimes|nullable|string|max:160',
+            'trusted_contact_email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'trusted_contact_phone' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
+            'trusted_contact_consent' => ['sometimes', 'boolean'],
             'privacy' => 'sometimes|nullable|string|max:120',
         ]);
 
-        $profile->fill($data);
-
-        $profile->save();
-        $request->user()->update(collect($data)->only([
-            'name',
-            'career',
-            'semester',
-            'shift',
-            'neighborhood',
-            'emergency_contact',
-        ])->all());
+        DB::transaction(function () use ($profile, $request, $data, $trustedContactProfile): void {
+            $trustedContactProfile->update($request->user(), $data);
+            $profile->fill(collect($data)->only([
+                'name',
+                'career',
+                'semester',
+                'shift',
+                'neighborhood',
+                'transport',
+                'emergency_contact',
+                'privacy',
+            ])->all());
+            $profile->save();
+            $request->user()->update(collect($data)->only([
+                'name',
+                'career',
+                'semester',
+                'shift',
+                'neighborhood',
+                'emergency_contact',
+            ])->all());
+        });
 
         return response()->json([
             'message' => 'Perfil actualizado.',
@@ -157,6 +174,11 @@ class ViajauController extends Controller
             'departure_time' => ['nullable', 'date_format:H:i'],
             'seats' => 'nullable|integer|min:1|max:20',
             'cost' => 'nullable|string|max:40',
+            'safety_route' => ['nullable', 'array', 'min:2', 'max:500'],
+            'safety_route.*' => ['required', 'array', 'size:2'],
+            'safety_route.*.0' => ['required', 'numeric', 'between:-90,90'],
+            'safety_route.*.1' => ['required', 'numeric', 'between:-180,180'],
+            'safety_route_duration_minutes' => ['required_with:safety_route', 'integer', 'min:1', 'max:600'],
         ])->validate();
 
         $profile = $request->user()->studentProfile;
@@ -179,11 +201,21 @@ class ViajauController extends Controller
             'seats' => $data['seats'] ?? 2,
             'cost' => $data['cost'] ?? '2500 COP',
             'status' => 'oferta-activa',
+            'safety_route' => $data['safety_route'] ?? null,
+            'safety_route_duration_minutes' => $data['safety_route_duration_minutes'] ?? null,
+            'safety_geofence_consent_at' => isset($data['safety_route']) ? now() : null,
         ]);
 
         return response()->json([
             'message' => 'Oferta de viaje creada.',
-            'data' => $trip,
+            'data' => [
+                'id' => $trip->id,
+                'student_profile_id' => $trip->student_profile_id,
+                'origin' => $trip->origin,
+                'destination' => $trip->destination,
+                'status' => $trip->status,
+                'safety_geofence_enabled' => $trip->safety_route !== null,
+            ],
         ], 201);
     }
 
@@ -368,10 +400,23 @@ class ViajauController extends Controller
                 );
             }
 
-            $lockedTrip->update(['status' => $nextStatus]);
+            $tripChanges = ['status' => $nextStatus];
+            if ($nextStatus === 'en-curso') {
+                $startedAt = now();
+                $tripChanges['started_at'] = $startedAt;
+                $tripChanges['arrival_checkin_deadline_at'] = $lockedTrip->safety_route_duration_minutes
+                    ? $startedAt->copy()->addMinutes(
+                        $lockedTrip->safety_route_duration_minutes
+                        + config('viajau.safety.checkin_grace_minutes'),
+                    )
+                    : null;
+            }
             if (in_array($nextStatus, ['completada', 'cancelada'], true)) {
+                $tripChanges['safety_route'] = null;
+                $tripChanges['arrival_checkin_deadline_at'] = null;
                 $lockedTrip->locations()->delete();
             }
+            $lockedTrip->update($tripChanges);
             if (in_array($nextStatus, ['en-curso', 'cancelada'], true)) {
                 $lockedTrip->requests()->where('status', 'pending')->update(['status' => 'cancelled']);
             }
@@ -380,8 +425,11 @@ class ViajauController extends Controller
         return response()->json(['message' => 'Estado del viaje actualizado.']);
     }
 
-    public function shareTripLocation(Request $request, TravelOffer $trip)
-    {
+    public function shareTripLocation(
+        Request $request,
+        TravelOffer $trip,
+        SafetyNotificationService $notifications,
+    ) {
         $this->assertActiveTripParticipant($request, $trip);
 
         $data = $request->validate([
@@ -406,12 +454,47 @@ class ViajauController extends Controller
                 ],
             );
         });
+        $safetyEvents = [];
+        if (
+            $trip->safety_route
+            && $location->accuracy_meters !== null
+            && $location->accuracy_meters <= config('viajau.safety.route_corridor_meters') / 2
+        ) {
+            $distanceFromRoute = $this->distanceToPolylineMeters(
+                (float) $location->latitude,
+                (float) $location->longitude,
+                $trip->safety_route,
+            );
+            if ($distanceFromRoute > config('viajau.safety.route_corridor_meters')) {
+                $safetyEvents[] = $this->triggerTripSafetyEvent(
+                    $trip,
+                    $request->user()->id,
+                    'route_deviation',
+                    $notifications,
+                );
+            } elseif (
+                $this->distanceBetweenCoordinates(
+                    (float) $location->latitude,
+                    (float) $location->longitude,
+                    (float) $trip->safety_route[array_key_last($trip->safety_route)][0],
+                    (float) $trip->safety_route[array_key_last($trip->safety_route)][1],
+                ) <= config('viajau.safety.arrival_radius_meters')
+            ) {
+                $safetyEvents[] = $this->triggerTripSafetyEvent(
+                    $trip,
+                    $request->user()->id,
+                    'arrival_geofence',
+                    $notifications,
+                );
+            }
+        }
 
         return response()->json([
             'message' => 'Ubicación compartida con los participantes del viaje.',
             'data' => [
                 'id' => $location->id,
                 'captured_at' => $location->captured_at?->toISOString(),
+                'safety_events' => $safetyEvents,
             ],
         ]);
     }
@@ -460,11 +543,27 @@ class ViajauController extends Controller
                 'checked_in_at' => $checkIn->checked_in_at?->toISOString(),
             ])
             ->values();
+        $safetyEvents = $trip->safetyEvents()
+            ->with('deliveries:id,trip_safety_event_id,channel,status,failure_reason')
+            ->orderBy('occurred_at')
+            ->get()
+            ->map(fn (TripSafetyEvent $event): array => [
+                'user_id' => $event->user_id,
+                'type' => $event->type,
+                'occurred_at' => $event->occurred_at?->toISOString(),
+                'notifications' => $event->deliveries->map(fn ($delivery): array => [
+                    'channel' => $delivery->channel,
+                    'status' => $delivery->status,
+                    'failure_reason' => $delivery->failure_reason,
+                ])->values(),
+            ])
+            ->values();
 
         return response()->json([
             'data' => [
                 'locations' => $locations,
                 'check_ins' => $checkIns,
+                'safety_events' => $safetyEvents,
             ],
         ]);
     }
@@ -642,7 +741,7 @@ class ViajauController extends Controller
         return Str::lower(trim(Str::ascii($value ?? '')));
     }
 
-    public function createAlert(Request $request)
+    public function createAlert(Request $request, SafetyNotificationService $notifications)
     {
         $this->assertActiveAccount($request);
         $profile = $request->user()->studentProfile;
@@ -668,11 +767,94 @@ class ViajauController extends Controller
             'longitude' => $data['longitude'] ?? null,
             'accuracy_meters' => $data['accuracy_meters'] ?? null,
         ]);
+        $event = $notifications->trigger([
+            'safety_alert_id' => $alert->id,
+            'user_id' => $request->user()->id,
+            'type' => 'panic',
+        ]);
 
         return response()->json([
             'message' => 'Alerta registrada para el equipo de seguridad.',
-            'data' => $this->safetyAlertData($alert),
+            'data' => [
+                ...$this->safetyAlertData($alert),
+                'notification_deliveries' => $this->notificationDeliverySummaries($event),
+            ],
         ], 201);
+    }
+
+    private function triggerTripSafetyEvent(
+        TravelOffer $trip,
+        int $userId,
+        string $type,
+        SafetyNotificationService $notifications,
+    ): array {
+        $event = $notifications->trigger([
+            'travel_offer_id' => $trip->id,
+            'user_id' => $userId,
+            'type' => $type,
+        ]);
+
+        return [
+            'type' => $event->type,
+            'occurred_at' => $event->occurred_at?->toISOString(),
+            'notifications' => $this->notificationDeliverySummaries($event),
+        ];
+    }
+
+    private function notificationDeliverySummaries(TripSafetyEvent $event): array
+    {
+        return $event->loadMissing('deliveries')->deliveries
+            ->map(fn ($delivery): array => [
+                'channel' => $delivery->channel,
+                'status' => $delivery->status,
+                'failure_reason' => $delivery->failure_reason,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function distanceToPolylineMeters(float $latitude, float $longitude, array $polyline): float
+    {
+        $earthRadius = 6371000;
+        $minimumDistance = INF;
+        $latitudeRadians = deg2rad($latitude);
+        $longitudeScale = cos($latitudeRadians);
+        $previous = null;
+
+        foreach ($polyline as $point) {
+            if ($previous !== null) {
+                $startX = deg2rad((float) $previous[1] - $longitude) * $earthRadius * $longitudeScale;
+                $startY = deg2rad((float) $previous[0] - $latitude) * $earthRadius;
+                $endX = deg2rad((float) $point[1] - $longitude) * $earthRadius * $longitudeScale;
+                $endY = deg2rad((float) $point[0] - $latitude) * $earthRadius;
+                $segmentX = $endX - $startX;
+                $segmentY = $endY - $startY;
+                $segmentLengthSquared = $segmentX ** 2 + $segmentY ** 2;
+                $projection = $segmentLengthSquared > 0
+                    ? max(0, min(1, -($startX * $segmentX + $startY * $segmentY) / $segmentLengthSquared))
+                    : 0;
+                $distance = hypot($startX + $projection * $segmentX, $startY + $projection * $segmentY);
+                $minimumDistance = min($minimumDistance, $distance);
+            }
+            $previous = $point;
+        }
+
+        return $minimumDistance;
+    }
+
+    private function distanceBetweenCoordinates(
+        float $latitude,
+        float $longitude,
+        float $destinationLatitude,
+        float $destinationLongitude,
+    ): float {
+        $latitudeDelta = deg2rad($destinationLatitude - $latitude);
+        $longitudeDelta = deg2rad($destinationLongitude - $longitude);
+        $value = sin($latitudeDelta / 2) ** 2
+            + cos(deg2rad($latitude)) * cos(deg2rad($destinationLatitude))
+            * sin($longitudeDelta / 2) ** 2;
+
+        return 6371000 * 2 * atan2(sqrt($value), sqrt(1 - $value));
     }
 
     public function securityAlerts(Request $request)

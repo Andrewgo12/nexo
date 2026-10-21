@@ -11,9 +11,9 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 | 3 | Búsqueda, filtros y ordenamiento | Parcial: ofertas activas con filtros sobre los datos disponibles y límites de privacidad. |
 | 4 | Emparejamiento por zona y horario | Implementado para ofertas verificadas; afinidad explicable, no reputación ni evaluación de seguridad. |
 | 5 | Gestión de viajes | Implementado: publicar ofertas, pedir/aceptar cupos, evitar sobreventa, cancelar, iniciar y completar. |
-| 6 | Seguridad y ubicación del viaje | En progreso: SOS persistente, GPS puntual opcional, vista/atención de alertas y ubicación compartida/check-in consentidos durante viajes en curso. |
+| 6 | Seguridad y ubicación del viaje | Parcial: SOS, GPS consentido, geocercas y avisos opt-in; requiere SMTP/Twilio y cola configurados. No integra autoridades ni servicios de emergencia. |
 
-Los módulos 7–16 siguen en el inventario y no se han iniciado como trabajo secuencial. El módulo 6 aún no se cierra: faltan notificaciones externas a contactos/servicios de emergencia y operación de respuesta; la aplicación no es un servicio de emergencia.
+Los módulos 7–16 siguen en el inventario y no se han iniciado como trabajo secuencial. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
 
 ## Cómo ejecutar y validar
 
@@ -67,8 +67,11 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 - El botón SOS registra una alerta persistente para el perfil activo y verificado. Si el estudiante marca la casilla de GPS, el navegador solicita permiso en ese momento y envía coordenadas actuales con la alerta; sin consentimiento, no se comparte ubicación. La solicitud no acepta del cliente el nivel de gravedad, estado ni perfil asociado; se limita a tres activaciones por minuto.
 - Los perfiles con rol `security` o `admin` pueden consultar las alertas activas, ver solo el nombre y universidad del estudiante, y marcarlas como atendidas con sello de tiempo y usuario responsable.
 - Los participantes aceptados de un viaje en curso pueden compartir su última ubicación GPS de forma explícita, consultarla entre miembros del viaje, dejar de compartirla y registrar check-in de salida/llegada. La ubicación actual se reemplaza (no se guarda una ruta histórica), deja de mostrarse tras dos minutos sin actualización y se elimina al completar/cancelar el viaje.
-- Geocercas automáticas y notificaciones externas a contactos/autoridades siguen pendientes. Registrar un SOS no contacta servicios de emergencia.
-- Endpoints: `POST/DELETE /api/trips/{id}/location`, `GET /api/trips/{id}/safety` y `POST /api/trips/{id}/check-ins`. Cobertura feature: `backend/tests/Feature/SafetyAlertTest.php` y `backend/tests/Feature/TripSafetyTrackingTest.php`.
+- Un usuario puede guardar correo y teléfono E.164 de un contacto de confianza y activar consentimiento explícito; al retirarlo, esos destinos se borran y los trabajos pendientes vuelven a validar el consentimiento. Alertas SOS, salida de corredor, llegada a radio destino y check-in vencido se encolan por correo, SMS y WhatsApp según proveedores habilitados. Los mensajes no incluyen coordenadas exactas.
+- Para geocercas, quien publica confirma la geocodificación y el trazado antes de crear la oferta. Se notifica al salir del corredor configurado (500 m por defecto), entrar en el radio de llegada (300 m) o exceder la duración prevista más 15 minutos sin check-in. Cada participante debe compartir GPS expresamente; se necesita precisión reportada de 250 m o mejor para evaluar geocercas. La geometría exacta se elimina al completar/cancelar.
+- Configura `MAIL_MAILER=smtp`, credenciales Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_WHATSAPP_FROM`), aplica migraciones y ejecuta `php artisan queue:work --queue=safety,default`. Programa `php artisan schedule:run` cada minuto para detectar check-ins vencidos. Sin proveedores o destinos configurados, las entregas quedan como `skipped`; no se simula entrega.
+- No se contactan automáticamente autoridades ni líneas públicas de emergencia. El equipo de seguridad ve SOS en el panel; la plataforma no sustituye un servicio de respuesta.
+- Endpoints: `POST/DELETE /api/trips/{id}/location`, `GET /api/trips/{id}/safety` y `POST /api/trips/{id}/check-ins`. Cobertura feature: `backend/tests/Feature/SafetyAlertTest.php`, `backend/tests/Feature/TripSafetyTrackingTest.php` y `backend/tests/Feature/SafetyNotificationsTest.php`.
 
 ## Alineación del inventario adjunto
 
