@@ -142,7 +142,7 @@ export const BUSINESS_MODULES = [
     id: 'dashboard-comunicacion',
     title: '10. Dashboard, historial y comunicación',
     summary: 'Resumen personal, historial de viajes y comunicación asociada al trayecto.',
-    status: 'Pendiente: los mensajes visibles son demostrativos; no hay chat persistente.',
+    status: 'Parcial: dashboard con datos reales e historial/chat persistente por viaje; push y mensajería externa pendientes.',
     functions: [
       'mostrarResumenViajes()', 'mostrarProximosViajes()', 'mostrarTrayectosActivos()',
       'mostrarNotificaciones()', 'mostrarRutasSugeridas()', 'listarViajesAnteriores()',

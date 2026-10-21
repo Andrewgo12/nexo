@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BUSINESS_MODULES } from './data/businessModules';
 import { getOsrmRoute, searchAddressNominatim } from './services/routingApi';
 import { getMioRoute } from './services/mioRoutingApi';
 import { getCurrentDeviceLocation } from './services/locationApi';
@@ -24,6 +23,7 @@ import {
   getMyReputation,
   getAdminReports,
   getMyMembership,
+  createWompiMembershipCheckout,
   getInsuranceProducts,
   getMyInsuranceEnrollments,
   requestInsuranceQuote,
@@ -35,6 +35,9 @@ import {
   submitTripReport,
   moderateAdminReport,
   getMyTrips,
+  getCommunicationTrips,
+  getTripMessages,
+  sendTripMessage,
   createTripCheckIn,
   publishTravelOffer,
   requestTravelSeat,
@@ -147,12 +150,6 @@ const catalogTypes = [
   { value: 'period', label: 'Periodo académico' },
 ];
 
-const dashboardFns = [
-  'mostrarResumenViajes()', 'mostrarProximosViajes()', 'mostrarTrayectosActivos()', 'mostrarNotificaciones()', 'mostrarRutasSugeridas()',
-  'listarViajesAnteriores()', 'consultarTrayectosPasados()', 'verEstadisticasPersonales()', 'verCalificacionesObtenidas()',
-  'crearChatViaje()', 'enviarMensaje()', 'responderMensaje()', 'adjuntarUbicacion()', 'compartirRuta()', 'enviarNotificacionInterna()'
-];
-
 const privacyFns = [
   'cifrarDatosSensibles()', 'protegerJWT()', 'validarToken()', 'gestionarSesiones()', 'limitarIntentosLogin()', 'auditoriaAcciones()', 'generarLogsSeguridad()',
   'ocultarUbicacionExacta()', 'compartirSoloZona()', 'activarModoPrivacidad()', 'limitarAccesoDeContacto()', 'borrarDatosSolicitados()'
@@ -209,6 +206,16 @@ const executionChecklist = [
   { id: 'prod-hardening', label: 'Cuarentena de producción, auditoría y escalamiento', done: false },
 ];
 
+const dashboardChecklist = [
+  { label: 'Resumen de ofertas, viajes, solicitudes y reputación con datos reales', done: true },
+  { label: 'Historial de ofertas y participaciones registradas', done: true },
+  { label: 'Chat persistente entre responsable y pasajeros aceptados', done: true },
+  { label: 'Cerrar el chat para nuevos mensajes al terminar el viaje', done: true },
+  { label: 'Fecha del viaje para calcular próximos trayectos', done: false },
+  { label: 'Notificaciones push y comunicación externa', done: false },
+  { label: 'Compartir ubicación/ruta desde el chat', done: false },
+];
+
 const initialStudent = { name: 'Kevin González', email: 'kevin.gonzalez@uniajc.edu.co', career: 'Ingeniería de Sistemas', semester: '8vo Semestre', shift: 'Nocturna', neighborhood: 'El Caney', transport: 'MIO + caminata', emergency: 'María González', privacy: 'Zona aproximada' };
 
 const kpis = [
@@ -223,6 +230,26 @@ const overviewCards = [
 ];
 
 const field = { padding: '12px 14px', borderRadius: 12, background: '#0f172a', border: '1px solid rgba(148,163,184,0.25)', color: '#fff' };
+let wompiWidgetScriptPromise;
+
+function loadWompiWidget() {
+  if (window.WidgetCheckout) return Promise.resolve();
+  if (!wompiWidgetScriptPromise) {
+    wompiWidgetScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.wompi.co/widget.js';
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => {
+        wompiWidgetScriptPromise = null;
+        reject(new Error('No fue posible cargar el checkout sandbox de Wompi.'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return wompiWidgetScriptPromise;
+}
+
 const insuranceStatusLabel = (status) => ({
   quote_requested: 'Cotización solicitada · pendiente de respuesta',
   quoted: 'Cotización recibida · pendiente de compra externa',
@@ -230,17 +257,18 @@ const insuranceStatusLabel = (status) => ({
   active: 'Activa · póliza verificada por administración',
   rejected: 'Rechazada · revisa la nota administrativa',
 }[status] || status);
+const membershipPaymentStatusLabel = (status) => ({
+  pending: 'pendiente de confirmación',
+  approved: 'aprobada por sandbox',
+  declined: 'rechazada por sandbox',
+  voided: 'anulada por sandbox',
+  error: 'error de sandbox',
+}[status] || status);
 const formatInsurancePremium = (amount) => new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
   maximumFractionDigits: 0,
 }).format(amount);
-const functionCoverage = BUSINESS_MODULES.map((module) => ({
-  ...module,
-  count: module.functions.length,
-  sample: module.functions.slice(0, 4)
-}));
-
 export default function AppFresh() {
   const persisted = useMemo(() => readAppData(), []);
   const [active, setActive] = useState(persisted.activeTab || 'auth');
@@ -319,6 +347,18 @@ export default function AppFresh() {
   const [insuranceError, setInsuranceError] = useState('');
   const [insuranceAction, setInsuranceAction] = useState('');
   const [insuranceRefresh, setInsuranceRefresh] = useState(0);
+  const [dashboardTrips, setDashboardTrips] = useState({ offers: [], requests: [] });
+  const [dashboardConversations, setDashboardConversations] = useState([]);
+  const [dashboardReputation, setDashboardReputation] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState('');
+  const [selectedChatTripId, setSelectedChatTripId] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatReadOnly, setChatReadOnly] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [chatAction, setChatAction] = useState(false);
+  const [chatDraft, setChatDraft] = useState('');
   const [reviewForm, setReviewForm] = useState({ trip_id: '', reviewee_profile_id: '', rating: '5', comment: '' });
   const [reportForm, setReportForm] = useState({ trip_id: '', reported_profile_id: '', category: 'conduct', description: '' });
   const [executionState, setExecutionState] = useState(persisted.executionState || executionChecklist);
@@ -664,6 +704,85 @@ export default function AppFresh() {
       controller.abort();
     };
   }, [active, authUser?.role, insuranceRefresh, isEmailVerified, isLoggedIn]);
+
+  useEffect(() => {
+    if (active !== 'dashboard' || !isLoggedIn || !isEmailVerified || authUser?.role !== 'student') return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadDashboard = async () => {
+      setDashboardLoading(true);
+      setDashboardError('');
+      try {
+        const [tripsResponse, conversationsResponse, reputationResponse] = await Promise.all([
+          getMyTrips(getAuthToken(), controller.signal),
+          getCommunicationTrips(getAuthToken(), controller.signal),
+          getMyReputation(getAuthToken(), controller.signal),
+        ]);
+        if (!Array.isArray(tripsResponse.data?.offers)
+          || !Array.isArray(tripsResponse.data?.requests)
+          || !Array.isArray(conversationsResponse.data)) {
+          throw new Error('El servidor devolvió información de dashboard inválida.');
+        }
+        if (!cancelled) {
+          setDashboardTrips(tripsResponse.data);
+          setDashboardConversations(conversationsResponse.data);
+          setDashboardReputation(reputationResponse.data || null);
+          setSelectedChatTripId((current) => (
+            conversationsResponse.data.some((trip) => String(trip.id) === current)
+              ? current
+              : String(conversationsResponse.data[0]?.id || '')
+          ));
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setDashboardError(error.message || 'No fue posible cargar tu dashboard.');
+        }
+      } finally {
+        if (!cancelled) setDashboardLoading(false);
+      }
+    };
+    loadDashboard();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [active, authUser?.role, isEmailVerified, isLoggedIn, tripRefreshKey]);
+
+  useEffect(() => {
+    if (active !== 'dashboard' || !selectedChatTripId || !isLoggedIn || !isEmailVerified) return undefined;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadChat = async () => {
+      try {
+        const response = await getTripMessages(selectedChatTripId, getAuthToken(), controller.signal);
+        if (!Array.isArray(response.data)) throw new Error('El servidor devolvió mensajes inválidos.');
+        if (!cancelled) {
+          setChatMessages(response.data);
+          setChatReadOnly(Boolean(response.meta?.read_only));
+          setChatError('');
+        }
+      } catch (error) {
+        if (!cancelled && error.name !== 'AbortError') {
+          setChatMessages([]);
+          setChatError(error.message || 'No fue posible cargar el chat de este viaje.');
+        }
+      }
+    };
+    setChatLoading(true);
+    loadChat().finally(() => {
+      if (!cancelled) setChatLoading(false);
+    });
+    const intervalId = window.setInterval(loadChat, 12000);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [active, isEmailVerified, isLoggedIn, selectedChatTripId]);
 
   useEffect(() => {
     if (active !== 'admin' || authUser?.role !== 'admin' || !isLoggedIn || !isEmailVerified) return undefined;
@@ -1165,6 +1284,50 @@ export default function AppFresh() {
       setToast('Solicitud de cotización enviada. No se ha activado ninguna cobertura.');
     } catch (error) {
       setInsuranceError(error.message || 'No fue posible solicitar la cotización.');
+    } finally {
+      setInsuranceAction('');
+    }
+  };
+
+  const submitDashboardMessage = async (event) => {
+    event.preventDefault();
+    if (!selectedChatTripId || !chatDraft.trim()) return;
+    setChatAction(true);
+    setChatError('');
+    try {
+      const response = await sendTripMessage(Number(selectedChatTripId), chatDraft.trim());
+      setChatMessages((current) => [...current, response.data].slice(-100));
+      setChatDraft('');
+    } catch (error) {
+      setChatError(error.message || 'No fue posible enviar el mensaje.');
+    } finally {
+      setChatAction(false);
+    }
+  };
+
+  const openWompiMembershipCheckout = async () => {
+    setInsuranceAction('membership-checkout');
+    setInsuranceError('');
+    try {
+      const { data: checkout } = await createWompiMembershipCheckout();
+      await loadWompiWidget();
+      if (typeof window.WidgetCheckout !== 'function') {
+        throw new Error('Wompi no cargó el checkout esperado.');
+      }
+      const widget = new window.WidgetCheckout({
+        publicKey: checkout.public_key,
+        currency: checkout.currency,
+        amountInCents: checkout.amount_in_cents,
+        reference: checkout.reference,
+        signature: checkout.signature,
+        redirectUrl: checkout.redirect_url,
+      });
+      widget.open(() => {
+        setToast('Checkout de pruebas finalizado; el estado solo se actualizará con el webhook validado.');
+        setInsuranceRefresh((value) => value + 1);
+      });
+    } catch (error) {
+      setInsuranceError(error.message || 'No fue posible iniciar el checkout sandbox.');
     } finally {
       setInsuranceAction('');
     }
@@ -3212,6 +3375,24 @@ export default function AppFresh() {
                       ? `Periodo gratuito: ${membershipInfo.data.trial_starts_at} a ${membershipInfo.data.trial_ends_at} (${membershipInfo.data.days_remaining} días restantes).`
                       : `Periodo gratuito finalizado el ${membershipInfo.data.trial_ends_at}. Precio previsto: ${formatInsurancePremium(membershipInfo.data.monthly_price_cop)} / mes.`}
                   </p>
+                  {membershipInfo.data.latest_sandbox_payment && (
+                    <p role="status" style={{ color: '#fbbf24', marginBottom: 0 }}>
+                      Última prueba sandbox: {membershipPaymentStatusLabel(membershipInfo.data.latest_sandbox_payment.status)}. No activa la membresía.
+                    </p>
+                  )}
+                  {membershipInfo.data.status === 'awaiting_payment_provider' && membershipInfo.data.wompi_sandbox_enabled && (
+                    <button
+                      type="button"
+                      disabled={insuranceAction === 'membership-checkout'}
+                      onClick={openWompiMembershipCheckout}
+                      style={{ ...field, marginTop: 12 }}
+                    >
+                      {insuranceAction === 'membership-checkout' ? 'Abriendo sandbox…' : 'Probar pago sandbox con Wompi · COP $9.000'}
+                    </button>
+                  )}
+                  {membershipInfo.data.status === 'awaiting_payment_provider' && !membershipInfo.data.wompi_sandbox_enabled && (
+                    <p style={{ color: '#94a3b8', marginBottom: 0 }}>Las pruebas de pago sandbox aún no tienen llaves configuradas. No se realizará ningún cobro.</p>
+                  )}
                 </div>
               )}
               {insuranceError && <p role="alert" style={{ color: '#fca5a5' }}>{insuranceError}</p>}
@@ -3336,42 +3517,170 @@ export default function AppFresh() {
         )}
 
         {active === 'dashboard' && (
-          <section style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
+          <section style={{ display: 'grid', gap: 24 }}>
             <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
               <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f472b6', fontWeight: 800 }}>MÓDULO 10</div>
-              <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Dashboard y comunicación</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
-                <Metric label='Viajes próximos' value='3' color='#f472b6' />
-                <Metric label='Notificaciones' value='8' color='#f9a8d4' />
-                <Metric label='Trayectos activos' value='2' color='#c084fc' />
-                <Metric label='Calificaciones' value='4.8' color='#fbbf24' />
-              </div>
-              <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
-                <div style={{ background: 'rgba(244,114,182,.08)', border: '1px solid rgba(244,114,182,.2)', borderRadius: 12, padding: 12 }}>Chat grupal: Ana y Claudia confirmaron punto de encuentro seguro.</div>
-                <div style={{ background: 'rgba(244,114,182,.08)', border: '1px solid rgba(244,114,182,.2)', borderRadius: 12, padding: 12 }}>Recordatorio de salida en 15 minutos y check-in de llegada habilitado.</div>
-              </div>
+              <h2 style={{ margin: '10px 0 8px', fontSize: 34 }}>Dashboard e historial de viajes</h2>
+              <p style={{ marginTop: 0, color: '#cbd5e1' }}>Resumen basado en tus ofertas, solicitudes y valoraciones registradas. Las ofertas no tienen una fecha de salida; por eso no se presentan como viajes próximos.</p>
+              {dashboardError && <p role="alert" style={{ color: '#fca5a5' }}>{dashboardError}</p>}
+              {dashboardLoading && <p role="status" style={{ color: '#cbd5e1' }}>Actualizando tu resumen…</p>}
+              {authUser?.role !== 'student' && <p role="status" style={{ color: '#fbbf24' }}>El dashboard personal y el chat de viajes están disponibles para estudiantes.</p>}
+              {authUser?.role === 'student' && (
+                <>
+                  {(() => {
+                    const ownedOffers = dashboardTrips.offers;
+                    const outgoingRequests = dashboardTrips.requests;
+                    const activeOffers = ownedOffers.filter((trip) => trip.status === 'oferta-activa');
+                    const inProgress = ownedOffers.filter((trip) => trip.status === 'en-curso').length
+                      + outgoingRequests.filter((request) => request.status === 'accepted' && request.offer.status === 'en-curso').length;
+                    const completed = ownedOffers.filter((trip) => trip.status === 'completada').length
+                      + outgoingRequests.filter((request) => request.status === 'accepted' && request.offer.status === 'completada').length;
+                    const pendingRequests = ownedOffers.reduce((count, trip) => (
+                      count + trip.requests.filter((request) => request.status === 'pending').length
+                    ), 0) + outgoingRequests.filter((request) => request.status === 'pending').length;
+                    const rating = dashboardReputation?.summary?.rating_average;
+                    const ratingCount = dashboardReputation?.summary?.rating_count || 0;
+                    const activity = [
+                      ...ownedOffers.flatMap((trip) => trip.requests
+                        .filter((request) => request.status === 'pending')
+                        .map((request) => ({
+                          key: `incoming-${request.id}`,
+                          label: `Solicitud de cupo de ${request.requester.name}`,
+                          detail: `${trip.origin} → ${trip.destination}`,
+                        }))),
+                      ...outgoingRequests
+                        .filter((request) => ['accepted', 'rejected'].includes(request.status))
+                        .map((request) => ({
+                          key: `outgoing-${request.id}`,
+                          label: `Tu solicitud fue ${tripStatusLabels[request.status] || request.status.toLowerCase()}`,
+                          detail: `${request.offer.origin} → ${request.offer.destination}`,
+                        })),
+                    ];
+                    const history = [
+                      ...ownedOffers.map((trip) => ({
+                        key: `offer-${trip.id}`,
+                        route: `${trip.origin} → ${trip.destination}`,
+                        status: trip.status,
+                        detail: `Oferta como responsable · ${trip.departure_time}`,
+                      })),
+                      ...outgoingRequests.map((request) => ({
+                        key: `request-${request.id}`,
+                        route: `${request.offer.origin} → ${request.offer.destination}`,
+                        status: request.offer.status === 'completada' ? 'completada' : request.status,
+                        detail: `Solicitud como pasajero · ${request.offer.departure_time}`,
+                      })),
+                    ];
+                    return (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginTop: 20 }}>
+                          <Metric label="Ofertas activas" value={activeOffers.length} color="#f472b6" />
+                          <Metric label="Viajes en curso" value={inProgress} color="#c084fc" />
+                          <Metric label="Viajes completados" value={completed} color="#34d399" />
+                          <Metric label="Solicitudes pendientes" value={pendingRequests} color="#fbbf24" />
+                          <Metric label="Calificación" value={rating === null || rating === undefined ? 'Sin calificar' : `${rating}/5 (${ratingCount})`} color="#f9a8d4" />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 20 }}>
+                          <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
+                            <h3 style={{ marginTop: 0 }}>Actividad de viajes</h3>
+                            {activity.length
+                              ? <div style={{ display: 'grid', gap: 10 }}>{activity.slice(0, 10).map((item) => <div key={item.key} style={{ borderBottom: '1px solid rgba(148,163,184,.15)', paddingBottom: 8 }}><strong>{item.label}</strong><div style={{ color: '#94a3b8', fontSize: 13 }}>{item.detail}</div></div>)}</div>
+                              : <p style={{ color: '#94a3b8' }}>No tienes solicitudes recientes pendientes de respuesta.</p>}
+                            <button type="button" onClick={() => setActive('trips')} style={{ ...field, marginTop: 12 }}>Gestionar viajes</button>
+                          </div>
+                          <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
+                            <h3 style={{ marginTop: 0 }}>Historial</h3>
+                            {history.length
+                              ? <div style={{ display: 'grid', gap: 10, maxHeight: 330, overflowY: 'auto' }}>{history.map((item) => <div key={item.key} style={{ borderBottom: '1px solid rgba(148,163,184,.15)', paddingBottom: 8 }}><strong>{item.route}</strong><div style={{ color: '#cbd5e1', fontSize: 13 }}>{item.detail} · {tripStatusLabels[item.status] || item.status}</div></div>)}</div>
+                              : <p style={{ color: '#94a3b8' }}>Aún no hay viajes registrados en tu historial.</p>}
+                            <button type="button" onClick={() => setActive('trust')} style={{ ...field, marginTop: 12 }}>Ver reputación y valoraciones</button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              )}
             </div>
-            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>COMUNICACIÓN</div>
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{dashboardFns.map(f => <span key={f} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(244,114,182,.12)', color: '#fbcfe8' }}>{f}</span>)}</div>
-              <div style={{ marginTop: 20, background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
-                <div style={{ fontWeight: 800, marginBottom: 10 }}>Cobertura funcional por módulo</div>
-                <small style={{ display: 'block', marginBottom: 12, color: '#cbd5e1' }}>Inventario de alcance. La cantidad de funciones listadas no significa que todas estén implementadas; revisa el estado de cada módulo.</small>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {functionCoverage.map((module) => (
-                    <div key={module.id} style={{ background: 'rgba(15,23,42,.72)', border: '1px solid rgba(148,163,184,.15)', borderRadius: 10, padding: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 800, fontSize: 12 }}>{module.title}</span>
-                        <span style={{ color: '#f9a8d4', fontWeight: 800, fontSize: 11 }}>{module.count}</span>
-                      </div>
-                      <div style={{ marginTop: 5, color: '#cbd5e1', fontSize: 11 }}>{module.status}</div>
-                      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {module.sample.map((func) => <span key={`${module.id}-${func}`} style={{ background: 'rgba(244,114,182,.08)', color: '#fbcfe8', borderRadius: 999, padding: '4px 6px', fontSize: 9 }}>{func}</span>)}
-                      </div>
+
+            {authUser?.role === 'student' && (
+              <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+                <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#f9a8d4', fontWeight: 800 }}>COMUNICACIÓN PRIVADA POR VIAJE</div>
+                <h3 style={{ margin: '8px 0 16px' }}>Chat con participantes aceptados</h3>
+                {dashboardConversations.length ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, .7fr) minmax(0, 1.3fr)', gap: 16 }}>
+                    <div style={{ display: 'grid', alignContent: 'start', gap: 8 }}>
+                      {dashboardConversations.map((conversation) => (
+                        <button
+                          type="button"
+                          key={conversation.id}
+                          aria-pressed={selectedChatTripId === String(conversation.id)}
+                          onClick={() => setSelectedChatTripId(String(conversation.id))}
+                          style={{ ...field, textAlign: 'left', borderColor: selectedChatTripId === String(conversation.id) ? '#f472b6' : field.border }}
+                        >
+                          <strong>{conversation.origin} → {conversation.destination}</strong>
+                          <span style={{ display: 'block', color: '#94a3b8', fontSize: 12, marginTop: 4 }}>
+                            {conversation.participants.map((participant) => participant.name).join(', ')} · {conversation.message_count} mensajes
+                          </span>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                    <div style={{ minWidth: 0 }}>
+                      {dashboardConversations.find((trip) => String(trip.id) === selectedChatTripId) && (
+                        <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 8 }}>
+                          Participantes: {dashboardConversations.find((trip) => String(trip.id) === selectedChatTripId).participants.map((participant) => participant.name).join(', ')}
+                        </div>
+                      )}
+                      {chatError && <p role="alert" style={{ color: '#fca5a5' }}>{chatError}</p>}
+                      {chatLoading && !chatMessages.length && <p role="status" style={{ color: '#cbd5e1' }}>Cargando mensajes…</p>}
+                      <div aria-live="polite" style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', padding: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(2,6,23,.45)' }}>
+                        {chatMessages.map((message) => (
+                          <div key={message.id} style={{ justifySelf: message.is_mine ? 'end' : 'start', maxWidth: '85%', background: message.is_mine ? 'rgba(244,114,182,.16)' : 'rgba(148,163,184,.12)', padding: '8px 12px', borderRadius: 12 }}>
+                            <strong style={{ fontSize: 12 }}>{message.is_mine ? 'Tú' : message.sender_name}</strong>
+                            <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</div>
+                            <time style={{ color: '#94a3b8', fontSize: 10 }}>{new Date(message.created_at).toLocaleString('es-CO')}</time>
+                          </div>
+                        ))}
+                        {!chatMessages.length && !chatLoading && !chatError && <p style={{ color: '#94a3b8' }}>Aún no hay mensajes. Confirma con el grupo el punto de encuentro.</p>}
+                      </div>
+                      {chatReadOnly
+                        ? <p role="status" style={{ color: '#fbbf24' }}>El viaje terminó; puedes consultar el historial, pero el chat está cerrado.</p>
+                        : (
+                          <form onSubmit={submitDashboardMessage} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                            <input
+                              aria-label="Escribe un mensaje para el viaje"
+                              value={chatDraft}
+                              maxLength={2000}
+                              onChange={(event) => setChatDraft(event.target.value)}
+                              placeholder="Escribe al grupo del viaje…"
+                              required
+                              style={{ ...field, flex: 1, minWidth: 0 }}
+                            />
+                            <button type="submit" disabled={chatAction || !chatDraft.trim()} style={field}>
+                              {chatAction ? 'Enviando…' : 'Enviar'}
+                            </button>
+                          </form>
+                        )}
+                      <p style={{ color: '#94a3b8', fontSize: 12 }}>Chat disponible únicamente para responsable y pasajeros aceptados. No compartas datos sensibles; el chat se cierra al cancelar o completar el viaje.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ color: '#94a3b8' }}>El chat aparecerá cuando tengas una oferta con pasajeros aceptados o participes como pasajero aceptado. Las notificaciones push y los mensajes fuera de la app no están habilitados.</p>
+                )}
               </div>
+            )}
+
+            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
+              <h3 style={{ marginTop: 0 }}>Checklist del módulo 10</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                {dashboardChecklist.map((item) => (
+                  <div key={item.label} style={{ color: item.done ? '#86efac' : '#fbbf24' }}>
+                    {item.done ? '☑' : '☐'} {item.label}
+                  </div>
+                ))}
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 0, marginTop: 12 }}>
+                Las notificaciones externas se trabajan en el módulo 12. El chat actualiza el historial periódicamente; no es mensajería en tiempo real.
+              </p>
             </div>
           </section>
         )}

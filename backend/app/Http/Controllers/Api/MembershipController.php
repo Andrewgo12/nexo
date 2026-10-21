@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\MembershipPayment;
 use Illuminate\Http\Request;
 
 class MembershipController extends Controller
@@ -23,6 +24,12 @@ class MembershipController extends Controller
                     : 0,
                 'monthly_price_cop' => config('membership.monthly_price_cop'),
                 'payments_enabled' => config('membership.payments_enabled'),
+                'wompi_sandbox_enabled' => config('membership.wompi.enabled'),
+                'latest_sandbox_payment' => MembershipPayment::query()
+                    ->where('user_id', $request->user()->id)
+                    ->where('environment', 'sandbox')
+                    ->latest()
+                    ->first(['reference', 'status', 'created_at']),
                 'access_restricted' => false,
             ],
             'message' => $isFreeTrial

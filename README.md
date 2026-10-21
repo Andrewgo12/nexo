@@ -14,9 +14,10 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 | 6 | Seguridad y ubicación del viaje | Parcial: SOS, GPS consentido, geocercas y avisos opt-in; requiere SMTP/Twilio y cola configurados. No integra autoridades ni servicios de emergencia. |
 | 7 | Administración y analytics | Implementado: métricas agregadas, gestión institucional de cuentas/verificaciones, incidentes, catálogos e importación validada de paradas/rutas GTFS. |
 | 8 | Confiabilidad y reputación | Implementado: calificaciones entre participantes de viajes completados, promedios verificables e informes privados moderados por admin. |
-| 9 | Pago y seguro | Parcial: solicitudes de cotización y revisión manual de pólizas; pagos Wompi/Mercado Pago/PayU e integración con aseguradora aún pendientes. |
+| 9 | Pago y seguro | Parcial: cotizaciones y pólizas manuales; Wompi sandbox implementado sin cobros reales; Mercado Pago, PayU y API de aseguradora pendientes. |
+| 10 | Dashboard, historial y comunicación | Parcial: dashboard personal basado en datos reales e historial/chat privado persistente por viaje; notificaciones push y externas pendientes. |
 
-Los módulos 10–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
+Los módulos 11–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
 
 ## Cómo ejecutar y validar
 
@@ -103,11 +104,18 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 - Administración registra las condiciones y primas recibidas del proveedor. Solo se permite presentar la póliza para revisión si su prima no supera COP $30.000 al mes; una cotización más alta se conserva como cotización, pero no puede activarse en la plataforma.
 - El estudiante adjunta número, vigencia y documento PDF de la póliza comprada externamente. El archivo se almacena en disco privado; solo administración puede descargarlo y activar la cobertura tras verificar la documentación. Solicitar una cotización o subir una póliza no activa cobertura.
 - Endpoints de estudiante: `GET /api/insurance/products`, `GET /api/insurance/enrollments/mine`, `POST /api/insurance/enrollments` y `POST /api/insurance/enrollments/{id}/policy`. Administración: `GET /api/admin/insurance/enrollments`, `PATCH /api/admin/insurance/enrollments/{id}` y `GET /api/admin/insurance/enrollments/{id}/document`.
-- La pasarela Wompi en sandbox, Mercado Pago, PayU y la integración API de aseguradora todavía no están implementadas; la configuración mantiene los pagos deshabilitados hasta tener proveedor/operación aprobados. No configurar producción ni afirmar pólizas/precios hasta tener convenio y documentación verificable. Migración y pruebas: `backend/database/migrations/2026_10_21_000009_create_insurance_enrollments_table.php`, `backend/tests/Feature/InsuranceTest.php` y `backend/tests/Feature/MembershipTest.php`.
+- El checkout Wompi sandbox genera firma de integridad en el servidor y procesa únicamente webhooks `transaction.updated` con firma verificada. Mantiene el estado como prueba; jamás activa membresías ni permite credenciales de producción. Configura `WOMPI_SANDBOX_ENABLED=true` y llaves/secreto de prueba solo en `.env`. Mercado Pago, PayU y la integración API de aseguradora siguen pendientes; no se recaudan pagos reales. No afirmar pólizas/precios hasta tener convenio y documentación verificable. Migración y pruebas: `backend/database/migrations/2026_10_21_000009_create_insurance_enrollments_table.php`, `backend/database/migrations/2026_10_21_000010_create_membership_payments_table.php`, `backend/tests/Feature/InsuranceTest.php`, `backend/tests/Feature/MembershipTest.php` y `backend/tests/Feature/WompiMembershipTest.php`.
+
+## Módulo 10: dashboard, historial y comunicación (parcial)
+
+- El dashboard personal usa ofertas, solicitudes y calificaciones de la API para mostrar ofertas activas, viajes en curso y completados, solicitudes pendientes, valoración e historial. Como las ofertas actuales guardan hora pero no fecha de salida, no inventa “próximos viajes”.
+- Chat persistente por viaje disponible únicamente para el responsable y pasajeros aceptados. Lista participantes solo por nombre, limita mensajes a 2.000 caracteres y solicitudes a 30 por minuto; al completar/cancelar queda en solo lectura. Consulta y envío: `GET /api/communication/trips`, `GET /api/trips/{id}/messages`, `POST /api/trips/{id}/messages`.
+- El chat no comparte automáticamente ubicación ni ruta; usa los controles de consentimiento del módulo 6 para compartir GPS. No hay notificaciones push/exteriores ni chat en tiempo real; la interfaz actualiza los mensajes cada 12 segundos mientras el dashboard está abierto.
+- Migración y pruebas: `backend/database/migrations/2026_10_21_000011_create_trip_messages_table.php` y `backend/tests/Feature/TripCommunicationTest.php`.
 
 ## Alineación del inventario adjunto
 
-El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. Ubicación en tiempo real, emergencias externas, chat y pagos permanecen pendientes; el módulo 9 permite solicitar cotizaciones y revisar manualmente pólizas.
+El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. La comunicación externa y pagos reales permanecen pendientes; el módulo 9 permite solicitar cotizaciones y probar Wompi en sandbox, y el módulo 10 incluye chat persistente por viaje para participantes aceptados.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

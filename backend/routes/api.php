@@ -5,7 +5,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\InsuranceController;
 use App\Http\Controllers\Api\MembershipController;
 use App\Http\Controllers\Api\ReputationController;
+use App\Http\Controllers\Api\TripCommunicationController;
 use App\Http\Controllers\Api\ViajauController;
+use App\Http\Controllers\Api\WompiMembershipController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -16,6 +18,8 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
+Route::post('/payments/wompi/webhook', [WompiMembershipController::class, 'webhook'])
+    ->middleware('throttle:120,1');
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -38,12 +42,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('verified')->group(function () {
         Route::get('/membership', [MembershipController::class, 'show']);
+        Route::post('/membership/wompi/checkout', [WompiMembershipController::class, 'createCheckout'])
+            ->middleware('throttle:5,1');
         Route::get('/insurance/products', [InsuranceController::class, 'products']);
         Route::get('/insurance/enrollments/mine', [InsuranceController::class, 'mine']);
         Route::post('/insurance/enrollments', [InsuranceController::class, 'requestQuote'])
             ->middleware('throttle:5,1');
         Route::post('/insurance/enrollments/{enrollment}/policy', [InsuranceController::class, 'submitPolicy'])
             ->middleware('throttle:5,1');
+        Route::get('/communication/trips', [TripCommunicationController::class, 'trips']);
+        Route::get('/trips/{trip}/messages', [TripCommunicationController::class, 'messages']);
+        Route::post('/trips/{trip}/messages', [TripCommunicationController::class, 'sendMessage'])
+            ->middleware('throttle:30,1');
         Route::get('/reputation/me', [ReputationController::class, 'mine']);
         Route::get('/reputation/profiles/{profile}', [ReputationController::class, 'profile']);
         Route::post('/trips/{trip}/reviews', [ReputationController::class, 'review'])

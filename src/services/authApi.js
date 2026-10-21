@@ -84,6 +84,22 @@ export function getMyTrips(token = getAuthToken(), signal) {
   return request('/trips/mine', { token, signal });
 }
 
+export function getCommunicationTrips(token = getAuthToken(), signal) {
+  return request('/communication/trips', { token, signal });
+}
+
+export function getTripMessages(tripId, token = getAuthToken(), signal) {
+  return request(`/trips/${tripId}/messages`, { token, signal });
+}
+
+export function sendTripMessage(tripId, body, token = getAuthToken()) {
+  return request(`/trips/${tripId}/messages`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ body }),
+  });
+}
+
 export function getMyReputation(token = getAuthToken(), signal) {
   return request('/reputation/me', { token, signal });
 }
@@ -114,6 +130,10 @@ export function getInsuranceProducts(token = getAuthToken(), signal) {
 
 export function getMyMembership(token = getAuthToken(), signal) {
   return request('/membership', { token, signal });
+}
+
+export function createWompiMembershipCheckout(token = getAuthToken()) {
+  return request('/membership/wompi/checkout', { method: 'POST', token });
 }
 
 export function getMyInsuranceEnrollments(token = getAuthToken(), signal) {

@@ -35,6 +35,11 @@ class TravelOffer extends Model
         return $this->hasMany(TripRequest::class);
     }
 
+    public function messages()
+    {
+        return $this->hasMany(TripMessage::class);
+    }
+
     public function locations()
     {
         return $this->hasMany(TripLocation::class);
