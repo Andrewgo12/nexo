@@ -21,23 +21,25 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 
 Los módulos 11–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
 
-## Estructura modular de la interfaz (en curso)
+## Arquitectura y refactorización actual
 
-`src/AppFresh.jsx` es únicamente el punto de entrada que importa y exporta `src/AppRoot.jsx`. El orquestador `AppRoot` compone el estado compartido, el view model, las acciones y los hooks de efectos; las vistas están separadas por responsabilidad en `src/components/app-sections/`, y el shell autenticado está en `src/components/app-shell/`. El selector de secciones se mantiene por debajo de 350 líneas. El mapa, dashboard, reputación, seguridad, autenticación, búsqueda y las vistas informativas tienen componentes independientes. `src/components/Metric.jsx`, `Panel.jsx` y `ConfirmationModal.jsx` reúnen elementos de interfaz compartidos; `src/services/dashboardSummary.js` contiene la transformación testeable del resumen del dashboard y `src/data/appSectionData.js` los catálogos de las vistas.
+La extracción del antiguo controlador React está completada: `src/AppFresh.jsx` es el punto de entrada mínimo que reexporta `src/AppRoot.jsx`. `AppRoot` compone el estado (`src/hooks/useAppState.js`), las acciones, el view model y los hooks de efectos. El shell y las vistas están separados en `src/components/app-shell/` y `src/components/app-sections/`; `AppSectionContent.jsx` tiene 345 líneas. Los componentes compartidos incluyen `Metric.jsx`, `Panel.jsx` y `ConfirmationModal.jsx`; `src/services/dashboardSummary.js` transforma los datos del dashboard y `src/data/appSectionData.js` mantiene catálogos de presentación.
 
-La modularización de `AppFresh.jsx` quedó completada: el archivo raíz solo reexporta el orquestador y la lógica compartida se distribuye en hooks y componentes. Esto no significa que todos los archivos del repositorio estén por debajo del límite de 350 líneas; otros archivos grandes siguen fuera de esta extracción.
+La lógica que antes estaba concentrada en `src/services/viajauCore.js` se distribuye ahora en cinco módulos de dominio: `profileCore.js`, `travelMatching.js`, `tripOperations.js`, `trustSafety.js` y `routeInsights.js`. `viajauCore.js` permanece como fachada de reexportación para conservar los imports existentes. En el backend, `ViajauController` coordina perfiles, ofertas y solicitudes; `TripSafetyController` concentra ubicación/check-ins, y los servicios `TravelOfferSearchService` y `DashboardAnalyticsService` separan consultas de búsqueda y analítica. La documentación detallada de autenticación e instalación está en [backend/README.md](./backend/README.md).
+
+La modularización global continúa: no todos los archivos han sido reducidos al objetivo de 350 líneas. En el estado revisado el 21 de octubre de 2026, los archivos de producto que aún superan ese tamaño son `src/data/mockData.js` (999), `src/App.css` (661), `src/index.css` (516), `src/components/InteractiveMap.jsx` (502), `src/components/AcademicReportViewer.jsx` (422), `src/services/authApi.js` (391) y `src/components/TripExplorer.jsx` (356). Estos son los siguientes candidatos de extracción; los archivos de estilos también requieren una estrategia apropiada a su contenido.
 
 ## Cómo ejecutar y validar
 
 - Frontend: `npm install`, `npm run dev`, `npm run build`, `npm run test:unit`, `npm run test:routing`.
 - Lint del producto: `npm run lint` o `npm run lint:product`; ambos revisan explícitamente `src/` y reportan los hallazgos de la aplicación sin recorrer el subproyecto embebido. `--deny-warnings` hace que cualquier diagnóstico de Oxlint bloquee el comando, sin excluir los hallazgos existentes. Lint de React Bits: `npm run lint:react-bits`, que usa la configuración propia de `react-bits-main/`.
-- CI: los workflows `Product CI` y `React Bits CI` validan sus respectivos alcances por separado. El lint del producto no oculta ni degrada a advertencias los diagnósticos encontrados en `src/`.
+- CI: `Product CI` valida el frontend con build, pruebas unitarias, routing y lint estricto, y ejecuta `php artisan test` con SQLite; `React Bits CI` valida por separado las pruebas, build y lint de `react-bits-main/`. El lint del producto usa `--deny-warnings`, por lo que cualquier diagnóstico en `src/` hace fallar ese paso.
 - Backend: desde `backend`, `composer install`, `php artisan migrate`, `php artisan serve`.
 - Suite backend: desde `backend`, `php artisan test`. Si PHP no carga SQLite automáticamente, habilita `pdo_sqlite` y `sqlite3` al ejecutar PHPUnit.
 - Configura `.env` de Laravel y la URL de API del frontend para el entorno local; no copies credenciales reales al repositorio.
 - El inicio de sesión del navegador usa sesiones Sanctum con cookies `HttpOnly`, no tokens bearer persistidos en Web Storage. En desarrollo, Vite proxya `/api` y `/sanctum` al backend. En despliegue, define `SANCTUM_STATEFUL_DOMAINS` con el host exacto del frontend y `CORS_ALLOWED_ORIGINS` con su origen completo; nunca habilites `*` junto con credenciales. Usa HTTPS y `SESSION_SECURE_COOKIE=true` en producción. Si frontend y API usan subdominios distintos, configura `SESSION_DOMAIN` para el dominio compartido y conserva ambos en el mismo sitio.
 
-La documentación de endpoints de autenticación e instalación se encuentra en [backend/README.md](./backend/README.md).
+La suite backend usa SQLite en memoria y requiere las extensiones PHP `pdo_sqlite` y `sqlite3`; el workflow de CI las instala explícitamente. La documentación de endpoints de autenticación e instalación se encuentra en [backend/README.md](./backend/README.md).
 
 ## Estado del módulo 2: mapas y rutas
 
@@ -127,18 +129,3 @@ Pruebas frontend: `npm run test:unit` valida comportamiento de componentes React
 ## Alineación del inventario adjunto
 
 El inventario de funciones está separado según los módulos que ya usa ViajaU: 4 es emparejamiento, 5 gestión de viajes, 6 seguridad y ubicación, 8 reputación, 9 pagos/seguro y 10 comunicación. Esto difiere de la recomendación resumida del adjunto, que renumera seguridad y pagos; se conserva el orden del proyecto y se asignan las funciones por su responsabilidad. La matriz en la interfaz muestra el estado real: nombres de funciones y cantidades describen alcance, no garantizan implementación. La comunicación externa y pagos reales permanecen pendientes; el módulo 9 permite solicitar cotizaciones y probar Wompi en sandbox, y el módulo 10 incluye chat persistente por viaje para participantes aceptados.
-
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
