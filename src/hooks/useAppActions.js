@@ -11,8 +11,16 @@ import useTripActions from './useTripActions';
 import useUiActions from './useUiActions';
 
 export default function useAppActions(state, viewModel) {
-  const { setAuthUser, setEmail, setIsEmailVerified, setStudent, setUni, setActive } = state;
+  const { setAuthUser, setEmail, setIsEmailVerified, setStudent, setUni, setActive, setSearchCursor, setSearchLoaded, setSearchNextCursor, setSearchResults, setMatchCursor, setMatchLoaded, setMatchNextCursor, setMatchResults } = state;
   const applyAuthenticatedUser = useCallback((user) => {
+    setSearchCursor(null);
+    setSearchNextCursor(null);
+    setSearchResults([]);
+    setSearchLoaded(false);
+    setMatchCursor(null);
+    setMatchNextCursor(null);
+    setMatchResults([]);
+    setMatchLoaded(false);
     setAuthUser(user);
     const matchingUniversity = universities.find((item) => item.name === user.university);
     if (matchingUniversity) setUni(matchingUniversity);
@@ -33,7 +41,7 @@ export default function useAppActions(state, viewModel) {
     setIsEmailVerified(Boolean(user.email_verified_at));
     if (user.role === 'security') setActive('safety');
     else if (!['admin', 'university'].includes(user.role)) setActive('auth');
-  }, [setStudent, setEmail, setUni, setIsEmailVerified, setActive, setAuthUser]);
+  }, [setStudent, setEmail, setUni, setIsEmailVerified, setActive, setAuthUser, setSearchCursor, setSearchNextCursor, setSearchResults, setSearchLoaded, setMatchCursor, setMatchNextCursor, setMatchResults, setMatchLoaded]);
 
   const ui = useUiActions(state);
   const admin = useAdminActions(state, { currentAdminDashboard: viewModel.currentAdminDashboard });
@@ -41,10 +49,7 @@ export default function useAppActions(state, viewModel) {
   const dashboard = useDashboardActions(state);
   const insurance = useInsuranceActions(state);
   const routes = useRouteActions(state);
-  const trips = useTripActions(state, {
-    geofenceRouteFingerprint: viewModel.geofenceRouteFingerprint,
-    hasCurrentGeofencePreview: viewModel.hasCurrentGeofencePreview,
-  });
+  const trips = useTripActions(state);
   const safety = useSafetyActions(state, { closeModal: ui.closeModal });
   const auth = useAuthActions(state, {
     applyAuthenticatedUser,

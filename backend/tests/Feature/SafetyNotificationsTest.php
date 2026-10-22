@@ -224,6 +224,7 @@ class SafetyNotificationsTest extends TestCase
             'safety_route' => [[3.45, -76.53], [3.46, -76.52], [3.47, -76.51]],
             'safety_route_duration_minutes' => 40,
         ]);
+        $trip->forceFill(['safety_route_verified' => true])->save();
         TripRequest::create([
             'travel_offer_id' => $trip->id,
             'requester_profile_id' => $passengerProfile->id,
@@ -252,7 +253,7 @@ class SafetyNotificationsTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_geofenced_trip_requires_a_duration_and_sets_its_arrival_deadline_on_start(): void
+    public function test_public_trip_creation_rejects_client_supplied_safety_routes(): void
     {
         $owner = $this->createStudent();
         $ownerProfile = $this->createProfile($owner);
@@ -268,20 +269,25 @@ class SafetyNotificationsTest extends TestCase
             'safety_route' => [[3.45, -76.53], [3.47, -76.51]],
         ];
 
-        $this->actingAs($owner, 'sanctum')->postJson('/api/trips', $payload)->assertUnprocessable();
-        $this->assertDatabaseCount('travel_offers', 0);
-
-        $response = $this->actingAs($owner, 'sanctum')->postJson('/api/trips', [
+        $this->actingAs($owner, 'sanctum')->postJson('/api/trips', [
             ...$payload,
             'safety_route_duration_minutes' => 40,
-        ]);
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['safety_route', 'safety_route_duration_minutes']);
+        $this->assertDatabaseCount('travel_offers', 0);
+        $response = $this->actingAs($owner, 'sanctum')->postJson('/api/trips', array_diff_key(
+            $payload,
+            ['safety_route' => true],
+        ));
         $response->assertCreated()
-            ->assertJsonPath('data.safety_geofence_enabled', true)
-            ->assertJsonMissingPath('data.safety_route');
+            ->assertJsonPath('data.safety_geofence_enabled', false)
+            ->assertJsonPath('data.safety_geofence_reason', 'server_route_verification_required');
         $tripId = $response->json('data.id');
         $this->assertDatabaseHas('travel_offers', [
             'id' => $tripId,
-            'safety_route_duration_minutes' => 40,
+            'safety_route' => null,
+            'safety_route_duration_minutes' => null,
+            'safety_geofence_consent_at' => null,
         ]);
 
         TripRequest::create([
@@ -295,11 +301,69 @@ class SafetyNotificationsTest extends TestCase
         ])->assertOk();
 
         $trip = TravelOffer::findOrFail($tripId);
-        $this->assertNotNull($trip->safety_geofence_consent_at);
         $this->assertNotNull($trip->started_at);
-        $this->assertEquals(55, $trip->started_at->diffInMinutes($trip->arrival_checkin_deadline_at));
+        $this->assertNull($trip->arrival_checkin_deadline_at);
         $this->assertGreaterThanOrEqual(0, $trip->started_at->diffInSeconds($startedAt));
         $this->assertSame($ownerProfile->id, $trip->student_profile_id);
+    }
+
+    public function test_unverified_legacy_safety_routes_do_not_generate_geofence_events(): void
+    {
+        $owner = $this->createStudent();
+        $this->createProfile($owner);
+        $trip = TravelOffer::create([
+            'student_profile_id' => $owner->studentProfile->id,
+            'origin' => 'Origen Cali',
+            'destination' => 'Destino Cali',
+            'mode' => 'Carro',
+            'departure_time' => '09:00',
+            'seats' => 1,
+            'cost' => '0',
+            'status' => 'en-curso',
+            'safety_route' => [[3.45, -76.53], [3.46, -76.52]],
+            'safety_route_duration_minutes' => 40,
+        ]);
+
+        $this->actingAs($owner, 'sanctum')->postJson("/api/trips/{$trip->id}/location", [
+            'latitude' => 3.50,
+            'longitude' => -76.50,
+            'accuracy_meters' => 20,
+        ])->assertOk()->assertJsonCount(0, 'data.safety_events');
+
+        $this->assertDatabaseCount('trip_safety_events', 0);
+        $this->assertFalse($trip->fresh()->safety_route_verified);
+    }
+
+    public function test_finishing_a_trip_clears_the_verified_safety_route(): void
+    {
+        $owner = $this->createStudent();
+        $profile = $this->createProfile($owner);
+        $trip = TravelOffer::create([
+            'student_profile_id' => $profile->id,
+            'origin' => 'Origen Cali',
+            'destination' => 'Destino Cali',
+            'mode' => 'Carro',
+            'departure_time' => '09:00',
+            'seats' => 1,
+            'cost' => '0',
+            'status' => 'en-curso',
+            'safety_route' => [[3.45, -76.53], [3.46, -76.52]],
+            'safety_route_duration_minutes' => 40,
+            'safety_geofence_consent_at' => now()->subMinutes(30),
+        ]);
+        $trip->forceFill(['safety_route_verified' => true])->save();
+
+        $this->actingAs($owner, 'sanctum')->patchJson("/api/trips/{$trip->id}", [
+            'status' => 'completada',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('travel_offers', [
+            'id' => $trip->id,
+            'safety_route' => null,
+            'safety_route_verified' => false,
+            'safety_route_duration_minutes' => null,
+            'safety_geofence_consent_at' => null,
+        ]);
     }
 
     public function test_overdue_arrival_command_notifies_only_participants_without_arrival_checkin(): void

@@ -167,12 +167,18 @@ export function getTravelOffers(filters, token = getAuthToken(), signal) {
     const value = filters[key]?.trim();
     if (value && value !== 'Cualquiera') params.set(key, value);
   }
+  if (Number.isSafeInteger(filters.after_id) && filters.after_id > 0) {
+    params.set('after_id', String(filters.after_id));
+  }
 
   return request(`/trips${params.size ? `?${params}` : ''}`, { token, signal });
 }
 
-export function getTravelMatches(token = getAuthToken(), signal) {
-  return request('/matches', { token, signal });
+export function getTravelMatches(token = getAuthToken(), signal, afterId = null) {
+  const query = Number.isSafeInteger(afterId) && afterId > 0
+    ? `?after_id=${afterId}`
+    : '';
+  return request(`/matches${query}`, { token, signal });
 }
 
 export function getMyTrips(token = getAuthToken(), signal) {

@@ -90,6 +90,7 @@ class TravelOffer extends Model
         return [
             'departure_date' => 'date',
             'safety_route' => 'array',
+            'safety_route_verified' => 'boolean',
             'safety_route_duration_minutes' => 'integer',
             'started_at' => 'datetime',
             'arrival_checkin_deadline_at' => 'datetime',

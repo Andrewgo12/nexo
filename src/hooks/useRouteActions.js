@@ -4,10 +4,13 @@ import { buildRouteSummary } from '../services/viajauCore';
 import { getCurrentDeviceLocation } from '../services/locationApi';
 
 export default function useRouteActions(state) {
-  const { route, routeLocations, setDeviceLocation, setLocationLoading, setRoute, setRouteError, setRouteLoading, setRouteLocations, setRouteResult, setRouteSearchLoading, setRouteSearchResults, setSearchError, setSearchLoaded, setSearchLoading, setSearchState, setToast } = state;
+  const { route, routeLocations, setDeviceLocation, setLocationLoading, setRoute, setRouteError, setRouteLoading, setRouteLocations, setRouteResult, setRouteSearchLoading, setRouteSearchResults, setSearchCursor, setSearchError, setSearchLoaded, setSearchLoading, setSearchNextCursor, setSearchResults, setSearchState, setToast } = state;
 
   const updateSearchFilter = (key, value) => {
       setSearchState((current) => ({ ...current, [key]: value }));
+      setSearchCursor(null);
+      setSearchNextCursor(null);
+      setSearchResults([]);
       setSearchLoading(true);
       setSearchError('');
       setSearchLoaded(false);

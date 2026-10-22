@@ -29,11 +29,16 @@ export default function useSessionEffects(state, helpers = {}) {
     }, [applyAuthenticatedUser, setToast, setIsLoggedIn, setIsBooting]);
 
   useEffect(() => {
-      writeAppData({
-        notifications: notifications,
-        advancedMode: advancedMode,
-        executionState: executionState,
-        activeTab: active
-      });
-    }, [notifications, advancedMode, executionState, active]);
+      try {
+        writeAppData({
+          notifications: notifications,
+          advancedMode: advancedMode,
+          executionState: executionState,
+          activeTab: active,
+        });
+      } catch (error) {
+        console.error('No se pudieron guardar las preferencias de ViajaU.', error);
+        setToast('No se pudieron guardar tus preferencias en este navegador. Revisa el espacio disponible o la configuración de almacenamiento.');
+      }
+    }, [notifications, advancedMode, executionState, active, setToast]);
 }

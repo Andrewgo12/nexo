@@ -83,7 +83,7 @@ class TripSearchTest extends TestCase
             ->assertJsonPath('data.0.id', $matchingOffer->id);
     }
 
-    public function test_search_caps_results_and_reports_truncation(): void
+    public function test_search_paginates_all_matching_results_with_a_stable_cursor(): void
     {
         $viewer = User::factory()->create();
         $this->createProfile($viewer);
@@ -95,11 +95,18 @@ class TripSearchTest extends TestCase
         }
 
         $token = $viewer->createToken('web')->plainTextToken;
-        $this->withToken($token)->getJson('/api/trips')->assertOk()
+        $firstPage = $this->withToken($token)->getJson('/api/trips')->assertOk()
             ->assertJsonCount(100, 'data')
             ->assertJsonPath('meta.total', 101)
             ->assertJsonPath('meta.limit', 100)
             ->assertJsonPath('meta.truncated', true);
+        $lastId = $firstPage->json('data.99.id');
+        $this->withToken($token)->getJson("/api/trips?after_id={$lastId}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.total', 101)
+            ->assertJsonPath('meta.truncated', false)
+            ->assertJsonPath('meta.next_after_id', null);
     }
 
     public function test_high_traffic_trip_queries_have_supporting_composite_indexes(): void
@@ -278,7 +285,7 @@ class TripSearchTest extends TestCase
             ->assertJsonPath('data.0.score', 100);
     }
 
-    public function test_matches_report_when_the_eligible_offer_limit_truncates_evaluation(): void
+    public function test_matches_can_be_scanned_past_the_first_evaluation_batch(): void
     {
         $viewer = User::factory()->create();
         $this->createProfile($viewer, [
@@ -294,11 +301,19 @@ class TripSearchTest extends TestCase
         }
         $token = $viewer->createToken('web')->plainTextToken;
 
-        $this->withToken($token)->getJson('/api/matches')->assertOk()
+        $firstPage = $this->withToken($token)->getJson('/api/matches')->assertOk()
             ->assertJsonCount(200, 'data')
             ->assertJsonPath('meta.total', 201)
             ->assertJsonPath('meta.evaluated', 200)
             ->assertJsonPath('meta.truncated', true);
+        $lastId = $firstPage->json('meta.next_after_id');
+        $this->withToken($token)->getJson("/api/matches?after_id={$lastId}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.total', 201)
+            ->assertJsonPath('meta.evaluated', 1)
+            ->assertJsonPath('meta.truncated', false)
+            ->assertJsonPath('meta.next_after_id', null);
     }
 
     public function test_search_and_matches_exclude_past_or_undated_offers(): void

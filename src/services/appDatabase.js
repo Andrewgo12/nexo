@@ -61,16 +61,20 @@ export function readAppData() {
     return DEFAULT_APP_DATA;
   }
 
+  let raw;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return DEFAULT_APP_DATA;
-    }
+    raw = window.localStorage.getItem(STORAGE_KEY);
+  } catch (error) {
+    console.error('No fue posible leer las preferencias guardadas en este navegador.', error);
+    return DEFAULT_APP_DATA;
+  }
 
-    const safeData = safeAppData(JSON.parse(raw));
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(safeData));
-    return { ...DEFAULT_APP_DATA, ...safeData };
-  } catch {
+  if (!raw) return DEFAULT_APP_DATA;
+
+  try {
+    return { ...DEFAULT_APP_DATA, ...safeAppData(JSON.parse(raw)) };
+  } catch (error) {
+    console.error('Las preferencias guardadas no tienen un formato válido.', error);
     return DEFAULT_APP_DATA;
   }
 }

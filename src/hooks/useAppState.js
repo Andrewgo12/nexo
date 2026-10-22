@@ -27,12 +27,16 @@ export default function useAppState(persisted, { initialStudent, universities })
   const [searchError, setSearchError] = useState('');
   const [searchLoaded, setSearchLoaded] = useState(false);
   const [searchTruncated, setSearchTruncated] = useState(false);
+  const [searchCursor, setSearchCursor] = useState(null);
+  const [searchNextCursor, setSearchNextCursor] = useState(null);
   const [matchResults, setMatchResults] = useState([]);
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState('');
   const [matchLoaded, setMatchLoaded] = useState(false);
   const [matchProfileAvailable, setMatchProfileAvailable] = useState(true);
   const [matchTruncated, setMatchTruncated] = useState(false);
+  const [matchCursor, setMatchCursor] = useState(null);
+  const [matchNextCursor, setMatchNextCursor] = useState(null);
   const [myTripData, setMyTripData] = useState({ offers: [], requests: [] });
   const [tripLoading, setTripLoading] = useState(false);
   const [tripError, setTripError] = useState('');
@@ -116,10 +120,7 @@ export default function useAppState(persisted, { initialStudent, universities })
       mode: 'MIO + caminata',
       seats: '2',
       cost: '2500 COP',
-      safety_route_duration_minutes: '45',
     });
-  const [tripGeofenceConsent, setTripGeofenceConsent] = useState(false);
-  const [tripGeofencePreview, setTripGeofencePreview] = useState(null);
   const [alertFeed, setAlertFeed] = useState([]);
   const [safetyActionLoading, setSafetyActionLoading] = useState('');
   const [safetyError, setSafetyError] = useState('');
@@ -161,10 +162,12 @@ export default function useAppState(persisted, { initialStudent, universities })
     route, setRoute, searchState, setSearchState,
     searchResults, setSearchResults, searchLoading, setSearchLoading,
     searchError, setSearchError, searchLoaded, setSearchLoaded,
-    searchTruncated, setSearchTruncated, matchResults, setMatchResults,
+    searchTruncated, setSearchTruncated, searchCursor, setSearchCursor,
+    searchNextCursor, setSearchNextCursor, matchResults, setMatchResults,
     matchLoading, setMatchLoading, matchError, setMatchError,
     matchLoaded, setMatchLoaded, matchProfileAvailable, setMatchProfileAvailable,
-    matchTruncated, setMatchTruncated, myTripData, setMyTripData,
+    matchTruncated, setMatchTruncated, matchCursor, setMatchCursor,
+    matchNextCursor, setMatchNextCursor, myTripData, setMyTripData,
     tripLoading, setTripLoading, tripError, setTripError,
     tripActionLoading, setTripActionLoading, tripRefreshKey, setTripRefreshKey,
     notifications, setNotifications, advancedMode, setAdvancedMode,
@@ -199,8 +202,7 @@ export default function useAppState(persisted, { initialStudent, universities })
     routeSearchLoading, setRouteSearchLoading, routeLoading, setRouteLoading,
     routeError, setRouteError, deviceLocation, setDeviceLocation,
     locationLoading, setLocationLoading, tripCards, setTripCards,
-    tripOfferMinimumDate, tripOfferForm, setTripOfferForm, tripGeofenceConsent, setTripGeofenceConsent,
-    tripGeofencePreview, setTripGeofencePreview, alertFeed, setAlertFeed,
+    tripOfferMinimumDate, tripOfferForm, setTripOfferForm, alertFeed, setAlertFeed,
     safetyActionLoading, setSafetyActionLoading, safetyError, setSafetyError,
     safetyLocationError, setSafetyLocationError, includeSafetyLocation, setIncludeSafetyLocation,
     safetyRefreshKey, setSafetyRefreshKey, safetyAlertsLoading, setSafetyAlertsLoading,

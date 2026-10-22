@@ -12,6 +12,9 @@ class TravelMatchController extends Controller
 {
     public function index(Request $request)
     {
+        $filters = $request->validate([
+            'after_id' => ['nullable', 'integer', 'min:1'],
+        ]);
         $viewer = $request->user();
         $profile = $viewer->studentProfile;
         if (! $profile || ! $profile->verified || $profile->status !== 'activo') {
@@ -32,11 +35,16 @@ class TravelMatchController extends Controller
                     });
             });
         $totalOffers = (clone $eligibleOffers)->count();
-        $offers = $eligibleOffers
+        $afterId = (int) ($filters['after_id'] ?? 0);
+        $offers = (clone $eligibleOffers)
+            ->when($afterId > 0, fn ($query) => $query->where('id', '>', $afterId))
             ->with(['studentProfile:id,user_id,name,university,career,neighborhood,shift,transport'])
-            ->latest()
+            ->orderBy('id')
             ->limit(200)
             ->get();
+        $lastOfferId = $offers->last()?->id;
+        $hasMore = $lastOfferId !== null
+            && (clone $eligibleOffers)->where('id', '>', $lastOfferId)->exists();
 
         $recommendations = $offers
             ->map(function (TravelOffer $offer) use ($profile): ?array {
@@ -111,7 +119,8 @@ class TravelMatchController extends Controller
                 'profile_available' => true,
                 'evaluated' => $offers->count(),
                 'total' => $totalOffers,
-                'truncated' => $totalOffers > $offers->count(),
+                'truncated' => $hasMore,
+                'next_after_id' => $hasMore ? $lastOfferId : null,
                 'minimum_score' => 30,
             ],
         ]);

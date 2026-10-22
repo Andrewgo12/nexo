@@ -110,9 +110,13 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           searchTruncated={state.searchTruncated}
           field={field}
           onFilterChange={actions.updateSearchFilter}
+          onLoadMore={() => state.setSearchCursor(state.searchNextCursor)}
           onSortChange={(sort) => state.setSearchState((current) => ({ ...current, sort }))}
           onClearFilters={() => {
             state.setSearchState({ zone: '', time: '', faculty: '', university: 'Cualquiera', transport: 'Cualquiera', sort: 'Compatibilidad' });
+            state.setSearchCursor(null);
+            state.setSearchNextCursor(null);
+            state.setSearchResults([]);
             state.setSearchLoading(true);
             state.setSearchError('');
             state.setSearchLoaded(false);
@@ -129,6 +133,7 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           matchResults={state.matchResults}
           matchTruncated={state.matchTruncated}
           field={field}
+          onLoadMore={() => state.setMatchCursor(state.matchNextCursor)}
           onNavigate={state.setActive}
           onViewOffers={() => {
             state.setSearchState((current) => ({
@@ -138,6 +143,9 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
               transport: 'Cualquiera',
               sort: 'Compatibilidad',
             }));
+            state.setSearchCursor(null);
+            state.setSearchNextCursor(null);
+            state.setSearchResults([]);
             state.setSearchLoading(true);
             state.setSearchError('');
             state.setSearchLoaded(false);
@@ -151,7 +159,7 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           authUser={state.authUser}
           calculateTravelCost={actions.calculateTravelCost}
           field={field}
-          hasCurrentGeofencePreview={model.hasCurrentGeofencePreview}
+
           myTripData={state.myTripData}
           recordTripCheckIn={actions.recordTripCheckIn}
           requestTravelSeat={requestTravelSeat}
@@ -162,8 +170,6 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           setSafetyError={state.setSafetyError}
           setSelectedSafetyTripId={state.setSelectedSafetyTripId}
           setSharingTripLocation={state.setSharingTripLocation}
-          setTripGeofenceConsent={state.setTripGeofenceConsent}
-          setTripGeofencePreview={state.setTripGeofencePreview}
           setTripOfferForm={state.setTripOfferForm}
           sharingTripLocation={state.sharingTripLocation}
           startTripLocationSharing={actions.startTripLocationSharing}
@@ -173,8 +179,6 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           tripActionLoading={state.tripActionLoading}
           tripCards={state.tripCards}
           tripError={state.tripError}
-          tripGeofenceConsent={state.tripGeofenceConsent}
-          tripGeofencePreview={state.tripGeofencePreview}
           tripLoading={state.tripLoading}
           tripLocationUpdateRef={state.tripLocationUpdateRef}
           tripOfferForm={state.tripOfferForm}

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { getAuthToken, getTravelMatches, getTravelOffers } from '../services/authApi';
 
 export default function useSearchMatchEffects(state, helpers = {}) {
-  const { active, isEmailVerified, isLoggedIn, setMatchError, setMatchLoaded, setMatchLoading, setMatchProfileAvailable, setMatchResults, setMatchTruncated, setSearchError, setSearchLoaded, setSearchLoading, setSearchResults, setSearchTruncated } = state;
+  const { active, authUser, isEmailVerified, isLoggedIn, matchCursor, setMatchCursor, setMatchError, setMatchLoaded, setMatchLoading, setMatchNextCursor, setMatchProfileAvailable, setMatchResults, setMatchTruncated, searchCursor, setSearchError, setSearchLoaded, setSearchLoading, setSearchNextCursor, setSearchResults, setSearchTruncated } = state;
   const { searchFilters } = helpers;
 
   useEffect(() => {
@@ -10,24 +10,33 @@ export default function useSearchMatchEffects(state, helpers = {}) {
 
       const controller = new AbortController();
       let cancelled = false;
+      const cursor = searchCursor;
       const timeoutId = setTimeout(async () => {
         setSearchLoading(true);
         setSearchError('');
-        setSearchLoaded(false);
+        if (!cursor) setSearchLoaded(false);
         try {
-          const response = await getTravelOffers(searchFilters, getAuthToken(), controller.signal);
+          const response = await getTravelOffers(
+            { ...searchFilters, after_id: cursor },
+            getAuthToken(),
+            controller.signal,
+          );
           if (!Array.isArray(response.data)) {
             throw new Error('El servidor devolvió una lista de ofertas inválida.');
           }
           if (!cancelled) {
-            setSearchResults(response.data);
+            setSearchResults((current) => cursor ? [...current, ...response.data] : response.data);
             setSearchLoaded(true);
             setSearchTruncated(Boolean(response.meta?.truncated));
+            setSearchNextCursor(response.meta?.next_after_id ?? null);
           }
         } catch (error) {
           if (!cancelled && error.name !== 'AbortError') {
-            setSearchResults([]);
-            setSearchTruncated(false);
+            if (!cursor) {
+              setSearchResults([]);
+              setSearchTruncated(false);
+              setSearchNextCursor(null);
+            }
             setSearchError(error.message || 'No fue posible buscar ofertas de viaje.');
           }
         } finally {
@@ -40,32 +49,37 @@ export default function useSearchMatchEffects(state, helpers = {}) {
         clearTimeout(timeoutId);
         controller.abort();
       };
-    }, [active, isEmailVerified, isLoggedIn, searchFilters, setSearchLoaded, setSearchError, setSearchLoading, setSearchResults, setSearchTruncated]);
+    }, [active, authUser?.id, isEmailVerified, isLoggedIn, searchCursor, searchFilters, setSearchLoaded, setSearchError, setSearchLoading, setSearchNextCursor, setSearchResults, setSearchTruncated]);
 
   useEffect(() => {
       if (active !== 'match' || !isLoggedIn || !isEmailVerified) return undefined;
 
       const controller = new AbortController();
       let cancelled = false;
+      const cursor = matchCursor;
       const timeoutId = setTimeout(async () => {
         setMatchLoading(true);
         setMatchError('');
-        setMatchLoaded(false);
+        if (!cursor) setMatchLoaded(false);
         try {
-          const response = await getTravelMatches(getAuthToken(), controller.signal);
+          const response = await getTravelMatches(getAuthToken(), controller.signal, cursor);
           if (!Array.isArray(response.data)) {
             throw new Error('El servidor devolvió una lista de coincidencias inválida.');
           }
           if (!cancelled) {
-            setMatchResults(response.data);
+            setMatchResults((current) => cursor ? [...current, ...response.data] : response.data);
             setMatchProfileAvailable(response.meta?.profile_available !== false);
             setMatchTruncated(Boolean(response.meta?.truncated));
+            setMatchNextCursor(response.meta?.next_after_id ?? null);
             setMatchLoaded(true);
           }
         } catch (error) {
           if (!cancelled && error.name !== 'AbortError') {
-            setMatchResults([]);
-            setMatchTruncated(false);
+            if (!cursor) {
+              setMatchResults([]);
+              setMatchTruncated(false);
+              setMatchNextCursor(null);
+            }
             setMatchError(error.message || 'No fue posible calcular coincidencias de viaje.');
           }
         } finally {
@@ -78,5 +92,12 @@ export default function useSearchMatchEffects(state, helpers = {}) {
         clearTimeout(timeoutId);
         controller.abort();
       };
-    }, [active, isEmailVerified, isLoggedIn, setMatchLoading, setMatchResults, setMatchProfileAvailable, setMatchTruncated, setMatchLoaded, setMatchError]);
+    }, [active, authUser?.id, isEmailVerified, isLoggedIn, matchCursor, setMatchLoading, setMatchNextCursor, setMatchResults, setMatchProfileAvailable, setMatchTruncated, setMatchLoaded, setMatchError]);
+
+  useEffect(() => {
+    setMatchCursor(null);
+    setMatchNextCursor(null);
+    setMatchResults([]);
+    setMatchLoaded(false);
+  }, [authUser?.id, setMatchCursor, setMatchNextCursor, setMatchResults, setMatchLoaded]);
 }

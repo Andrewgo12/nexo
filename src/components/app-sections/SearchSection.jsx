@@ -10,6 +10,7 @@ export default function SearchSection({
   searchTruncated,
   field,
   onFilterChange,
+  onLoadMore,
   onSortChange,
   onClearFilters,
 }) {
@@ -33,23 +34,30 @@ export default function SearchSection({
         <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
           {searchLoading && <div role="status" style={{ color: '#bae6fd' }}>Buscando ofertas publicadas…</div>}
           {searchError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10 }}>{searchError}</div>}
-          {!searchLoading && !searchError && searchLoaded && filteredResults.length === 0 && (
+          {!searchLoading && !searchError && searchLoaded && !searchTruncated && filteredResults.length === 0 && (
             <div role="status" style={{ color: '#cbd5e1', background: 'rgba(148,163,184,.08)', padding: 16, borderRadius: 12 }}>
               No hay ofertas activas que coincidan con estos filtros. Prueba otra zona, hora o transporte.
             </div>
           )}
-          {!searchLoading && !searchError && filteredResults.map((item) => (
+          {!searchLoading && !searchError && searchLoaded && searchTruncated && filteredResults.length === 0 && (
+            <div role="status" style={{ color: '#cbd5e1' }}>
+              Esta página no contiene ofertas coincidentes con los filtros locales; puedes cargar más resultados.
+            </div>
+          )}
+          {!searchError && filteredResults.map((item) => (
             <div key={item.id} style={{ background: 'rgba(59,130,246,.08)', border: '1px solid rgba(96,165,250,.28)', borderRadius: 12, padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ fontWeight: 800, fontSize: 18 }}>{item.name}</div>
                 <div style={{ color: '#93c5fd', fontWeight: 800 }}>{item.score}% afinidad estimada</div>
               </div>
-              <div style={{ marginTop: 6, color: '#dbeafe' }}>{item.origin} → {item.destination} • {item.time} • {item.transport}</div>
+              <div style={{ marginTop: 6, color: '#dbeafe' }}>{item.origin} → {item.destination} • {item.departure_date} {item.time} • {item.transport}</div>
               <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 13 }}>{item.university}{item.faculty ? ` • ${item.faculty}` : ''} • {item.seats} cupo(s) • {item.cost}</div>
             </div>
           ))}
           {!searchLoading && searchLoaded && searchTruncated && (
-            <div role="status" style={{ color: '#fde68a' }}>Hay más de 100 ofertas coincidentes. Ajusta los filtros para acotar la búsqueda.</div>
+            <button type="button" onClick={onLoadMore} style={{ ...field, padding: '9px 12px', cursor: 'pointer' }}>
+              Cargar más ofertas
+            </button>
           )}
         </div>
         <small style={{ display: 'block', marginTop: 12, color: '#94a3b8' }}>La afinidad estima coincidencias de barrio, transporte y jornada declarados; no representa una calificación de seguridad ni reputación.</small>

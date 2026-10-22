@@ -88,6 +88,7 @@ class ViajauController extends Controller
             'faculty' => ['nullable', 'string', 'max:120'],
             'university' => ['nullable', 'string', 'max:120'],
             'transport' => ['nullable', 'string', 'max:120'],
+            'after_id' => ['nullable', 'integer', 'min:1'],
         ]);
 
         return response()->json($search->search((int) $request->user()->id, $filters));
@@ -107,11 +108,8 @@ class ViajauController extends Controller
             'departure_time' => ['nullable', 'date_format:H:i'],
             'seats' => 'nullable|integer|min:1|max:20',
             'cost' => 'nullable|string|max:40',
-            'safety_route' => ['nullable', 'array', 'min:2', 'max:500'],
-            'safety_route.*' => ['required', 'array', 'size:2'],
-            'safety_route.*.0' => ['required', 'numeric', 'between:-90,90'],
-            'safety_route.*.1' => ['required', 'numeric', 'between:-180,180'],
-            'safety_route_duration_minutes' => ['required_with:safety_route', 'integer', 'min:1', 'max:600'],
+            'safety_route' => ['prohibited'],
+            'safety_route_duration_minutes' => ['prohibited'],
         ])->validate();
         $departureTime = $data['departure_time'] ?? '19:45';
         if (
@@ -144,9 +142,6 @@ class ViajauController extends Controller
             'seats' => $data['seats'] ?? 2,
             'cost' => $data['cost'] ?? '2500 COP',
             'status' => 'oferta-activa',
-            'safety_route' => $data['safety_route'] ?? null,
-            'safety_route_duration_minutes' => $data['safety_route_duration_minutes'] ?? null,
-            'safety_geofence_consent_at' => isset($data['safety_route']) ? now() : null,
         ]);
 
         return response()->json([
@@ -159,7 +154,8 @@ class ViajauController extends Controller
                 'departure_date' => $trip->departure_date?->toDateString(),
                 'departure_time' => $trip->departure_time,
                 'status' => $trip->status,
-                'safety_geofence_enabled' => $trip->safety_route !== null,
+                'safety_geofence_enabled' => false,
+                'safety_geofence_reason' => 'server_route_verification_required',
             ],
         ], 201);
     }
@@ -353,7 +349,8 @@ class ViajauController extends Controller
             if ($nextStatus === 'en-curso') {
                 $startedAt = now();
                 $tripChanges['started_at'] = $startedAt;
-                $tripChanges['arrival_checkin_deadline_at'] = $lockedTrip->safety_route_duration_minutes
+                $tripChanges['arrival_checkin_deadline_at'] = $lockedTrip->safety_route_verified
+                    && $lockedTrip->safety_route_duration_minutes
                     ? $startedAt->copy()->addMinutes(
                         $lockedTrip->safety_route_duration_minutes
                         + config('viajau.safety.checkin_grace_minutes'),
@@ -362,10 +359,17 @@ class ViajauController extends Controller
             }
             if (in_array($nextStatus, ['completada', 'cancelada'], true)) {
                 $tripChanges['safety_route'] = null;
+                $tripChanges['safety_route_duration_minutes'] = null;
+                $tripChanges['safety_geofence_consent_at'] = null;
+                $tripChanges['safety_route_verified'] = false;
                 $tripChanges['arrival_checkin_deadline_at'] = null;
                 $lockedTrip->locations()->delete();
             }
-            $lockedTrip->update($tripChanges);
+            $lockedTrip->fill($tripChanges);
+            if (in_array($nextStatus, ['completada', 'cancelada'], true)) {
+                $lockedTrip->safety_route_verified = false;
+            }
+            $lockedTrip->save();
             if ($nextStatus === 'en-curso') {
                 $lockedTrip->requests()->where('status', 'pending')->update(['status' => 'cancelled']);
             } elseif ($nextStatus === 'cancelada') {

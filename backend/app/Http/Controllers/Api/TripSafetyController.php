@@ -47,7 +47,8 @@ class TripSafetyController extends Controller
         });
         $safetyEvents = [];
         if (
-            $trip->safety_route
+            $trip->safety_route_verified
+            && $trip->safety_route
             && $location->accuracy_meters !== null
             && $location->accuracy_meters <= config('viajau.safety.route_corridor_meters') / 2
         ) {

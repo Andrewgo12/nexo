@@ -26,8 +26,6 @@ export default function useAppViewModel(state) {
     searchState,
     student,
     tripCards,
-    tripGeofencePreview,
-    tripOfferForm,
     uni,
   } = state;
 
@@ -43,14 +41,6 @@ export default function useAppViewModel(state) {
         label: `${request.offer.origin} → ${request.offer.destination} (${request.offer.owner})`,
       })),
   ], [safetyTripData]);
-  const geofenceRouteFingerprint = JSON.stringify([
-    tripOfferForm.origin,
-    tripOfferForm.destination,
-    tripOfferForm.departure_date,
-    tripOfferForm.mode,
-    tripOfferForm.safety_route_duration_minutes,
-  ]);
-  const hasCurrentGeofencePreview = tripGeofencePreview?.fingerprint === geofenceRouteFingerprint;
   const readiness = useMemo(() => calculateTravelReadiness(student, route), [student, route]);
   const dashboardMetrics = useMemo(
     () => buildDashboardMetrics(student, route, tripCards, alertFeed),
@@ -111,8 +101,6 @@ export default function useAppViewModel(state) {
     validEmail,
     insuranceMonthlyBudget: insuranceProducts[0]?.monthly_budget_cop ?? 30000,
     safetyTripOptions,
-    geofenceRouteFingerprint,
-    hasCurrentGeofencePreview,
     readiness,
     dashboardMetrics,
     safetyMatrix,

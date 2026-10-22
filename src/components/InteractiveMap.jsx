@@ -2,22 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { 
   Navigation, 
-  Layers, 
-  ShieldCheck, 
-  Bus, 
-  Car, 
   Play, 
   Pause, 
   RotateCcw, 
-  Maximize2, 
-  Info,
   CheckCircle2,
   AlertTriangle,
   Home,
-  Leaf,
-  Plus,
-  Moon,
-  CloudRain
 } from 'lucide-react';
 import { UNIVERSITIES, MIO_STATIONS, MIO_LINES, NEIGHBORHOODS } from '../data/mockData';
 import { getOsrmRoute } from '../services/routingApi';
@@ -54,14 +44,13 @@ export default function InteractiveMap({
   activeTrips, 
   onSelectTrip,
   activeUniversity,
-  studentUser,
   incidents = [],
   onOpenReportIncident,
   onOpenArrivalCheckin,
-  onOpenEcoSavings
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const onSelectTripRef = useRef(onSelectTrip);
   const routePolylineRef = useRef(null);
   const simulationMarkerRef = useRef(null);
   const animationFrameRef = useRef(null);
@@ -81,6 +70,10 @@ export default function InteractiveMap({
   // Dynamic OSRM route polyline state
   const [activePolylineCoords, setActivePolylineCoords] = useState(null);
   const [routingSource, setRoutingSource] = useState('');
+
+  useEffect(() => {
+    onSelectTripRef.current = onSelectTrip;
+  }, [onSelectTrip]);
 
   // Initialize Map
   useEffect(() => {
@@ -106,6 +99,10 @@ export default function InteractiveMap({
     mapInstanceRef.current = map;
 
     return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -205,7 +202,7 @@ export default function InteractiveMap({
         const marker = L.marker(trip.origin.coords, { icon });
 
         marker.on('click', () => {
-          onSelectTrip(trip);
+          onSelectTripRef.current?.(trip);
         });
 
         marker.bindPopup(`
@@ -307,11 +304,14 @@ export default function InteractiveMap({
       simulationMarkerRef.current = null;
     }
 
+    setActivePolylineCoords(null);
+    setRoutingSource('');
+
     if (selectedTrip && selectedTrip.origin && selectedTrip.destination) {
       // Query real OSRM routing engine
       getOsrmRoute(selectedTrip.origin.coords, selectedTrip.destination.coords, selectedTrip.transportMode)
         .then(result => {
-          if (!isMounted || !result) return;
+          if (!isMounted || !mapInstanceRef.current || !result) return;
           const coords = result.polyline;
           setActivePolylineCoords(coords);
           setRoutingSource(result.source || 'OSRM');
@@ -348,6 +348,10 @@ export default function InteractiveMap({
 
     return () => {
       isMounted = false;
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [selectedTrip]);
 
@@ -362,6 +366,7 @@ export default function InteractiveMap({
     const totalSteps = 140; // smooth interpolation
 
     const animate = () => {
+      if (!mapInstanceRef.current || !simulationMarkerRef.current) return;
       step++;
       const progressRatio = step / totalSteps;
       setSimulationProgress(Math.round(progressRatio * 100));
@@ -404,8 +409,9 @@ export default function InteractiveMap({
 
   const pauseSimulation = () => {
     setIsSimulating(false);
-    if (animationFrameRef.current) {
+    if (animationFrameRef.current !== null) {
       cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
   };
 

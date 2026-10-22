@@ -193,53 +193,11 @@ export default function TripManagementSection(props) {
           <label style={{ display: 'grid', gap: 6 }}>Transporte<input required maxLength={80} value={props.tripOfferForm.mode} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, mode: event.target.value }))} style={props.field} /></label>
           <label style={{ display: 'grid', gap: 6 }}>Cupos<input required type="number" min="1" max="20" value={props.tripOfferForm.seats} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, seats: event.target.value }))} style={props.field} /></label>
           <label style={{ display: 'grid', gap: 6 }}>Aporte por persona<input required maxLength={40} value={props.tripOfferForm.cost} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, cost: event.target.value }))} style={props.field} /></label>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: '#dbeafe', lineHeight: 1.5 }}>
-          <input
-            type="checkbox"
-            checked={props.tripGeofenceConsent}
-            onChange={(event) => {
-              props.setTripGeofenceConsent(event.target.checked);
-              props.setTripGeofencePreview(null);
-            }}
-            style={{ marginTop: 4 }}
-          />
-          Configurar geocerca de este viaje. Se geocodificarán las direcciones y se guardará el trazado para alertas a los contactos que hayan dado consentimiento.
-          </label>
-          {props.tripGeofenceConsent && (
-          <>
-            {props.hasCurrentGeofencePreview && (
-              <div style={{ borderRadius: 10, padding: 10, background: 'rgba(59,130,246,.08)', color: '#dbeafe', fontSize: 12 }}>
-                <div>Origen detectado: {props.tripGeofencePreview.origin}</div>
-                <div>Destino detectado: {props.tripGeofencePreview.destination}</div>
-                <div>Fuente de ruta: {props.tripGeofencePreview.source}</div>
-                <div>Si un resultado no corresponde, ajusta la dirección antes de confirmar la oferta.</div>
-              </div>
-            )}
-            <label style={{ display: 'grid', gap: 6 }}>
-                Duración estimada del viaje (minutos)
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  max="600"
-                  value={props.tripOfferForm.safety_route_duration_minutes}
-                  onChange={(event) => props.setTripOfferForm((current) => ({ ...current, safety_route_duration_minutes: event.target.value }))}
-                  style={props.field}
-                />
-              </label>
-              <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
-                Origen/destino se consultan con OpenStreetMap y el trazado se calcula con OSRM o datos públicos del MIO. El backend activa una alerta al salir más de 500 m del corredor, entrar a 300 m del destino o no confirmar llegada 15 min después de la duración indicada. Solo funciona cuando cada participante comparte GPS expresamente; se notifica el evento, no las coordenadas.
-              </p>
-            </>
-          )}
+          <div role="note" style={{ color: '#fde68a', background: 'rgba(120,53,15,.25)', padding: 12, borderRadius: 10 }}>
+            La geocerca automática está temporalmente desactivada: el servidor no valida de forma independiente las rutas calculadas en el navegador. El seguimiento GPS durante un viaje sigue disponible con consentimiento explícito.
+          </div>
           <button disabled={props.tripActionLoading === 'create'} type="submit" style={{ border: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '12px 16px', fontWeight: 800, cursor: 'pointer' }}>
-            {props.tripActionLoading === 'create'
-              ? 'Configurando…'
-              : props.tripGeofenceConsent && props.hasCurrentGeofencePreview
-                ? 'Confirmar ruta y publicar'
-                : props.tripGeofenceConsent
-                  ? 'Previsualizar geocerca'
-                  : 'Publicar oferta'}
+            {props.tripActionLoading === 'create' ? 'Publicando…' : 'Publicar oferta'}
           </button>
         </form>
         <button onClick={props.calculateTravelCost} style={{ marginTop: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '10px 12px', fontWeight: 800 }}>Calcular costo estimado de ruta</button>

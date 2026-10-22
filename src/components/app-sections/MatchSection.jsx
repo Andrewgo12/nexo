@@ -8,6 +8,7 @@ export default function MatchSection({
   matchResults,
   matchTruncated,
   field,
+  onLoadMore,
   onNavigate,
   onViewOffers,
 }) {
@@ -24,14 +25,19 @@ export default function MatchSection({
             Completa y verifica tu perfil de estudiante para recibir recomendaciones.
           </div>
         )}
-        {!matchLoading && !matchError && matchLoaded && matchProfileAvailable && matchResults.length === 0 && (
+        {!matchLoading && !matchError && matchLoaded && matchProfileAvailable && !matchTruncated && matchResults.length === 0 && (
           <div role="status" style={{ color: '#cbd5e1', background: 'rgba(148,163,184,.08)', padding: 16, borderRadius: 12, marginTop: 16 }}>
             Aún no hay ofertas verificadas que coincidan con tu zona, jornada o transporte.
             <button type="button" onClick={() => onNavigate('search')} style={{ ...field, display: 'block', marginTop: 12, padding: '8px 12px', cursor: 'pointer' }}>Buscar todas las ofertas</button>
           </div>
         )}
+        {!matchLoading && !matchError && matchLoaded && matchProfileAvailable && matchTruncated && matchResults.length === 0 && (
+          <div role="status" style={{ color: '#cbd5e1', marginTop: 16 }}>
+            Este grupo no contiene coincidencias; puedes continuar con el siguiente.
+          </div>
+        )}
         <div style={{ display: 'grid', gap: 14 }}>
-          {!matchLoading && matchResults.map((match) => (
+          {matchResults.map((match) => (
             <div key={match.id} style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                 <div>
@@ -47,7 +53,9 @@ export default function MatchSection({
           ))}
         </div>
         {!matchLoading && matchLoaded && matchTruncated && (
-          <div role="status" style={{ color: '#fde68a', marginTop: 12 }}>Se evaluaron las 200 ofertas más recientes. La lista puede estar incompleta; revisa las ofertas en Búsqueda.</div>
+          <button type="button" onClick={onLoadMore} style={{ ...field, marginTop: 12, padding: '9px 12px', cursor: 'pointer' }}>
+            Cargar más recomendaciones
+          </button>
         )}
       </div>
       <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>

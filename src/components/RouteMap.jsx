@@ -20,6 +20,10 @@ export default function RouteMap({ origin, destination, route, userLocation }) {
     mapRef.current = map;
 
     return () => {
+      if (routeLayerRef.current) map.removeLayer(routeLayerRef.current);
+      if (markersRef.current) map.removeLayer(markersRef.current);
+      routeLayerRef.current = null;
+      markersRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -30,7 +34,9 @@ export default function RouteMap({ origin, destination, route, userLocation }) {
     if (!map) return;
 
     if (routeLayerRef.current) map.removeLayer(routeLayerRef.current);
+    routeLayerRef.current = null;
     if (markersRef.current) map.removeLayer(markersRef.current);
+    markersRef.current = null;
 
     const markers = L.layerGroup().addTo(map);
     markersRef.current = markers;
@@ -81,6 +87,11 @@ export default function RouteMap({ origin, destination, route, userLocation }) {
     if (bounds.length > 1) map.fitBounds(bounds, { padding: [24, 24] });
     else if (bounds.length === 1) map.setView(bounds[0], 15);
     else map.setView([3.4516, -76.532], 12);
+
+    return () => {
+      if (map.hasLayer(markers)) map.removeLayer(markers);
+      if (markersRef.current === markers) markersRef.current = null;
+    };
   }, [origin, destination, route, userLocation]);
 
   return <div ref={mapElementRef} aria-label="Mapa de origen, destino y ruta" style={{ height: 340, width: '100%', borderRadius: 14, overflow: 'hidden' }} />;

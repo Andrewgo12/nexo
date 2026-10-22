@@ -36,7 +36,9 @@ class TravelOfferSearchService
             });
 
         $total = (clone $query)->count();
-        $offers = $query->orderBy('departure_time')
+        $afterId = (int) ($filters['after_id'] ?? 0);
+        $offers = (clone $query)
+            ->when($afterId > 0, fn (Builder $pageQuery) => $pageQuery->where('id', '>', $afterId))
             ->orderBy('id')
             ->limit(self::RESULT_LIMIT)
             ->get()
@@ -61,13 +63,17 @@ class TravelOfferSearchService
                 'created_at' => $offer->created_at?->toISOString(),
             ])
             ->values();
+        $lastOfferId = $offers->last()['id'] ?? null;
+        $hasMore = $lastOfferId !== null
+            && (clone $query)->where('id', '>', $lastOfferId)->exists();
 
         return [
             'data' => $offers,
             'meta' => [
                 'total' => $total,
                 'limit' => self::RESULT_LIMIT,
-                'truncated' => $total > self::RESULT_LIMIT,
+                'truncated' => $hasMore,
+                'next_after_id' => $hasMore ? $lastOfferId : null,
             ],
         ];
     }

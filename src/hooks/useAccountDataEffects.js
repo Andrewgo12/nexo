@@ -5,6 +5,54 @@ export default function useAccountDataEffects(state) {
   const { active, adminReportsPage, authUser, insuranceRefresh, isEmailVerified, isLoggedIn, reputationRefresh, selectedChatTripId, setAdminInsuranceEnrollments, setAdminReports, setAdminReportsMeta, setChatError, setChatLoading, setChatMessages, setChatReadOnly, setDashboardConversations, setDashboardError, setDashboardLoading, setDashboardReputation, setDashboardTrips, setInsuranceError, setInsuranceLoading, setInsuranceProducts, setMembershipInfo, setMyInsuranceEnrollments, setReputationData, setReputationError, setReputationLoading, setSelectedChatTripId, tripRefreshKey } = state;
 
   useEffect(() => {
+    setDashboardTrips({ offers: [], requests: [] });
+    setDashboardConversations([]);
+    setDashboardReputation(null);
+    setDashboardError('');
+    setDashboardLoading(false);
+    setReputationData(null);
+    setReputationError('');
+    setReputationLoading(false);
+    setAdminReports([]);
+    setAdminReportsMeta({ current_page: 1, last_page: 1, total: 0 });
+    setInsuranceProducts([]);
+    setMyInsuranceEnrollments([]);
+    setMembershipInfo(null);
+    setAdminInsuranceEnrollments([]);
+    setInsuranceError('');
+    setInsuranceLoading(false);
+    setSelectedChatTripId('');
+    setChatMessages([]);
+    setChatReadOnly(false);
+    setChatError('');
+    setChatLoading(false);
+  }, [
+    authUser?.id,
+    authUser?.role,
+    setAdminInsuranceEnrollments,
+    setAdminReports,
+    setAdminReportsMeta,
+    setChatError,
+    setChatLoading,
+    setChatMessages,
+    setChatReadOnly,
+    setDashboardConversations,
+    setDashboardError,
+    setDashboardLoading,
+    setDashboardReputation,
+    setDashboardTrips,
+    setInsuranceError,
+    setInsuranceLoading,
+    setInsuranceProducts,
+    setMembershipInfo,
+    setMyInsuranceEnrollments,
+    setReputationData,
+    setReputationError,
+    setReputationLoading,
+    setSelectedChatTripId,
+  ]);
+
+  useEffect(() => {
       if (active !== 'trust' || !isLoggedIn || !isEmailVerified) return undefined;
 
       const controller = new AbortController();
@@ -40,7 +88,7 @@ export default function useAccountDataEffects(state) {
         cancelled = true;
         controller.abort();
       };
-    }, [active, adminReportsPage, authUser?.role, isEmailVerified, isLoggedIn, reputationRefresh, setReputationError, setReputationData, setAdminReports, setReputationLoading, setAdminReportsMeta]);
+    }, [active, adminReportsPage, authUser?.id, authUser?.role, isEmailVerified, isLoggedIn, reputationRefresh, setReputationError, setReputationData, setAdminReports, setReputationLoading, setAdminReportsMeta]);
 
   useEffect(() => {
       if (active !== 'payments' || !isLoggedIn || !isEmailVerified) return undefined;
@@ -84,7 +132,7 @@ export default function useAccountDataEffects(state) {
         cancelled = true;
         controller.abort();
       };
-    }, [active, authUser?.role, insuranceRefresh, isEmailVerified, isLoggedIn, setInsuranceError, setInsuranceLoading, setMyInsuranceEnrollments, setMembershipInfo, setAdminInsuranceEnrollments, setInsuranceProducts]);
+    }, [active, authUser?.id, authUser?.role, insuranceRefresh, isEmailVerified, isLoggedIn, setInsuranceError, setInsuranceLoading, setMyInsuranceEnrollments, setMembershipInfo, setAdminInsuranceEnrollments, setInsuranceProducts]);
 
   useEffect(() => {
       if (active !== 'dashboard' || !isLoggedIn || !isEmailVerified || authUser?.role !== 'student') return undefined;
@@ -129,7 +177,7 @@ export default function useAccountDataEffects(state) {
         cancelled = true;
         controller.abort();
       };
-    }, [active, authUser?.role, isEmailVerified, isLoggedIn, tripRefreshKey, setDashboardError, setDashboardTrips, setSelectedChatTripId, setDashboardConversations, setDashboardLoading, setDashboardReputation]);
+    }, [active, authUser?.id, authUser?.role, isEmailVerified, isLoggedIn, tripRefreshKey, setDashboardError, setDashboardTrips, setSelectedChatTripId, setDashboardConversations, setDashboardLoading, setDashboardReputation]);
 
   useEffect(() => {
       if (active !== 'dashboard' || !selectedChatTripId || !isLoggedIn || !isEmailVerified) return undefined;
@@ -167,5 +215,5 @@ export default function useAccountDataEffects(state) {
         controller.abort();
         window.clearInterval(intervalId);
       };
-    }, [active, isEmailVerified, isLoggedIn, selectedChatTripId, setChatLoading, setChatMessages, setChatReadOnly, setChatError]);
+    }, [active, authUser?.id, isEmailVerified, isLoggedIn, selectedChatTripId, setChatLoading, setChatMessages, setChatReadOnly, setChatError]);
 }
