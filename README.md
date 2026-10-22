@@ -4,6 +4,8 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 
 ## Estado actual
 
+`README.md` es la fuente de verdad del estado mantenido. [PROJECT_STATUS.md](./PROJECT_STATUS.md) se conserva solo como snapshot histórico fechado, no como guía de implementación o despliegue.
+
 | Módulo | Área | Estado |
 |---|---|---|
 | 1 | Autenticación y usuarios | Base funcional: registro institucional, verificación por correo, inicio/cierre de sesión, perfil, roles y protección de rutas. |
@@ -21,7 +23,9 @@ Los módulos 11–16 siguen en el inventario. El módulo 6 requiere configuraci�
 
 ## Cómo ejecutar y validar
 
-- Frontend: `npm install`, `npm run dev`, `npm run build`, `npm run test:routing`.
+- Frontend: `npm install`, `npm run dev`, `npm run build`, `npm run test:unit`, `npm run test:routing`.
+- Lint del producto: `npm run lint` o `npm run lint:product`; ambos revisan explícitamente `src/` y reportan los hallazgos de la aplicación sin recorrer el subproyecto embebido. `--deny-warnings` hace que cualquier diagnóstico de Oxlint bloquee el comando, sin excluir los hallazgos existentes. Lint de React Bits: `npm run lint:react-bits`, que usa la configuración propia de `react-bits-main/`.
+- CI: los workflows `Product CI` y `React Bits CI` validan sus respectivos alcances por separado. El lint del producto no oculta ni degrada a advertencias los diagnósticos encontrados en `src/`.
 - Backend: desde `backend`, `composer install`, `php artisan migrate`, `php artisan serve`.
 - Suite backend: desde `backend`, `php artisan test`. Si PHP no carga SQLite automáticamente, habilita `pdo_sqlite` y `sqlite3` al ejecutar PHPUnit.
 - Configura `.env` de Laravel y la URL de API del frontend para el entorno local; no copies credenciales reales al repositorio.
@@ -38,7 +42,7 @@ La documentación de endpoints de autenticación e instalación se encuentra en 
 - El MIO usa paradas y trazados del [servicio GTFS público de Metro Cali](https://www.arcgis.com/home/item.html?id=163af9c688444778b74150cd84f64a8b), atribuido a Metro Cali bajo [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Las consultas se paginan para respetar el límite de transferencia del proveedor. No se afirman horarios o frecuencias vigentes: el servicio no expone un calendario activo verificable.
 - La búsqueda de direcciones se envía a Nominatim. Al solicitar una ruta desde el GPS, sus coordenadas se envían al proveedor del modo elegido; el navegador no las persiste en la aplicación. Los mapas cargan mosaicos de OpenStreetMap.
 
-Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no requiere conexión).
+Pruebas frontend: `npm run test:unit` valida comportamiento de componentes React; `npm run test:routing` prueba el contrato del cliente API con proveedores simulados, sin conexión. El mapa Leaflet se carga de forma diferida al abrir el módulo de rutas.
 
 ## Módulo 3: búsqueda, filtros y ordenamiento
 
@@ -74,7 +78,7 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 - Los participantes aceptados de un viaje en curso pueden compartir su última ubicación GPS de forma explícita, consultarla entre miembros del viaje, dejar de compartirla y registrar check-in de salida/llegada. La ubicación actual se reemplaza (no se guarda una ruta histórica), deja de mostrarse tras dos minutos sin actualización y se elimina al completar/cancelar el viaje.
 - Un usuario puede guardar correo y teléfono E.164 de un contacto de confianza y activar consentimiento explícito; al retirarlo, esos destinos se borran y los trabajos pendientes vuelven a validar el consentimiento. Alertas SOS, salida de corredor, llegada a radio destino y check-in vencido se encolan por correo, SMS y WhatsApp según proveedores habilitados. Los mensajes no incluyen coordenadas exactas.
 - Para geocercas, quien publica confirma la geocodificación y el trazado antes de crear la oferta. Se notifica al salir del corredor configurado (500 m por defecto), entrar en el radio de llegada (300 m) o exceder la duración prevista más 15 minutos sin check-in. Cada participante debe compartir GPS expresamente; se necesita precisión reportada de 250 m o mejor para evaluar geocercas. La geometría exacta se elimina al completar/cancelar.
-- Configura `MAIL_MAILER=smtp`, credenciales Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_WHATSAPP_FROM`), aplica migraciones y ejecuta `php artisan queue:work --queue=safety,default`. Programa `php artisan schedule:run` cada minuto para detectar check-ins vencidos. Sin proveedores o destinos configurados, las entregas quedan como `skipped`; no se simula entrega.
+- Configura `MAIL_MAILER=smtp`, credenciales Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_WHATSAPP_FROM`), aplica migraciones y ejecuta un worker `php artisan queue:work --queue=safety,default --tries=3 --timeout=30 --max-time=3600`. Programa `php artisan schedule:run` cada minuto: procesa check-ins vencidos y monitorea colas (umbral 100); configura alertas externas para logs `critical` y ausencia del heartbeat de scheduler durante más de dos minutos. Sin proveedores o destinos configurados, las entregas quedan como `skipped`; no se simula entrega.
 - No se contactan automáticamente autoridades ni líneas públicas de emergencia. El equipo de seguridad ve SOS en el panel; la plataforma no sustituye un servicio de respuesta.
 - Endpoints: `POST/DELETE /api/trips/{id}/location`, `GET /api/trips/{id}/safety` y `POST /api/trips/{id}/check-ins`. Cobertura feature: `backend/tests/Feature/SafetyAlertTest.php`, `backend/tests/Feature/TripSafetyTrackingTest.php` y `backend/tests/Feature/SafetyNotificationsTest.php`.
 

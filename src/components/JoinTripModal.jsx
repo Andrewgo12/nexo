@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -11,22 +11,40 @@ import {
   Users, 
   KeyRound, 
   CheckCircle2, 
-  AlertCircle,
-  Sparkles,
-  Phone
+  Sparkles
 } from 'lucide-react';
 
 export default function JoinTripModal({ 
   isOpen, 
   onClose, 
   trip, 
-  onConfirmJoin, 
-  studentUser 
+  onConfirmJoin
 }) {
   const [includeInsurance, setIncludeInsurance] = useState(true);
   const [pickupNote, setPickupNote] = useState('');
   const [securityPin] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [confirmed, setConfirmed] = useState(false);
+  const confirmationTimeoutRef = useRef(null);
+
+  useEffect(() => () => {
+    if (confirmationTimeoutRef.current !== null) window.clearTimeout(confirmationTimeoutRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen || confirmationTimeoutRef.current === null) return;
+    window.clearTimeout(confirmationTimeoutRef.current);
+    confirmationTimeoutRef.current = null;
+    setConfirmed(false);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    if (confirmationTimeoutRef.current !== null) {
+      window.clearTimeout(confirmationTimeoutRef.current);
+      confirmationTimeoutRef.current = null;
+    }
+    setConfirmed(false);
+    onClose();
+  };
 
   if (!isOpen || !trip) return null;
 
@@ -36,7 +54,9 @@ export default function JoinTripModal({
 
   const handleConfirm = () => {
     setConfirmed(true);
-    setTimeout(() => {
+    confirmationTimeoutRef.current = window.setTimeout(() => {
+      confirmationTimeoutRef.current = null;
+      setConfirmed(false);
       onConfirmJoin({
         tripId: trip.id,
         trip,
@@ -45,7 +65,6 @@ export default function JoinTripModal({
         pickupNote,
         totalToPay
       });
-      setConfirmed(false);
       onClose();
     }, 1200);
   };
@@ -79,7 +98,7 @@ export default function JoinTripModal({
               </p>
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+          <button className="modal-close" onClick={handleClose}><X size={20} /></button>
         </div>
 
         {/* Body */}
@@ -205,7 +224,7 @@ export default function JoinTripModal({
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+              <button className="btn-secondary" onClick={handleClose}>Cancelar</button>
               <button 
                 className="btn-primary" 
                 onClick={handleConfirm}

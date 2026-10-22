@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import {
   clearAuthToken,
   getMyTrips,
+  getCurrentAccount,
+  logoutAccount,
+  registerAccount,
   getTravelMatches,
   getTravelOffers,
   loginAccount,
@@ -68,7 +71,7 @@ const loginResponse = await loginAccount({
   remember: true,
 });
 assert.equal(loginResponse.user.id, 1);
-assert.deepEqual(authRequests.map(({ url }) => url), ['/sanctum/csrf-cookie', '/api/login']);
+assert.deepEqual(authRequests.map(({ url }) => url), ['/sanctum/csrf-cookie', '/api/auth/login']);
 assert.equal(authRequests[0].options.credentials, 'include');
 assert.equal(authRequests[1].options.credentials, 'include');
 assert.equal(authRequests[1].options.headers.get('X-XSRF-TOKEN'), 'csrf+token');
@@ -76,6 +79,14 @@ assert.equal(authRequests[1].options.headers.get('Authorization'), null);
 localStorage.setItem('viajau-auth-token', 'stale-browser-token');
 clearAuthToken();
 assert.equal(localStorage.getItem('viajau-auth-token'), null);
+await registerAccount({ name: 'Ana Example', email: 'ana@example.com', password: 'password' });
+await getCurrentAccount();
+await logoutAccount();
+assert.deepEqual(authRequests.slice(2).map(({ url }) => url), [
+  '/api/auth/register',
+  '/api/auth/me',
+  '/api/auth/logout',
+]);
 
 globalThis.fetch = async () => jsonResponse(null, 200);
 await assert.rejects(getTravelMatches(), (error) => {
@@ -428,4 +439,20 @@ await assert.rejects(
   /offline/,
 );
 
-console.log('Routing and travel API tests passed.');
+const originalSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (callback, delay, ...args) => originalSetTimeout(
+  callback,
+  delay === 15000 ? 0 : delay,
+  ...args,
+);
+globalThis.fetch = async (_url, { signal }) => new Promise((_resolve, reject) => {
+  signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+});
+await assert.rejects(getCurrentAccount(), (error) => {
+  assert.equal(error.name, 'TimeoutError');
+  assert.equal(error.status, 408);
+  return true;
+});
+globalThis.setTimeout = originalSetTimeout;
+
+console.log('Routing, travel, and API timeout tests passed.');

@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -19,6 +20,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -163,6 +165,7 @@ class AuthController extends Controller
 
         Auth::guard('web')->login($user, $remember);
         $request->session()->regenerate();
+        $request->session()->put('auth_version', $user->auth_version);
 
         return null;
     }
@@ -204,34 +207,71 @@ class AuthController extends Controller
             'photo' => ['sometimes', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
         $user = $request->user();
+        $newPhotoPath = null;
+        $oldPhotoPath = $user->profile_photo_path;
         if ($request->hasFile('photo')) {
             $newPhotoPath = $request->file('photo')->store('profile-photos', 'public');
-            $oldPhotoPath = $user->profile_photo_path;
+            abort_unless(is_string($newPhotoPath), 500, 'No fue posible guardar la foto de perfil.');
             $user->profile_photo_path = $newPhotoPath;
         }
-        DB::transaction(function () use ($user, $data, $trustedContactProfile): void {
-            $trustedContactProfile->update($user, $data);
-            $user->fill(collect($data)->only([
-                'name',
-                'career',
-                'semester',
-                'shift',
-                'neighborhood',
-                'emergency_contact',
-            ])->all())->save();
-            $user->studentProfile()->update(collect($data)->only([
-                'name',
-                'career',
-                'semester',
-                'shift',
-                'neighborhood',
-                'transport',
-                'emergency_contact',
-                'privacy',
-            ])->all());
-        });
-        if (isset($newPhotoPath) && $oldPhotoPath) {
-            Storage::disk('public')->delete($oldPhotoPath);
+        try {
+            DB::transaction(function () use ($user, $data, $trustedContactProfile): void {
+                $trustedContactProfile->update($user, $data);
+                $user->fill(collect($data)->only([
+                    'name',
+                    'career',
+                    'semester',
+                    'shift',
+                    'neighborhood',
+                    'emergency_contact',
+                ])->all())->save();
+                $user->studentProfile()->update(collect($data)->only([
+                    'name',
+                    'career',
+                    'semester',
+                    'shift',
+                    'neighborhood',
+                    'transport',
+                    'emergency_contact',
+                    'privacy',
+                ])->all());
+            });
+        } catch (Throwable $exception) {
+            if ($newPhotoPath !== null) {
+                try {
+                    if (! Storage::disk('public')->delete($newPhotoPath)) {
+                        Log::error('Failed to remove an uncommitted profile photo.', [
+                            'user_id' => $user->id,
+                            'path' => $newPhotoPath,
+                            'exception' => $exception->getMessage(),
+                        ]);
+                    }
+                } catch (Throwable $cleanupException) {
+                    Log::error('Failed to remove an uncommitted profile photo.', [
+                        'user_id' => $user->id,
+                        'path' => $newPhotoPath,
+                        'exception' => $cleanupException->getMessage(),
+                    ]);
+                }
+            }
+            throw $exception;
+        }
+
+        if ($newPhotoPath !== null && $oldPhotoPath) {
+            try {
+                if (! Storage::disk('public')->delete($oldPhotoPath)) {
+                    Log::warning('Failed to remove a replaced profile photo.', [
+                        'user_id' => $user->id,
+                        'path' => $oldPhotoPath,
+                    ]);
+                }
+            } catch (Throwable $exception) {
+                Log::error('Failed to remove a replaced profile photo.', [
+                    'user_id' => $user->id,
+                    'path' => $oldPhotoPath,
+                    'exception' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return response()->json([
@@ -254,7 +294,10 @@ class AuthController extends Controller
             ]);
         }
 
-        $user->update(['password' => $data['password']]);
+        $user->forceFill([
+            'password' => $data['password'],
+            'auth_version' => $user->auth_version + 1,
+        ])->save();
         $currentAccessToken = $user->currentAccessToken();
         if ($currentAccessToken instanceof PersonalAccessToken) {
             $user->tokens()->where('id', '!=', $currentAccessToken->getKey())->delete();
@@ -263,6 +306,7 @@ class AuthController extends Controller
         }
         if ($request->hasSession()) {
             $request->session()->regenerate();
+            $request->session()->put('auth_version', $user->fresh()->auth_version);
         }
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);
@@ -328,6 +372,7 @@ class AuthController extends Controller
                 $user->forceFill([
                     'password' => $password,
                     'remember_token' => Str::random(60),
+                    'auth_version' => $user->auth_version + 1,
                 ])->save();
                 $user->tokens()->delete();
                 event(new PasswordReset($user));

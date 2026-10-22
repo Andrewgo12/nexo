@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureActiveAccount;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\RequireHttpsInProduction;
 use Illuminate\Foundation\Application;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(RequireHttpsInProduction::class);
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
+            'account.active' => EnsureActiveAccount::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

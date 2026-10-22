@@ -35,7 +35,7 @@ use Laravel\Sanctum\HasApiTokens;
     'role',
     'status',
 ])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'auth_version'])]
 class User extends Authenticatable implements MustVerifyEmailContract
 {
     public const ROLE_STUDENT = 'student';

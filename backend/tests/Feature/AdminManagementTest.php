@@ -36,6 +36,28 @@ class AdminManagementTest extends TestCase
             'status' => User::STATUS_BLOCKED,
         ])->assertOk()->assertJsonPath('data.status', User::STATUS_BLOCKED);
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertSame(2, $student->fresh()->auth_version);
+    }
+
+    public function test_admin_status_changes_revoke_tokens_before_account_reactivation(): void
+    {
+        $student = $this->createStudent('UNIAJC');
+        $admin = $this->createManager(User::ROLE_ADMIN);
+        $token = $student->createToken('session-before-pending');
+
+        $this->actingAs($admin, 'sanctum')->patchJson("/api/admin/users/{$student->id}", [
+            'status' => User::STATUS_PENDING,
+        ])->assertOk();
+
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertSame(2, $student->fresh()->auth_version);
+
+        $this->actingAs($admin, 'sanctum')->patchJson("/api/admin/users/{$student->id}", [
+            'status' => User::STATUS_ACTIVE,
+        ])->assertOk();
+
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertSame(3, $student->fresh()->auth_version);
     }
 
     public function test_university_manager_is_scoped_to_its_own_students_and_cannot_change_other_universities(): void

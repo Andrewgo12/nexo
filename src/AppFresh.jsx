@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getOsrmRoute, searchAddressNominatim } from './services/routingApi';
 import { getMioRoute } from './services/mioRoutingApi';
 import { getCurrentDeviceLocation } from './services/locationApi';
-import RouteMap from './components/RouteMap';
+import InsuranceMembershipPanel from './components/InsuranceMembershipPanel';
+import DashboardSection from './components/DashboardSection';
+import Metric from './components/Metric';
 import { readAppData, writeAppData } from './services/appDatabase';
 import {
   clearAuthToken,
@@ -73,6 +75,8 @@ import {
   buildSafetyMatrix,
   getRouteModeKey
 } from './services/viajauCore';
+
+const RouteMap = lazy(() => import('./components/RouteMap'));
 
 const modules = [
   { key: 'auth', title: '1. Usuarios y validación institucional', color: '#34d399' },
@@ -743,7 +747,10 @@ export default function AppFresh() {
 
     const controller = new AbortController();
     let cancelled = false;
+    let loading = false;
     const loadChat = async () => {
+      if (loading) return;
+      loading = true;
       try {
         const response = await getTripMessages(selectedChatTripId, getAuthToken(), controller.signal);
         if (!Array.isArray(response.data)) throw new Error('El servidor devolvió mensajes inválidos.');
@@ -757,12 +764,13 @@ export default function AppFresh() {
           setChatMessages([]);
           setChatError(error.message || 'No fue posible cargar el chat de este viaje.');
         }
+      } finally {
+        loading = false;
+        if (!cancelled) setChatLoading(false);
       }
     };
     setChatLoading(true);
-    loadChat().finally(() => {
-      if (!cancelled) setChatLoading(false);
-    });
+    loadChat();
     const intervalId = window.setInterval(loadChat, 12000);
 
     return () => {
@@ -1263,7 +1271,7 @@ export default function AppFresh() {
     }
   };
 
-  const submitInsuranceQuoteRequest = async (productKey) => {
+  const submitInsuranceQuoteRequest = useCallback(async (productKey) => {
     setInsuranceAction(`quote-${productKey}`);
     setInsuranceError('');
     try {
@@ -1275,7 +1283,7 @@ export default function AppFresh() {
     } finally {
       setInsuranceAction('');
     }
-  };
+  }, []);
 
   const submitDashboardMessage = async (event) => {
     event.preventDefault();
@@ -1293,7 +1301,7 @@ export default function AppFresh() {
     }
   };
 
-  const openWompiMembershipCheckout = async () => {
+  const openWompiMembershipCheckout = useCallback(async () => {
     setInsuranceAction('membership-checkout');
     setInsuranceError('');
     try {
@@ -1319,9 +1327,9 @@ export default function AppFresh() {
     } finally {
       setInsuranceAction('');
     }
-  };
+  }, []);
 
-  const submitInsurancePolicyForm = async (event, enrollmentId) => {
+  const submitInsurancePolicyForm = useCallback(async (event, enrollmentId) => {
     event.preventDefault();
     const form = event.currentTarget;
     setInsuranceAction(`policy-${enrollmentId}`);
@@ -1336,9 +1344,9 @@ export default function AppFresh() {
     } finally {
       setInsuranceAction('');
     }
-  };
+  }, []);
 
-  const submitAdminInsuranceQuote = async (event, enrollmentId) => {
+  const submitAdminInsuranceQuote = useCallback(async (event, enrollmentId) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setInsuranceAction(`admin-${enrollmentId}`);
@@ -1356,9 +1364,9 @@ export default function AppFresh() {
     } finally {
       setInsuranceAction('');
     }
-  };
+  }, []);
 
-  const moderateInsuranceEnrollment = async (enrollmentId, status) => {
+  const moderateInsuranceEnrollment = useCallback(async (enrollmentId, status) => {
     const reviewNote = status === 'rejected'
       ? window.prompt('Motivo del rechazo (obligatorio):')
       : '';
@@ -1378,9 +1386,9 @@ export default function AppFresh() {
     } finally {
       setInsuranceAction('');
     }
-  };
+  }, []);
 
-  const downloadInsurancePolicy = async (enrollmentId) => {
+  const downloadInsurancePolicy = useCallback(async (enrollmentId) => {
     setInsuranceAction(`download-${enrollmentId}`);
     setInsuranceError('');
     try {
@@ -1396,7 +1404,7 @@ export default function AppFresh() {
     } finally {
       setInsuranceAction('');
     }
-  };
+  }, []);
 
   const moderateReputationReport = async (reportId, status) => {
     const resolutionNote = window.prompt('Nota de resolución (opcional):');
@@ -2393,12 +2401,14 @@ export default function AppFresh() {
               </div>
             </div>
             <div style={{ gridColumn: '1 / -1', background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 16 }}>
-              <RouteMap
-                origin={routeLocations.origin}
-                destination={routeLocations.destination}
-                route={routeResult}
-                userLocation={deviceLocation}
-              />
+              <Suspense fallback={<div role="status" style={{ height: 340 }}>Cargando mapa…</div>}>
+                <RouteMap
+                  origin={routeLocations.origin}
+                  destination={routeLocations.destination}
+                  route={routeResult}
+                  userLocation={deviceLocation}
+                />
+              </Suspense>
               <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>Mapa © OpenStreetMap contributors</small>
             </div>
           </section>
@@ -3350,330 +3360,52 @@ export default function AppFresh() {
         )}
 
         {active === 'payments' && (
-          <section style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
-            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#5eead4', fontWeight: 800 }}>MÓDULO 9</div>
-              <h2 style={{ margin: '10px 0 12px', fontSize: 34 }}>Cotización y registro manual de seguros</h2>
-              <p style={{ margin: '0 0 18px', color: '#cbd5e1', lineHeight: 1.6 }}>
-                No se confirmó una póliza integral ni un precio público que reúna salud, vida y hurto. Los productos son candidatos para cotizar; la prima debe ser de máximo {formatInsurancePremium(insuranceMonthlyBudget)} al mes. ViajaU no activa cobertura por solicitar una cotización ni por subir un documento: administración debe verificar la póliza.
-              </p>
-              {authUser?.role === 'student' && membershipInfo?.data && (
-                <div style={{ marginBottom: 20, background: 'rgba(45,212,191,.06)', border: '1px solid rgba(45,212,191,.2)', borderRadius: 14, padding: 16 }}>
-                  <strong>Membresía de ViajaU</strong>
-                  <p style={{ color: '#cbd5e1', margin: '8px 0' }}>{membershipInfo.message}</p>
-                  <p style={{ color: '#cbd5e1', margin: 0 }}>
-                    {membershipInfo.data.status === 'free_trial'
-                      ? `Periodo gratuito: ${membershipInfo.data.trial_starts_at} a ${membershipInfo.data.trial_ends_at} (${membershipInfo.data.days_remaining} días restantes).`
-                      : `Periodo gratuito finalizado el ${membershipInfo.data.trial_ends_at}. Precio previsto: ${formatInsurancePremium(membershipInfo.data.monthly_price_cop)} / mes.`}
-                  </p>
-                  {membershipInfo.data.latest_sandbox_payment && (
-                    <p role="status" style={{ color: '#fbbf24', marginBottom: 0 }}>
-                      Última prueba sandbox: {membershipPaymentStatusLabel(membershipInfo.data.latest_sandbox_payment.status)}. No activa la membresía.
-                    </p>
-                  )}
-                  {membershipInfo.data.status === 'awaiting_payment_provider' && membershipInfo.data.wompi_sandbox_enabled && (
-                    <button
-                      type="button"
-                      disabled={insuranceAction === 'membership-checkout'}
-                      onClick={openWompiMembershipCheckout}
-                      style={{ ...field, marginTop: 12 }}
-                    >
-                      {insuranceAction === 'membership-checkout' ? 'Abriendo sandbox…' : 'Probar pago sandbox con Wompi · COP $9.000'}
-                    </button>
-                  )}
-                  {membershipInfo.data.status === 'awaiting_payment_provider' && !membershipInfo.data.wompi_sandbox_enabled && (
-                    <p style={{ color: '#94a3b8', marginBottom: 0 }}>Las pruebas de pago sandbox aún no tienen llaves configuradas. No se realizará ningún cobro.</p>
-                  )}
-                </div>
-              )}
-              {insuranceError && <p role="alert" style={{ color: '#fca5a5' }}>{insuranceError}</p>}
-              {insuranceLoading && <p role="status" style={{ color: '#cbd5e1' }}>Cargando información de seguros…</p>}
-
-              {authUser?.role === 'student' && (
-                <>
-                  <h3 style={{ margin: '24px 0 12px' }}>Productos candidatos · todos requieren cotización</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-                    {insuranceProducts.map((product) => {
-                      const hasOpenRequest = myInsuranceEnrollments.some((item) => (
-                        item.product_key === product.key
-                        && ['quote_requested', 'quoted', 'pending_review', 'active'].includes(item.status)
-                      ));
-                      return (
-                        <article key={product.key} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
-                          <strong>{product.provider} · {product.name}</strong>
-                          <p style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.5 }}>{product.coverage_summary}</p>
-                          <a href={product.source_url} target="_blank" rel="noreferrer" style={{ color: '#5eead4', fontSize: 13 }}>Ver información del proveedor</a>
-                          <p style={{ color: '#fbbf24', fontSize: 13 }}>Precio: por cotizar · presupuesto máximo {formatInsurancePremium(product.monthly_budget_cop)} / mes · sin cobertura confirmada</p>
-                          <button
-                            type="button"
-                            disabled={hasOpenRequest || insuranceAction === `quote-${product.key}`}
-                            onClick={() => submitInsuranceQuoteRequest(product.key)}
-                            style={field}
-                          >
-                            {hasOpenRequest ? 'Solicitud en curso' : insuranceAction === `quote-${product.key}` ? 'Enviando…' : 'Solicitar cotización'}
-                          </button>
-                        </article>
-                      );
-                    })}
-                  </div>
-
-                  <h3 style={{ margin: '28px 0 12px' }}>Mis solicitudes y pólizas</h3>
-                  {!myInsuranceEnrollments.length && !insuranceLoading && <p style={{ color: '#94a3b8' }}>Aún no tienes solicitudes de seguro.</p>}
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    {myInsuranceEnrollments.map((enrollment) => (
-                      <article key={enrollment.id} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
-                        <strong>{enrollment.provider} · {enrollment.product_name}</strong>
-                        <p style={{ color: '#5eead4', margin: '8px 0' }}>Estado: {insuranceStatusLabel(enrollment.status)}</p>
-                        {enrollment.monthly_premium_cop != null && (
-                          <p>Prima cotizada: {formatInsurancePremium(enrollment.monthly_premium_cop)} / mes</p>
-                        )}
-                        {enrollment.coverage_summary && <p style={{ color: '#cbd5e1' }}>{enrollment.coverage_summary}</p>}
-                        {enrollment.review_note && <p role="note" style={{ color: '#fbbf24' }}>Nota administrativa: {enrollment.review_note}</p>}
-                        {enrollment.status === 'quoted' && enrollment.monthly_premium_cop <= insuranceMonthlyBudget && (
-                          <form onSubmit={(event) => submitInsurancePolicyForm(event, enrollment.id)} style={{ display: 'grid', gap: 10, maxWidth: 560, marginTop: 14 }}>
-                            <label style={{ display: 'grid', gap: 6 }}>Número de póliza
-                              <input name="policy_number" required maxLength={120} style={field} />
-                            </label>
-                            <label style={{ display: 'grid', gap: 6 }}>Inicio de cobertura
-                              <input name="coverage_starts_at" type="date" required style={field} />
-                            </label>
-                            <label style={{ display: 'grid', gap: 6 }}>Fin de cobertura
-                              <input name="coverage_ends_at" type="date" required style={field} />
-                            </label>
-                            <label style={{ display: 'grid', gap: 6 }}>Documento PDF de la póliza (máx. 5 MB)
-                              <input name="policy_document" type="file" accept="application/pdf,.pdf" required style={field} />
-                            </label>
-                            <button type="submit" disabled={insuranceAction === `policy-${enrollment.id}`} style={field}>
-                              {insuranceAction === `policy-${enrollment.id}` ? 'Enviando…' : 'Enviar póliza para verificación'}
-                            </button>
-                          </form>
-                        )}
-                        {enrollment.status === 'quoted' && enrollment.monthly_premium_cop > insuranceMonthlyBudget && (
-                          <p role="alert" style={{ color: '#fca5a5' }}>Esta cotización excede el presupuesto de {formatInsurancePremium(insuranceMonthlyBudget)}/mes y no puede registrarse como cobertura.</p>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {authUser?.role === 'admin' && (
-                <>
-                  <h3 style={{ margin: '24px 0 12px' }}>Revisión administrativa</h3>
-                  {!adminInsuranceEnrollments.length && !insuranceLoading && <p style={{ color: '#94a3b8' }}>No hay solicitudes de seguro para revisar.</p>}
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    {adminInsuranceEnrollments.map((enrollment) => (
-                      <article key={enrollment.id} style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, padding: 16 }}>
-                        <strong>{enrollment.provider} · {enrollment.product_name}</strong>
-                        <p style={{ color: '#cbd5e1' }}>Estudiante: {enrollment.user} · {enrollment.email}</p>
-                        <p style={{ color: '#5eead4' }}>Estado: {insuranceStatusLabel(enrollment.status)}</p>
-                        {enrollment.monthly_premium_cop != null && <p>Prima: {formatInsurancePremium(enrollment.monthly_premium_cop)} / mes</p>}
-                        {enrollment.coverage_summary && <p>{enrollment.coverage_summary}</p>}
-                        {enrollment.policy_number && <p>Póliza: {enrollment.policy_number} · Vigencia: {enrollment.coverage_starts_at} a {enrollment.coverage_ends_at}</p>}
-                        {enrollment.review_note && <p role="note">Nota: {enrollment.review_note}</p>}
-                        {enrollment.status === 'quote_requested' && (
-                          <>
-                            <form onSubmit={(event) => submitAdminInsuranceQuote(event, enrollment.id)} style={{ display: 'grid', gap: 10, maxWidth: 600 }}>
-                              <label style={{ display: 'grid', gap: 6 }}>Prima mensual cotizada (COP)
-                                <input name="monthly_premium_cop" type="number" min="1" max="1000000" required style={field} />
-                              </label>
-                              <label style={{ display: 'grid', gap: 6 }}>Coberturas y condiciones confirmadas por el proveedor
-                                <textarea name="coverage_summary" minLength={10} maxLength={2000} required style={{ ...field, minHeight: 90 }} />
-                              </label>
-                              <button type="submit" disabled={insuranceAction === `admin-${enrollment.id}`} style={field}>Registrar cotización verificada</button>
-                            </form>
-                            <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'rejected')} style={{ ...field, marginTop: 8 }}>Rechazar solicitud con motivo</button>
-                          </>
-                        )}
-                        {enrollment.status === 'quoted' && (
-                          <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'rejected')} style={{ ...field, marginTop: 8 }}>Rechazar cotización con motivo</button>
-                        )}
-                        {enrollment.status === 'pending_review' && (
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {enrollment.has_policy_document && <button type="button" disabled={insuranceAction === `download-${enrollment.id}`} onClick={() => downloadInsurancePolicy(enrollment.id)} style={field}>Descargar póliza</button>}
-                            <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'active')} style={field}>Validar y activar póliza</button>
-                            <button type="button" disabled={insuranceAction === `admin-${enrollment.id}`} onClick={() => moderateInsuranceEnrollment(enrollment.id, 'rejected')} style={field}>Rechazar con motivo</button>
-                          </div>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </>
-              )}
-              {!['student', 'admin'].includes(authUser?.role) && (
-                <p role="status" style={{ color: '#fbbf24' }}>Inicia sesión como estudiante verificado o administrador para usar este flujo.</p>
-              )}
-            </div>
-          </section>
+          <InsuranceMembershipPanel
+            authUser={authUser}
+            adminInsuranceEnrollments={adminInsuranceEnrollments}
+            downloadInsurancePolicy={downloadInsurancePolicy}
+            field={field}
+            formatInsurancePremium={formatInsurancePremium}
+            insuranceAction={insuranceAction}
+            insuranceError={insuranceError}
+            insuranceLoading={insuranceLoading}
+            insuranceMonthlyBudget={insuranceMonthlyBudget}
+            insuranceProducts={insuranceProducts}
+            insuranceStatusLabel={insuranceStatusLabel}
+            membershipInfo={membershipInfo}
+            membershipPaymentStatusLabel={membershipPaymentStatusLabel}
+            moderateInsuranceEnrollment={moderateInsuranceEnrollment}
+            myInsuranceEnrollments={myInsuranceEnrollments}
+            openWompiMembershipCheckout={openWompiMembershipCheckout}
+            submitAdminInsuranceQuote={submitAdminInsuranceQuote}
+            submitInsurancePolicyForm={submitInsurancePolicyForm}
+            submitInsuranceQuoteRequest={submitInsuranceQuoteRequest}
+          />
         )}
 
         {active === 'dashboard' && (
-          <section style={{ display: 'grid', gap: 24 }}>
-            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f472b6', fontWeight: 800 }}>MÓDULO 10</div>
-              <h2 style={{ margin: '10px 0 8px', fontSize: 34 }}>Dashboard e historial de viajes</h2>
-              <p style={{ marginTop: 0, color: '#cbd5e1' }}>Resumen basado en tus ofertas, solicitudes y valoraciones registradas. Las ofertas no tienen una fecha de salida; por eso no se presentan como viajes próximos.</p>
-              {dashboardError && <p role="alert" style={{ color: '#fca5a5' }}>{dashboardError}</p>}
-              {dashboardLoading && <p role="status" style={{ color: '#cbd5e1' }}>Actualizando tu resumen…</p>}
-              {authUser?.role !== 'student' && <p role="status" style={{ color: '#fbbf24' }}>El dashboard personal y el chat de viajes están disponibles para estudiantes.</p>}
-              {authUser?.role === 'student' && (
-                <>
-                  {(() => {
-                    const ownedOffers = dashboardTrips.offers;
-                    const outgoingRequests = dashboardTrips.requests;
-                    const activeOffers = ownedOffers.filter((trip) => trip.status === 'oferta-activa');
-                    const inProgress = ownedOffers.filter((trip) => trip.status === 'en-curso').length
-                      + outgoingRequests.filter((request) => request.status === 'accepted' && request.offer.status === 'en-curso').length;
-                    const completed = ownedOffers.filter((trip) => trip.status === 'completada').length
-                      + outgoingRequests.filter((request) => request.status === 'accepted' && request.offer.status === 'completada').length;
-                    const pendingRequests = ownedOffers.reduce((count, trip) => (
-                      count + trip.requests.filter((request) => request.status === 'pending').length
-                    ), 0) + outgoingRequests.filter((request) => request.status === 'pending').length;
-                    const rating = dashboardReputation?.summary?.rating_average;
-                    const ratingCount = dashboardReputation?.summary?.rating_count || 0;
-                    const activity = [
-                      ...ownedOffers.flatMap((trip) => trip.requests
-                        .filter((request) => request.status === 'pending')
-                        .map((request) => ({
-                          key: `incoming-${request.id}`,
-                          label: `Solicitud de cupo de ${request.requester.name}`,
-                          detail: `${trip.origin} → ${trip.destination}`,
-                        }))),
-                      ...outgoingRequests
-                        .filter((request) => ['accepted', 'rejected'].includes(request.status))
-                        .map((request) => ({
-                          key: `outgoing-${request.id}`,
-                          label: `Tu solicitud fue ${tripStatusLabels[request.status] || request.status.toLowerCase()}`,
-                          detail: `${request.offer.origin} → ${request.offer.destination}`,
-                        })),
-                    ];
-                    const history = [
-                      ...ownedOffers.map((trip) => ({
-                        key: `offer-${trip.id}`,
-                        route: `${trip.origin} → ${trip.destination}`,
-                        status: trip.status,
-                        detail: `Oferta como responsable · ${trip.departure_time}`,
-                      })),
-                      ...outgoingRequests.map((request) => ({
-                        key: `request-${request.id}`,
-                        route: `${request.offer.origin} → ${request.offer.destination}`,
-                        status: request.offer.status === 'completada' ? 'completada' : request.status,
-                        detail: `Solicitud como pasajero · ${request.offer.departure_time}`,
-                      })),
-                    ];
-                    return (
-                      <>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginTop: 20 }}>
-                          <Metric label="Ofertas activas" value={activeOffers.length} color="#f472b6" />
-                          <Metric label="Viajes en curso" value={inProgress} color="#c084fc" />
-                          <Metric label="Viajes completados" value={completed} color="#34d399" />
-                          <Metric label="Solicitudes pendientes" value={pendingRequests} color="#fbbf24" />
-                          <Metric label="Calificación" value={rating === null || rating === undefined ? 'Sin calificar' : `${rating}/5 (${ratingCount})`} color="#f9a8d4" />
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 20 }}>
-                          <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
-                            <h3 style={{ marginTop: 0 }}>Actividad de viajes</h3>
-                            {activity.length
-                              ? <div style={{ display: 'grid', gap: 10 }}>{activity.slice(0, 10).map((item) => <div key={item.key} style={{ borderBottom: '1px solid rgba(148,163,184,.15)', paddingBottom: 8 }}><strong>{item.label}</strong><div style={{ color: '#94a3b8', fontSize: 13 }}>{item.detail}</div></div>)}</div>
-                              : <p style={{ color: '#94a3b8' }}>No tienes solicitudes recientes pendientes de respuesta.</p>}
-                            <button type="button" onClick={() => setActive('trips')} style={{ ...field, marginTop: 12 }}>Gestionar viajes</button>
-                          </div>
-                          <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
-                            <h3 style={{ marginTop: 0 }}>Historial</h3>
-                            {history.length
-                              ? <div style={{ display: 'grid', gap: 10, maxHeight: 330, overflowY: 'auto' }}>{history.map((item) => <div key={item.key} style={{ borderBottom: '1px solid rgba(148,163,184,.15)', paddingBottom: 8 }}><strong>{item.route}</strong><div style={{ color: '#cbd5e1', fontSize: 13 }}>{item.detail} · {tripStatusLabels[item.status] || item.status}</div></div>)}</div>
-                              : <p style={{ color: '#94a3b8' }}>Aún no hay viajes registrados en tu historial.</p>}
-                            <button type="button" onClick={() => setActive('trust')} style={{ ...field, marginTop: 12 }}>Ver reputación y valoraciones</button>
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </>
-              )}
-            </div>
-
-            {authUser?.role === 'student' && (
-              <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-                <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#f9a8d4', fontWeight: 800 }}>COMUNICACIÓN PRIVADA POR VIAJE</div>
-                <h3 style={{ margin: '8px 0 16px' }}>Chat con participantes aceptados</h3>
-                {dashboardConversations.length ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, .7fr) minmax(0, 1.3fr)', gap: 16 }}>
-                    <div style={{ display: 'grid', alignContent: 'start', gap: 8 }}>
-                      {dashboardConversations.map((conversation) => (
-                        <button
-                          type="button"
-                          key={conversation.id}
-                          aria-pressed={selectedChatTripId === String(conversation.id)}
-                          onClick={() => setSelectedChatTripId(String(conversation.id))}
-                          style={{ ...field, textAlign: 'left', borderColor: selectedChatTripId === String(conversation.id) ? '#f472b6' : field.border }}
-                        >
-                          <strong>{conversation.origin} → {conversation.destination}</strong>
-                          <span style={{ display: 'block', color: '#94a3b8', fontSize: 12, marginTop: 4 }}>
-                            {conversation.participants.map((participant) => participant.name).join(', ')} · {conversation.message_count} mensajes
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      {dashboardConversations.find((trip) => String(trip.id) === selectedChatTripId) && (
-                        <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 8 }}>
-                          Participantes: {dashboardConversations.find((trip) => String(trip.id) === selectedChatTripId).participants.map((participant) => participant.name).join(', ')}
-                        </div>
-                      )}
-                      {chatError && <p role="alert" style={{ color: '#fca5a5' }}>{chatError}</p>}
-                      {chatLoading && !chatMessages.length && <p role="status" style={{ color: '#cbd5e1' }}>Cargando mensajes…</p>}
-                      <div aria-live="polite" style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', padding: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(2,6,23,.45)' }}>
-                        {chatMessages.map((message) => (
-                          <div key={message.id} style={{ justifySelf: message.is_mine ? 'end' : 'start', maxWidth: '85%', background: message.is_mine ? 'rgba(244,114,182,.16)' : 'rgba(148,163,184,.12)', padding: '8px 12px', borderRadius: 12 }}>
-                            <strong style={{ fontSize: 12 }}>{message.is_mine ? 'Tú' : message.sender_name}</strong>
-                            <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</div>
-                            <time style={{ color: '#94a3b8', fontSize: 10 }}>{new Date(message.created_at).toLocaleString('es-CO')}</time>
-                          </div>
-                        ))}
-                        {!chatMessages.length && !chatLoading && !chatError && <p style={{ color: '#94a3b8' }}>Aún no hay mensajes. Confirma con el grupo el punto de encuentro.</p>}
-                      </div>
-                      {chatReadOnly
-                        ? <p role="status" style={{ color: '#fbbf24' }}>El viaje terminó; puedes consultar el historial, pero el chat está cerrado.</p>
-                        : (
-                          <form onSubmit={submitDashboardMessage} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                            <input
-                              aria-label="Escribe un mensaje para el viaje"
-                              value={chatDraft}
-                              maxLength={2000}
-                              onChange={(event) => setChatDraft(event.target.value)}
-                              placeholder="Escribe al grupo del viaje…"
-                              required
-                              style={{ ...field, flex: 1, minWidth: 0 }}
-                            />
-                            <button type="submit" disabled={chatAction || !chatDraft.trim()} style={field}>
-                              {chatAction ? 'Enviando…' : 'Enviar'}
-                            </button>
-                          </form>
-                        )}
-                      <p style={{ color: '#94a3b8', fontSize: 12 }}>Chat disponible únicamente para responsable y pasajeros aceptados. No compartas datos sensibles; el chat se cierra al cancelar o completar el viaje.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <p style={{ color: '#94a3b8' }}>El chat aparecerá cuando tengas una oferta con pasajeros aceptados o participes como pasajero aceptado. Las notificaciones push y los mensajes fuera de la app no están habilitados.</p>
-                )}
-              </div>
-            )}
-
-            <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-              <h3 style={{ marginTop: 0 }}>Checklist del módulo 10</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
-                {dashboardChecklist.map((item) => (
-                  <div key={item.label} style={{ color: item.done ? '#86efac' : '#fbbf24' }}>
-                    {item.done ? '☑' : '☐'} {item.label}
-                  </div>
-                ))}
-              </div>
-              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 0, marginTop: 12 }}>
-                Las notificaciones externas se trabajan en el módulo 12. El chat actualiza el historial periódicamente; no es mensajería en tiempo real.
-              </p>
-            </div>
-          </section>
+          <DashboardSection
+            authUser={authUser}
+            dashboardError={dashboardError}
+            dashboardLoading={dashboardLoading}
+            dashboardTrips={dashboardTrips}
+            dashboardReputation={dashboardReputation}
+            dashboardConversations={dashboardConversations}
+            selectedChatTripId={selectedChatTripId}
+            chatError={chatError}
+            chatLoading={chatLoading}
+            chatMessages={chatMessages}
+            chatReadOnly={chatReadOnly}
+            chatAction={chatAction}
+            chatDraft={chatDraft}
+            dashboardChecklist={dashboardChecklist}
+            field={field}
+            tripStatusLabels={tripStatusLabels}
+            onNavigate={setActive}
+            onSelectChatTrip={setSelectedChatTripId}
+            onChatDraftChange={setChatDraft}
+            onSubmitMessage={submitDashboardMessage}
+          />
         )}
 
         {active === 'privacy' && (
@@ -3870,8 +3602,4 @@ export default function AppFresh() {
 
 function Panel({ title, value, color }) {
   return <div style={{ background: 'rgba(15,23,42,.8)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}><div style={{ color, fontWeight: 800, marginBottom: 4 }}>{title}</div><div style={{ color: '#dbeafe' }}>{value}</div></div>;
-}
-
-function Metric({ label, value, color }) {
-  return <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.15)', borderRadius: 14, padding: 16 }}><div style={{ fontSize: 12, color: '#94a3b8' }}>{label}</div><div style={{ marginTop: 8, color, fontWeight: 800, fontSize: 24 }}>{value}</div></div>;
 }

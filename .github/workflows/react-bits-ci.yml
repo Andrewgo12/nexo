@@ -1,0 +1,47 @@
+name: React Bits CI
+
+on:
+  push:
+    paths:
+      - "react-bits-main/**"
+      - ".github/workflows/react-bits-ci.yml"
+  pull_request:
+    paths:
+      - "react-bits-main/**"
+      - ".github/workflows/react-bits-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  react-bits:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: react-bits-main
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: react-bits-main/package-lock.json
+      - run: npm ci
+      - name: Run all React Bits checks
+        run: |
+          set +e
+          npm run test:boot
+          boot_status=$?
+          npm run test:prop-docs
+          prop_docs_status=$?
+          npm run test:seo
+          seo_status=$?
+          npm run test:shape-magic
+          shape_magic_status=$?
+          npm run build
+          build_status=$?
+          npm run lint
+          lint_status=$?
+          if [ "$boot_status" -ne 0 ] || [ "$prop_docs_status" -ne 0 ] || [ "$seo_status" -ne 0 ] || [ "$shape_magic_status" -ne 0 ] || [ "$build_status" -ne 0 ] || [ "$lint_status" -ne 0 ]; then
+            exit 1
+          fi

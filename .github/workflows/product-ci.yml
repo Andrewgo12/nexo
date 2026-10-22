@@ -1,0 +1,75 @@
+name: Product CI
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "backend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".oxlintrc.json"
+      - "index.html"
+      - "postcss.config.mjs"
+      - "public/**"
+      - "tsconfig.json"
+      - "vitest.config.js"
+      - "vite.config.js"
+      - ".github/workflows/product-ci.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "backend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".oxlintrc.json"
+      - "index.html"
+      - "postcss.config.mjs"
+      - "public/**"
+      - "tsconfig.json"
+      - "vitest.config.js"
+      - "vite.config.js"
+      - ".github/workflows/product-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  product-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:unit
+      - run: npm run test:routing
+      - run: npm run lint:product
+
+  product-backend:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ":memory:"
+      CACHE_STORE: array
+      MAIL_MAILER: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_sqlite, sqlite3
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - run: php artisan test

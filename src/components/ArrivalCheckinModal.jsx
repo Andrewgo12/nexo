@@ -1,16 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
-  ShieldCheck, 
-  Clock, 
-  MapPin, 
   CheckCircle2, 
   AlertTriangle, 
-  Phone, 
-  Share2, 
   MessageCircle,
-  Home,
-  RotateCcw
+  Home
 } from 'lucide-react';
 
 export default function ArrivalCheckinModal({ 
@@ -25,10 +19,12 @@ export default function ArrivalCheckinModal({
   const [timeLeft, setTimeLeft] = useState(35 * 60);
   const [isRunning, setIsRunning] = useState(true);
   const [arrivalConfirmed, setArrivalConfirmed] = useState(false);
+  const closeTimeoutRef = useRef(null);
+  const sosTriggeredRef = useRef(false);
 
   useEffect(() => {
-    if (!isOpen || !isRunning || timeLeft <= 0) return;
-    const interval = setInterval(() => {
+    if (!isOpen || !isRunning) return undefined;
+    const interval = window.setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           setIsRunning(false);
@@ -38,8 +34,37 @@ export default function ArrivalCheckinModal({
         return prev - 1;
       });
     }, 1000);
-    return () => clearInterval(interval);
-  }, [isOpen, isRunning, timeLeft]);
+    return () => window.clearInterval(interval);
+  }, [isOpen, isRunning]);
+
+  useEffect(() => {
+    if (isOpen || closeTimeoutRef.current === null) return;
+    window.clearTimeout(closeTimeoutRef.current);
+    closeTimeoutRef.current = null;
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || timeLeft !== 0 || arrivalConfirmed || sosTriggeredRef.current) return;
+    sosTriggeredRef.current = true;
+    onTriggerSOS?.({
+      timestamp: new Date().toLocaleTimeString(),
+      user: studentUser.name,
+      campus: 'Regreso nocturno en curso',
+      coords: trip?.destination?.coords || [3.3768, -76.5332]
+    });
+  }, [arrivalConfirmed, isOpen, onTriggerSOS, studentUser.name, timeLeft, trip?.destination?.coords]);
+
+  useEffect(() => () => {
+    if (closeTimeoutRef.current !== null) window.clearTimeout(closeTimeoutRef.current);
+  }, []);
+
+  const handleClose = () => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -50,8 +75,9 @@ export default function ArrivalCheckinModal({
   const handleArrivalSuccess = () => {
     setIsRunning(false);
     setArrivalConfirmed(true);
-    onConfirmArrival && onConfirmArrival();
-    setTimeout(() => {
+    onConfirmArrival?.();
+    closeTimeoutRef.current = window.setTimeout(() => {
+      closeTimeoutRef.current = null;
       onClose();
     }, 1800);
   };
@@ -84,7 +110,7 @@ export default function ArrivalCheckinModal({
               </p>
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+          <button className="modal-close" onClick={handleClose}><X size={20} /></button>
         </div>
 
         {/* Content */}
@@ -164,8 +190,8 @@ export default function ArrivalCheckinModal({
                     className="btn-secondary" 
                     style={{ justifyContent: 'center', borderColor: 'var(--rose-primary)', color: 'var(--rose-primary)', fontSize: '0.82rem' }}
                     onClick={() => {
-                      onClose();
-                      onTriggerSOS && onTriggerSOS({
+                      handleClose();
+                      onTriggerSOS?.({
                         timestamp: new Date().toLocaleTimeString(),
                         user: studentUser.name,
                         campus: 'Regreso nocturno en curso',

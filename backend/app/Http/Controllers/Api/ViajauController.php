@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\SafetyAlert;
 use App\Models\StudentProfile;
 use App\Models\TravelOffer;
 use App\Models\TripCheckIn;
@@ -18,7 +17,6 @@ use App\Services\TrustedContactProfileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ViajauController extends Controller
@@ -569,157 +567,6 @@ class ViajauController extends Controller
         abort_unless($status === User::STATUS_ACTIVE, 403, 'La cuenta debe estar activa.');
     }
 
-    public function listMatches(Request $request)
-    {
-        $viewer = $request->user();
-        $profile = $viewer->studentProfile;
-        if (! $profile || ! $profile->verified || $profile->status !== 'activo') {
-            return response()->json(['data' => [], 'meta' => ['reason' => 'profile_unavailable']]);
-        }
-
-        $eligibleOffers = TravelOffer::query()
-            ->where('status', 'oferta-activa')
-            ->where('seats', '>', 0)
-            ->whereHas('studentProfile', function ($query) use ($viewer): void {
-                $query->where('verified', true)
-                    ->where('status', 'activo')
-                    ->where('user_id', '<>', $viewer->id)
-                    ->whereHas('user', function ($userQuery): void {
-                        $userQuery->where('status', User::STATUS_ACTIVE)
-                            ->whereNotNull('email_verified_at');
-                    });
-            });
-        $totalOffers = (clone $eligibleOffers)->count();
-        $offers = $eligibleOffers
-            ->with(['studentProfile:id,user_id,name,university,career,neighborhood,shift,transport'])
-            ->latest()
-            ->limit(200)
-            ->get();
-
-        $recommendations = $offers
-            ->map(function (TravelOffer $offer) use ($profile): ?array {
-                $candidate = $offer->studentProfile;
-                $score = 0;
-                $reasons = [];
-                $viewerNeighborhood = $this->normalizeMatchValue($profile->neighborhood);
-                $route = $this->normalizeMatchValue($offer->origin.' '.$offer->destination);
-
-                $zonePattern = '~(?:^|[^a-z0-9])'.preg_quote($viewerNeighborhood, '~').'(?:$|[^a-z0-9])~';
-                if (
-                    strlen($viewerNeighborhood) >= 3 &&
-                    preg_match($zonePattern, $route) === 1
-                ) {
-                    $score += 50;
-                    $reasons[] = 'El recorrido pasa por tu zona declarada';
-                }
-
-                $validDepartureTime = preg_match(
-                    '/^(?:[01]\d|2[0-3]):[0-5]\d$/',
-                    (string) $offer->departure_time,
-                ) === 1;
-                $hour = (int) substr((string) $offer->departure_time, 0, 2);
-                $shift = $this->normalizeMatchValue($profile->shift);
-                $fitsShift = match (true) {
-                    ! $validDepartureTime => false,
-                    str_contains($shift, 'manana') => $hour >= 5 && $hour < 12,
-                    str_contains($shift, 'tarde') => $hour >= 12 && $hour < 18,
-                    str_contains($shift, 'noche'), str_contains($shift, 'noct') => $hour >= 18 || $hour < 5,
-                    default => false,
-                };
-                if ($shift !== '' && $fitsShift) {
-                    $score += 35;
-                    $reasons[] = 'La salida coincide con tu jornada declarada';
-                }
-
-                $preferredTransport = $this->normalizeMatchValue($profile->transport);
-                $offerTransport = $this->normalizeMatchValue($offer->mode);
-                $preferredMode = trim((string) preg_split('~[+/,]~', $preferredTransport)[0]);
-                if ($preferredMode !== '' && str_contains($offerTransport, $preferredMode)) {
-                    $score += 15;
-                    $reasons[] = 'Coincide con tu transporte preferido';
-                }
-
-                if ($score < 30) {
-                    return null;
-                }
-
-                return [
-                    'id' => $offer->id,
-                    'traveler' => $candidate->name,
-                    'origin' => $offer->origin,
-                    'destination' => $offer->destination,
-                    'zone' => $offer->origin.' → '.$offer->destination,
-                    'time' => $offer->departure_time,
-                    'mode' => $offer->mode,
-                    'university' => $candidate->university,
-                    'seats' => $offer->seats,
-                    'cost' => $offer->cost,
-                    'score' => $score,
-                    'reasons' => $reasons,
-                ];
-            })
-            ->filter()
-            ->sortByDesc('score')
-            ->values();
-
-        return response()->json([
-            'data' => $recommendations,
-            'meta' => [
-                'profile_available' => true,
-                'evaluated' => $offers->count(),
-                'total' => $totalOffers,
-                'truncated' => $totalOffers > $offers->count(),
-                'minimum_score' => 30,
-            ],
-        ]);
-    }
-
-    private function normalizeMatchValue(?string $value): string
-    {
-        return Str::lower(trim(Str::ascii($value ?? '')));
-    }
-
-    public function createAlert(Request $request, SafetyNotificationService $notifications)
-    {
-        $this->assertActiveAccount($request);
-        $profile = $request->user()->studentProfile;
-        abort_unless(
-            $profile && $profile->verified && $profile->status === 'activo',
-            403,
-            'Necesitas un perfil de estudiante activo y verificado para enviar una alerta.',
-        );
-
-        $data = $request->validate([
-            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
-            'accuracy_meters' => ['nullable', 'integer', 'min:0', 'max:100000'],
-        ]);
-
-        $alert = SafetyAlert::create([
-            'student_profile_id' => $profile->id,
-            'type' => 'panic',
-            'severity' => 'critical',
-            'message' => 'El estudiante activó una alerta de emergencia.',
-            'active' => true,
-            'latitude' => $data['latitude'] ?? null,
-            'longitude' => $data['longitude'] ?? null,
-            'accuracy_meters' => $data['accuracy_meters'] ?? null,
-        ]);
-        $event = $notifications->trigger([
-            'safety_alert_id' => $alert->id,
-            'user_id' => $request->user()->id,
-            'type' => 'panic',
-        ]);
-
-        return response()->json([
-            'message' => 'Alerta registrada para el equipo de seguridad.',
-            'data' => [
-                ...$this->safetyAlertData($alert),
-                'notification_deliveries' => $this->notificationDeliverySummaries($event),
-            ],
-        ], 201);
-    }
-
     private function triggerTripSafetyEvent(
         TravelOffer $trip,
         int $userId,
@@ -793,73 +640,6 @@ class ViajauController extends Controller
             * sin($longitudeDelta / 2) ** 2;
 
         return 6371000 * 2 * atan2(sqrt($value), sqrt(1 - $value));
-    }
-
-    public function securityAlerts(Request $request)
-    {
-        $this->assertActiveAccount($request);
-
-        return response()->json([
-            'data' => SafetyAlert::query()
-                ->select([
-                    'id',
-                    'student_profile_id',
-                    'type',
-                    'severity',
-                    'message',
-                    'active',
-                    'latitude',
-                    'longitude',
-                    'accuracy_meters',
-                    'resolved_at',
-                    'resolved_by_user_id',
-                    'created_at',
-                ])
-                ->with('studentProfile:id,name,university')
-                ->where('active', true)
-                ->latest()
-                ->limit(100)
-                ->get(),
-        ]);
-    }
-
-    public function resolveSafetyAlert(Request $request, SafetyAlert $alert)
-    {
-        $this->assertActiveAccount($request);
-
-        $resolvedAlert = DB::transaction(function () use ($request, $alert): SafetyAlert {
-            $lockedAlert = SafetyAlert::query()->lockForUpdate()->findOrFail($alert->id);
-            abort_unless($lockedAlert->active, 409, 'La alerta ya fue atendida.');
-            $lockedAlert->update([
-                'active' => false,
-                'resolved_at' => now(),
-                'resolved_by_user_id' => $request->user()->id,
-            ]);
-
-            return $lockedAlert->fresh();
-        });
-
-        return response()->json([
-            'message' => 'Alerta marcada como atendida.',
-            'data' => $this->safetyAlertData($resolvedAlert),
-        ]);
-    }
-
-    private function safetyAlertData(SafetyAlert $alert): array
-    {
-        return [
-            'id' => $alert->id,
-            'student_profile_id' => $alert->student_profile_id,
-            'type' => $alert->type,
-            'severity' => $alert->severity,
-            'message' => $alert->message,
-            'active' => $alert->active,
-            'latitude' => $alert->latitude,
-            'longitude' => $alert->longitude,
-            'accuracy_meters' => $alert->accuracy_meters,
-            'resolved_at' => $alert->resolved_at?->toISOString(),
-            'created_at' => $alert->created_at?->toISOString(),
-        ];
     }
 
     public function dashboard(Request $request, DashboardAnalyticsService $analytics)

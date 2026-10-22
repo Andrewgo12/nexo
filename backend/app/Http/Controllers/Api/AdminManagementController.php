@@ -76,8 +76,14 @@ class AdminManagementController extends Controller
 
         DB::transaction(function () use ($managedUser, $data): void {
             if (array_key_exists('status', $data)) {
-                $managedUser->update(['status' => $data['status']]);
-                if ($data['status'] === User::STATUS_BLOCKED) {
+                $statusChanged = $managedUser->status !== $data['status'];
+                if ($statusChanged) {
+                    $managedUser->forceFill([
+                        'status' => $data['status'],
+                        'auth_version' => $managedUser->auth_version + 1,
+                    ])->save();
+                }
+                if ($statusChanged || $data['status'] === User::STATUS_BLOCKED) {
                     $managedUser->tokens()->delete();
                 }
             }

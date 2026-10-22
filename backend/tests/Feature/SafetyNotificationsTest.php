@@ -169,6 +169,42 @@ class SafetyNotificationsTest extends TestCase
             && str_contains($request['Body'], 'activó una alerta SOS'));
     }
 
+    public function test_twilio_provider_failure_marks_the_delivery_failed_after_retries(): void
+    {
+        $user = $this->createStudent([
+            'trusted_contact_consent' => true,
+            'trusted_contact_consent_at' => now(),
+            'trusted_contact_phone' => '+573001234567',
+        ]);
+        $event = TripSafetyEvent::create([
+            'user_id' => $user->id,
+            'type' => 'panic',
+            'occurred_at' => now(),
+        ]);
+        $delivery = $event->deliveries()->create([
+            'channel' => 'sms',
+            'status' => 'pending',
+            'recipient_hash' => hash('sha256', '+573001234567'),
+        ]);
+        Http::fake([
+            'api.twilio.com/*' => Http::response(['message' => 'Service unavailable'], 503),
+        ]);
+        $job = new SendSafetyNotification($delivery->id);
+
+        try {
+            $job->handle();
+            self::fail('Expected the notification provider failure to throw.');
+        } catch (\RuntimeException $exception) {
+            $job->failed($exception);
+        }
+
+        $this->assertDatabaseHas('safety_notification_deliveries', [
+            'id' => $delivery->id,
+            'status' => 'failed',
+            'failure_reason' => 'No fue posible entregar la alerta después de varios intentos.',
+        ]);
+    }
+
     public function test_trip_location_generates_one_route_deviation_and_one_arrival_event(): void
     {
         Queue::fake();

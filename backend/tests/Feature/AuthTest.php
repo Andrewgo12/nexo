@@ -10,8 +10,10 @@ use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
@@ -346,6 +348,7 @@ class AuthTest extends TestCase
         $admin = User::factory()->create([
             'role' => User::ROLE_ADMIN,
             'email_verified_at' => now(),
+            'status' => User::STATUS_ACTIVE,
         ]);
         $adminToken = $admin->createToken('web')->plainTextToken;
 
@@ -448,7 +451,75 @@ class AuthTest extends TestCase
         $rotatedSessionCookie = $passwordChange->getCookie(config('session.cookie'), false);
         $this->assertNotNull($rotatedSessionCookie);
         $this->withCookie(config('session.cookie'), $rotatedSessionCookie->getValue())
-            ->getJson('/api/auth/me')->assertOk();
+            ->putJson('/api/auth/profile', ['name' => 'Sesión conservada'])->assertOk();
+    }
+
+    public function test_stale_auth_version_cannot_authorize_a_browser_session(): void
+    {
+        $user = User::factory()->create([
+            'auth_version' => 1,
+        ]);
+        $this->actingAs($user, 'web')->withSession(['auth_version' => 1])
+            ->putJson('/api/auth/profile', ['name' => 'Sesión vigente'])->assertOk();
+
+        $user->forceFill(['auth_version' => 2])->save();
+        $this->putJson('/api/auth/profile', ['name' => 'Sesión obsoleta'])->assertUnauthorized();
+    }
+
+    public function test_blocking_an_account_invalidates_its_existing_browser_session(): void
+    {
+        $student = User::factory()->create([
+            'email_verified_at' => now(),
+        ]);
+        StudentProfile::create([
+            'user_id' => $student->id,
+            'name' => $student->name,
+            'email' => $student->email,
+            'university' => 'UNIAJC',
+            'verified' => true,
+            'status' => 'activo',
+        ]);
+        $login = $this->postJson('/api/login', [
+            'email' => $student->email,
+            'password' => 'password',
+        ])->assertOk();
+        $session = $login->getCookie(config('session.cookie'), false);
+        $admin = User::factory()->create([
+            'role' => User::ROLE_ADMIN,
+            'email_verified_at' => now(),
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        $this->actingAs($admin, 'sanctum')->patchJson("/api/admin/users/{$student->id}", [
+            'status' => User::STATUS_BLOCKED,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('users', [
+            'id' => $student->id,
+            'status' => User::STATUS_BLOCKED,
+            'auth_version' => 2,
+        ]);
+
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders()->withHeaders([
+            'Origin' => 'http://localhost:5173',
+            'Referer' => 'http://localhost:5173/',
+        ])->withCookie(config('session.cookie'), $session->getValue())
+            ->postJson('/api/trips', [
+                'origin' => 'Universidad',
+                'destination' => 'Casa',
+            ])->assertForbidden();
+
+        $student->forceFill(['status' => User::STATUS_ACTIVE])->save();
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders()->withHeaders([
+            'Origin' => 'http://localhost:5173',
+            'Referer' => 'http://localhost:5173/',
+        ])->withCookie(config('session.cookie'), $session->getValue())
+            ->postJson('/api/trips', [
+                'origin' => 'Universidad',
+                'destination' => 'Casa',
+            ])->assertUnauthorized();
     }
 
     public function test_student_cannot_create_a_trip_using_another_students_profile(): void
@@ -496,6 +567,33 @@ class AuthTest extends TestCase
             ->assertJsonStructure(['user' => ['photo_url']]);
         $this->assertStringContainsString('profile-photos/', $response->json('user.photo_url'));
         Storage::disk('public')->assertExists($user->fresh()->profile_photo_path);
+    }
+
+    public function test_profile_photo_is_removed_when_profile_transaction_fails(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create();
+        $token = $user->createToken('web')->plainTextToken;
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l0sAAAAASUVORK5CYII=');
+        DB::unprepared(
+            'CREATE TRIGGER fail_profile_update BEFORE UPDATE ON users '
+            ."BEGIN SELECT RAISE(ABORT, 'forced update failure'); END;",
+        );
+
+        $this->withToken($token)->post('/api/profile/photo', [
+            'photo' => UploadedFile::fake()->createWithContent('avatar.png', $png),
+        ], ['Accept' => 'application/json'])->assertServerError();
+
+        $this->assertSame([], Storage::disk('public')->allFiles('profile-photos'));
+        $this->assertNull($user->fresh()->profile_photo_path);
+    }
+
+    public function test_student_profile_user_id_has_a_database_unique_index(): void
+    {
+        $this->assertContains(
+            'student_profiles_user_id_unique',
+            Schema::getIndexListing('student_profiles'),
+        );
     }
 
     public function test_production_http_requests_are_rejected_and_https_requests_are_allowed(): void

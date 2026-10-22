@@ -1,7 +1,44 @@
 const API_BASE_URL = (import.meta.env?.VITE_API_URL || '/api').replace(/\/$/, '');
 const API_ROOT_URL = API_BASE_URL.replace(/\/api(?:\/v\d+)?$/, '');
 const TOKEN_KEY = 'viajau-auth-token';
+const REQUEST_TIMEOUT_MS = 15000;
 let csrfCookiePromise;
+
+function createTimeoutError() {
+  const error = new Error('La solicitud tardó demasiado. Intenta de nuevo.');
+  error.name = 'TimeoutError';
+  error.status = 408;
+  return error;
+}
+
+async function withRequestTimeout(operation, callerSignal) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const abortRequest = () => controller.abort(callerSignal.reason);
+  if (callerSignal?.aborted) {
+    abortRequest();
+  } else {
+    callerSignal?.addEventListener('abort', abortRequest, { once: true });
+  }
+
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (timedOut) throw createTimeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    callerSignal?.removeEventListener('abort', abortRequest);
+  }
+}
+
+function fetchWithTimeout(url, options) {
+  return withRequestTimeout((signal) => fetch(url, { ...options, signal }), options.signal);
+}
 
 function getXsrfToken() {
   if (typeof document === 'undefined') return null;
@@ -35,7 +72,7 @@ async function readJsonResponse(response) {
 
 async function ensureCsrfCookie(force = false) {
   if (!force && getXsrfToken()) return;
-  csrfCookiePromise ??= fetch(`${API_ROOT_URL}/sanctum/csrf-cookie`, {
+  csrfCookiePromise ??= fetchWithTimeout(`${API_ROOT_URL}/sanctum/csrf-cookie`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   }).then((response) => {
@@ -66,58 +103,62 @@ async function request(path, requestOptions = {}) {
   const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const method = (options.method || 'GET').toUpperCase();
   const isUnsafeMethod = !['GET', 'HEAD', 'OPTIONS'].includes(method);
-  const sendRequest = () => {
-    const xsrfToken = getXsrfToken();
-    const headers = new Headers(options.headers);
-    headers.set('Accept', 'application/json');
-    if (isMultipart) {
-      headers.delete('Content-Type');
-    } else if (options.body != null && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
+  return withRequestTimeout(async (signal) => {
+    if (isUnsafeMethod) await ensureCsrfCookie();
+    const sendRequest = () => {
+      const xsrfToken = getXsrfToken();
+      const headers = new Headers(options.headers);
+      headers.set('Accept', 'application/json');
+      if (isMultipart) {
+        headers.delete('Content-Type');
+      } else if (options.body != null && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+      }
+      headers.delete('Authorization');
+      if (isUnsafeMethod && xsrfToken) headers.set('X-XSRF-TOKEN', xsrfToken);
+      return fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        credentials: 'include',
+        headers,
+        signal,
+      });
+    };
+
+    let response = await sendRequest();
+    if (response.status === 419 && isUnsafeMethod) {
+      csrfCookiePromise = undefined;
+      await ensureCsrfCookie(true);
+      response = await sendRequest();
     }
-    headers.delete('Authorization');
-    if (isUnsafeMethod && xsrfToken) headers.set('X-XSRF-TOKEN', xsrfToken);
-    return fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      credentials: 'include',
-      headers,
-    });
-  };
-  if (isUnsafeMethod) await ensureCsrfCookie();
-  let response = await sendRequest();
-  if (response.status === 419 && isUnsafeMethod) {
-    csrfCookiePromise = undefined;
-    await ensureCsrfCookie(true);
-    response = await sendRequest();
-  }
-  const payload = await readJsonResponse(response);
+    const payload = await readJsonResponse(response);
 
-  if (!response.ok) {
-    const validationErrors = Object.values(payload.errors || {}).flat();
-    const error = new Error(validationErrors[0] || payload.message || `La solicitud falló con el estado ${response.status}.`);
-    error.status = response.status;
-    throw error;
-  }
+    if (!response.ok) {
+      const validationErrors = Object.values(payload.errors || {}).flat();
+      const error = new Error(validationErrors[0] || payload.message || `La solicitud falló con el estado ${response.status}.`);
+      error.status = response.status;
+      throw error;
+    }
 
-  return payload;
+    return payload;
+  }, options.signal);
 }
 
 export function registerAccount(data) {
-  return request('/register', {
+  return request('/auth/register', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
 export function loginAccount(data) {
-  return request('/login', {
+  return request('/auth/login', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
 export function getCurrentAccount(token = getAuthToken()) {
-  return request('/me', { token });
+  return request('/auth/me', { token });
 }
 
 export function getTravelOffers(filters, token = getAuthToken(), signal) {
@@ -223,19 +264,22 @@ export function updateAdminInsuranceEnrollment(enrollmentId, data, token = getAu
 }
 
 export async function downloadAdminInsurancePolicy(enrollmentId) {
-  const response = await fetch(`${API_BASE_URL}/admin/insurance/enrollments/${enrollmentId}/document`, {
-    credentials: 'include',
-    headers: {
-      Accept: 'application/pdf',
-    },
+  return withRequestTimeout(async (signal) => {
+    const response = await fetch(`${API_BASE_URL}/admin/insurance/enrollments/${enrollmentId}/document`, {
+      credentials: 'include',
+      headers: {
+        Accept: 'application/pdf',
+      },
+      signal,
+    });
+    if (!response.ok) {
+      const payload = await readJsonResponse(response);
+      const error = new Error(payload.message || `No fue posible descargar el documento de póliza (estado ${response.status}).`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.blob();
   });
-  if (!response.ok) {
-    const payload = await readJsonResponse(response);
-    const error = new Error(payload.message || `No fue posible descargar el documento de póliza (estado ${response.status}).`);
-    error.status = response.status;
-    throw error;
-  }
-  return response.blob();
 }
 
 export function publishTravelOffer(data, token = getAuthToken()) {
@@ -364,7 +408,7 @@ export function resolveSafetyAlert(alertId, token = getAuthToken()) {
 }
 
 export function logoutAccount(token = getAuthToken()) {
-  return request('/logout', { method: 'POST', token });
+  return request('/auth/logout', { method: 'POST', token });
 }
 
 export function resendVerification(token = getAuthToken()) {

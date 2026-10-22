@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\InsuranceController;
 use App\Http\Controllers\Api\MembershipController;
 use App\Http\Controllers\Api\ReputationController;
+use App\Http\Controllers\Api\SafetyAlertController;
+use App\Http\Controllers\Api\TravelMatchController;
 use App\Http\Controllers\Api\TripCommunicationController;
 use App\Http\Controllers\Api\ViajauController;
 use App\Http\Controllers\Api\WompiMembershipController;
@@ -21,7 +23,7 @@ Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->m
 Route::post('/payments/wompi/webhook', [WompiMembershipController::class, 'webhook'])
     ->middleware('throttle:120,1');
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+Route::middleware(['auth:sanctum', 'account.active'])->get('/user', function (Request $request) {
     return $request->user();
 });
 
@@ -30,13 +32,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/auth/me', [AuthController::class, 'me']);
+    Route::post('/auth/email/verification-notification', [AuthController::class, 'resendVerification'])
+        ->middleware('throttle:6,1');
+});
+
+Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::put('/auth/profile', [AuthController::class, 'updateProfile']);
     Route::post('/profile/photo', [AuthController::class, 'updateProfile']);
     Route::put('/auth/change-password', [AuthController::class, 'changePassword'])
         ->middleware('throttle:5,1');
-    Route::post('/auth/email/verification-notification', [AuthController::class, 'resendVerification'])
-        ->middleware('throttle:6,1');
     Route::get('/students/{id}', [ViajauController::class, 'showStudent']);
     Route::put('/students/{id}/profile', [ViajauController::class, 'updateProfile']);
 
@@ -74,8 +79,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('throttle:10,1');
         Route::patch('/trip-requests/{tripRequest}', [ViajauController::class, 'updateTripRequest'])
             ->middleware('throttle:20,1');
-        Route::get('/matches', [ViajauController::class, 'listMatches']);
-        Route::post('/alerts', [ViajauController::class, 'createAlert'])->middleware('throttle:3,1');
+        Route::get('/matches', [TravelMatchController::class, 'index']);
+        Route::post('/alerts', [SafetyAlertController::class, 'store'])->middleware('throttle:3,1');
     });
 
     Route::middleware(['verified', 'role:admin,university'])->get('/dashboard', [ViajauController::class, 'dashboard']);
@@ -99,7 +104,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/transit-feed/latest', [AdminManagementController::class, 'latestTransitFeed']);
     });
     Route::middleware(['verified', 'role:security,admin'])->group(function () {
-        Route::get('/security/alerts', [ViajauController::class, 'securityAlerts']);
-        Route::patch('/security/alerts/{alert}/resolve', [ViajauController::class, 'resolveSafetyAlert']);
+        Route::get('/security/alerts', [SafetyAlertController::class, 'index']);
+        Route::patch('/security/alerts/{alert}/resolve', [SafetyAlertController::class, 'resolve']);
     });
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   AlertTriangle, 
@@ -6,7 +6,6 @@ import {
   Moon, 
   ShieldCheck, 
   CloudRain, 
-  MapPin, 
   Plus, 
   CheckCircle2 
 } from 'lucide-react';
@@ -25,6 +24,27 @@ export default function IncidentReportModal({
   const [severity, setSeverity] = useState('medium');
   const [locationName, setLocationName] = useState(activeUniversity.shortName);
   const [submitted, setSubmitted] = useState(false);
+  const submissionTimeoutRef = useRef(null);
+
+  useEffect(() => () => {
+    if (submissionTimeoutRef.current !== null) window.clearTimeout(submissionTimeoutRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen || submissionTimeoutRef.current === null) return;
+    window.clearTimeout(submissionTimeoutRef.current);
+    submissionTimeoutRef.current = null;
+    setSubmitted(false);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    if (submissionTimeoutRef.current !== null) {
+      window.clearTimeout(submissionTimeoutRef.current);
+      submissionTimeoutRef.current = null;
+    }
+    setSubmitted(false);
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -52,9 +72,10 @@ export default function IncidentReportModal({
     };
 
     setSubmitted(true);
-    setTimeout(() => {
-      onAddIncident(newIncident);
+    submissionTimeoutRef.current = window.setTimeout(() => {
+      submissionTimeoutRef.current = null;
       setSubmitted(false);
+      onAddIncident(newIncident);
       onClose();
     }, 1000);
   };
@@ -75,7 +96,7 @@ export default function IncidentReportModal({
               </p>
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+          <button className="modal-close" onClick={handleClose}><X size={20} /></button>
         </div>
 
         {/* Form */}
@@ -208,7 +229,7 @@ export default function IncidentReportModal({
 
           {/* Footer Buttons */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+            <button type="button" className="btn-secondary" onClick={handleClose}>Cancelar</button>
             <button 
               type="submit" 
               className="btn-primary"

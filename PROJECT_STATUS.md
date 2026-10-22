@@ -1,8 +1,8 @@
-# ViajaU - Estado real del proyecto
+# Archivo histórico: estado del proyecto al 2026-10-20
 
 Fecha de revisión: 2026-10-20
-Rama: `agents/dominant-wallaby`
-Repositorio: `Andrewgo12/nexo`
+
+> Este documento conserva un snapshot histórico y no debe usarse para evaluar el estado actual ni para preparar despliegues. Sus porcentajes, dependencias pendientes y referencias a ramas/configuraciones pueden haber quedado obsoletos. [README.md](./README.md) es la fuente de verdad vigente y enlaza las pruebas, capacidades y dependencias operativas actuales.
 
 ## 1) Resumen ejecutivo
 
