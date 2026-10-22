@@ -6,6 +6,19 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{js,jsx}'],
+    pool: 'vmThreads',
     setupFiles: ['./src/test/setup.js'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/**/*.test.{js,jsx}', 'src/test/**'],
+      thresholds: {
+        branches: 7,
+        functions: 7,
+        lines: 9,
+        statements: 9,
+      },
+    },
   },
 });

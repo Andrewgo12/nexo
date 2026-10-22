@@ -307,7 +307,7 @@ export default function CometDial({
     L.text = '';
     L.valueText = '';
     paintRef.current?.(performance.now());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [min, max, step, sweep, thickness, cometReach, cometWidth, unit]);
   useEffect(() => {
     if (value === undefined || grip.current) return;

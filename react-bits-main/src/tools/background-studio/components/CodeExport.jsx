@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import CodeExample, { injectPropsIntoCode } from '../../../components/code/CodeExample';
+import CodeExample from '../../../components/code/CodeExample';
+import { injectPropsIntoCode } from '../../../components/code/injectPropsIntoCode';
 import CopyForAIMenu from '../../../components/common/CopyForAIMenu';
 import { ComponentPropsProvider } from '../../../components/context/ComponentPropsContext';
 import { ActiveRouteContext } from '../../../components/context/ActiveRouteContext/ActiveRouteContext';

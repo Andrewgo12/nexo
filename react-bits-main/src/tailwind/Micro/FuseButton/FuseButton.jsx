@@ -128,7 +128,7 @@ export default function FuseButton({
       document.removeEventListener('visibilitychange', onVisibility);
       anim.current?.cancel();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export default function FuseButton({
     if (pauseOnHover) return;
     pause.current.hover = false;
     syncPlayState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pauseOnHover]);
 
   const handlePointerDown = e => {

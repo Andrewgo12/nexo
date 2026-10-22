@@ -9,16 +9,19 @@ import { auditPropDocs, readSourceDefaults } from './checkPropDocs.js';
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'react-bits-props-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  return (file, contents) => {
-    const fullPath = path.join(root, file);
-    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-    fs.writeFileSync(fullPath, contents);
-    return fullPath;
+  return {
+    root,
+    write(file, contents) {
+      const fullPath = path.join(root, file);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, contents);
+      return fullPath;
+    },
   };
 }
 
 test('reads typed and wrapped props without treating internal defaults as public props', t => {
-  const write = fixture(t);
+  const { write } = fixture(t);
   const file = write(
     'Example.tsx',
     `
@@ -41,16 +44,14 @@ test('reads typed and wrapped props without treating internal defaults as public
 });
 
 test('compares semantic scalar defaults and reports docs and variant drift', t => {
-  const write = fixture(t);
-  let root;
+  const { root, write } = fixture(t);
   for (const variant of ['content', 'tailwind', 'ts-default', 'ts-tailwind']) {
-    const file = write(
+    write(
       `src/${variant}/Animations/Example/Example.${variant.startsWith('ts-') ? 'tsx' : 'jsx'}`,
       `
       const Example = ({ speed = ${variant === 'tailwind' ? 3 : 2}, color = '#fff', enabled = true, title = 'Actual', src = 'https://example.com/image.jpg' }) => null;
     `
     );
-    root = file.split('/src/')[0];
   }
   write(
     'src/demo/Animations/ExampleDemo.jsx',
@@ -78,7 +79,7 @@ test('compares semantic scalar defaults and reports docs and variant drift', t =
 });
 
 test('fails instead of silently skipping an unsupported component signature', t => {
-  const write = fixture(t);
+  const { write } = fixture(t);
   const file = write('Example.jsx', 'const Example = props => null;');
   assert.throws(() => readSourceDefaults(file, 'Example'), /Cannot read prop defaults/);
 });

@@ -132,7 +132,7 @@ export default function SwipeToast({
       flags.current.hover = false;
       syncFuse();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pauseOnHover]);
   useEffect(() => {
     const onVisibility = () => {
@@ -145,7 +145,7 @@ export default function SwipeToast({
       clearTimeout(closeTimer.current);
       anim.current?.cancel();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const swipeOut = (dy, v) => {

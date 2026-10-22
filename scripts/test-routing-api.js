@@ -49,9 +49,9 @@ localStorage.setItem('viajau-local-db-v1', JSON.stringify({
 const safeAppData = readAppData();
 assert.equal(safeAppData.email, undefined);
 assert.equal(safeAppData.emergency_contact, undefined);
+assert.equal(safeAppData.name, undefined);
 assert.equal(safeAppData.notifications[0].title, DEFAULT_APP_DATA.notifications[0].title);
 assert.equal(safeAppData.notifications[0].active, true);
-assert.equal(JSON.parse(localStorage.getItem('viajau-local-db-v1')).name, undefined);
 writeAppData({ name: 'Ana Example', email: 'ana@example.com', activeTab: 'profile' });
 assert.equal(JSON.parse(localStorage.getItem('viajau-local-db-v1')).email, undefined);
 

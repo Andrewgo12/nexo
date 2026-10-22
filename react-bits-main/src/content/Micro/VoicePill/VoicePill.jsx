@@ -330,11 +330,11 @@ export default function VoicePill({
       window.removeEventListener('blur', stop);
       document.removeEventListener('visibilitychange', onVis);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pressed]);
   useEffect(() => {
     if (disabled) end('disabled');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [disabled]);
   useEffect(() => {
     const s = st.current;
@@ -343,7 +343,7 @@ export default function VoicePill({
       cancelAnimationFrame(s.raf);
       s.audio?.ctx.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const radius = shape === 'rounded' ? Math.round(size * 0.29) : size / 2;

@@ -1,19 +1,22 @@
 # ViajaU
 
-> **Estado documentado:** revisión del repositorio `main` en el commit `4eda677` (22 de octubre de 2026). Las versiones prefijadas con `^` en los manifiestos son rangos permitidos; las versiones bloqueadas corresponden a los lockfiles inspeccionados. El estado funcional no equivale a autorización para operar un servicio de transporte o de emergencia en producción.
+> **Estado documentado:** revisión del checkout `main` en el commit `949e1c2` (22 de octubre de 2026), con cambios locales en curso. Las versiones prefijadas con `^` en los manifiestos son rangos permitidos; las versiones bloqueadas corresponden a los lockfiles inspeccionados. El estado funcional no equivale a autorización para operar un servicio de transporte o de emergencia en producción.
 
 ## 1. Estado actual del proyecto
 
-- **Fase de desarrollo:** MVP en desarrollo. La aplicación tiene cliente React y API Laravel funcionales, pero hay integraciones externas opcionales, áreas incompletas, incidencias de lint y falta de una validación backend reproducible en el entorno local auditado. No se declara lista para producción.
-- **Cobertura de pruebas:** no hay porcentaje disponible. Vitest no configura recolector de cobertura y `phpunit.xml` no configura reportes de cobertura. No se debe inferir cobertura a partir de la cantidad de pruebas.
+- **Fase de desarrollo:** MVP en desarrollo. La aplicación tiene cliente React y API Laravel funcionales, pero hay integraciones externas opcionales y áreas incompletas. No se declara lista para producción.
+- **Cobertura de pruebas:** Vitest reportó 9,30 % de cobertura de líneas en la última ejecución completada (8 archivos y 16 pruebas). `test:coverage` aplica pisos globales de 7 % en ramas/funciones y 9 % en líneas/sentencias. No hay reporte porcentual configurado para PHPUnit; la cobertura frontend no representa la cobertura del backend.
 - **Verificación observada en este checkout:**
   - `npm run build`: correcto.
-  - `npm run test:unit`: 3 archivos, 5 pruebas aprobadas.
+  - `npm run test:unit`: 8 archivos, 16 pruebas aprobadas en la última ejecución completada.
+  - `npm run test:coverage`: correcto; 8 archivos y 16 pruebas aprobadas, con 9,30 % de cobertura de líneas y umbrales globales satisfechos.
   - `npm run test:routing`: correcto; prueba contratos del cliente con respuestas simuladas, no una API desplegada.
-  - `node scripts/test-viajau-functions.js`: ejecutable auxiliar, no está expuesto como script npm ni aparece en `Product CI`.
-  - `npm run lint:product`: falla por 45 diagnósticos Oxlint al usar `--deny-warnings`; incluye imports/variables sin uso y problemas de pureza/dependencias React.
-  - `cd backend; php artisan test`: no verificable en este entorno. PHPUnit reportó 116 pruebas, 2 aprobadas y 114 errores por `could not find driver`; el PHP local no tiene `pdo_sqlite`/`sqlite3`. El workflow `Product CI` sí instala esas extensiones, pero su último resultado remoto no se infiere aquí.
-- **Automatización:** `Product CI` cubre build, pruebas y lint del producto, además de PHPUnit en Ubuntu/PHP 8.4 con SQLite. `React Bits CI` valida el subproyecto embebido en su propio entorno.
+  - `npm run lint:react-bits`: correcto; ESLint finalizó sin errores ni advertencias.
+  - `npm --prefix react-bits-main run build`: no completó en este equipo Windows de 8 GB; el proceso Vite alcanzó el límite de heap de Node (~2 GB) durante `transforming`. El subpaso de generación de registry completó 1.274 elementos; no se afirma que el build de producción haya pasado.
+  - `node scripts/test-viajau-functions.js`: diagnóstico exploratorio; reporta 39 ejecuciones sin excepciones, pero no valida resultados y captura errores sin fallar el proceso, por lo que no cuenta como suite de pruebas.
+  - `npm run lint:product`: correcto; Oxlint termina sin diagnósticos con `--deny-warnings`.
+  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó 126 errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 128 pruebas y 725 aserciones. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
+- **Automatización:** `Product CI` cubre build, pruebas, cobertura frontend y lint del producto, además de PHPUnit en Ubuntu/PHP 8.4 con SQLite. `React Bits CI` valida el subproyecto embebido en su propio entorno.
 
 | # | Módulo de producto | Estado | Alcance confirmado y límites |
 |---:|---|---|---|
@@ -179,9 +182,9 @@ Las migraciones incluyen FKs con acciones explícitas, email único, perfil úni
 
 ### Requisitos
 
-1. Node.js 22 para coincidir con CI y npm compatible con el lockfile v3.
+1. Node.js 22 como runtime de CI y `.nvmrc`; ambos manifiestos del producto declaran Node `>=22`. npm compatible con lockfile v3.
 2. PHP `>=8.3` y Composer 2.
-3. Extensiones PHP requeridas por el driver escogido; para pruebas locales, `pdo_sqlite` y `sqlite3`. La configuración auditada del equipo no las tenía.
+3. Extensiones PHP requeridas por el driver escogido; para pruebas locales, `pdo_sqlite` y `sqlite3`. En el entorno auditado los DLL existen, pero estaban deshabilitados.
 4. Git y acceso de red a los proveedores externos si se prueban mapas, geocodificación, correo, SMS/WhatsApp o Wompi.
 5. Para operación de avisos: SMTP, credenciales Twilio si se habilitan, worker de cola persistente y scheduler configurado. No son necesarios para compilar el frontend.
 
@@ -205,7 +208,7 @@ php artisan migrate
 php artisan serve
 ```
 
-En PowerShell de Windows, usa `Copy-Item .env.example .env` en lugar de `cp`. Si se usa SQLite, configura `DB_DATABASE` al archivo local de base de datos y créalo antes de migrar; para las pruebas, instala explícitamente `pdo_sqlite` y `sqlite3`. Si se usa otro motor, configura su driver/host/credenciales y verifica las migraciones contra ese motor antes de producción.
+En PowerShell de Windows, usa `Copy-Item .env.example .env` en lugar de `cp`. Si se usa SQLite, configura `DB_DATABASE` al archivo local de base de datos y créalo antes de migrar. Para pruebas, verifica `php --ini`, habilita `extension=pdo_sqlite` y `extension=sqlite3` en el `php.ini` activo (y confirma que `extension_dir` apunta al directorio `ext` de PHP); luego verifica con `php -m` y ejecuta `php artisan test` desde `backend`. Si se usa otro motor, configura su driver/host/credenciales y verifica las migraciones contra ese motor antes de producción.
 
 La verificación de correo requiere configurar el mailer. Los avisos asíncronos requieren configurar cola, credenciales y worker; para la función programada, instala `php artisan schedule:run` en el scheduler del sistema. No uses credenciales de sandbox en producción ni habilites pagos reales: la configuración de producto los mantiene desactivados.
 
@@ -302,9 +305,11 @@ Laravel consume además variables estándar del driver seleccionado (`DB_CHARSET
 | `npm run build` | Build de producción Vite; no ejecuta pruebas ni lint. |
 | `npm run preview` | Sirve localmente el build generado. |
 | `npm run test:unit` | Vitest sobre `src/**/*.test.{js,jsx}` con jsdom. |
+| `npm run test:coverage` | Ejecuta Vitest con cobertura V8 y umbrales globales configurados. |
 | `npm run test:routing` | Pruebas de contrato de routing/cliente API con Node y mocks. |
-| `npm run lint` / `npm run lint:product` | Oxlint sobre `src/` con `--deny-warnings`; actualmente falla por diagnósticos. |
-| `node scripts/test-viajau-functions.js` | Ejecución manual de prueba auxiliar; no está declarada en `package.json` ni CI. |
+| `npm run lint` / `npm run lint:product` | Oxlint sobre `src/` con `--deny-warnings`. |
+| `npm run lint:react-bits` | Ejecuta ESLint en el subproyecto `react-bits-main/`. |
+| `node scripts/test-viajau-functions.js` | Diagnóstico exploratorio sin aserciones; captura errores y no falla el proceso, por lo que no sustituye pruebas ni se ejecuta en CI. |
 
 No hay script de formato configurado en la raíz. `npm run lint:react-bits` ejecuta el lint del subproyecto aparte; no se debe confundir con lint del producto.
 
@@ -415,14 +420,14 @@ Las rutas alias antiguas de auth (`/api/register`, `/api/login`, `/api/logout`, 
 
 ## 8. Deuda técnica y puntos de mejora observados
 
-1. **No hay cobertura cuantificada.** Vitest y PHPUnit no configuran reporte porcentual; agregar cobertura y umbrales por capa antes de usar una cifra de calidad.
+1. **Cobertura frontend todavía baja.** Vitest mide 9,30 % de líneas en la última ejecución observada y sus umbrales actuales son pisos mínimos de no regresión. PHPUnit no genera reporte porcentual; ampliar cobertura de flujos críticos y medir el backend por separado.
 2. **Pruebas backend y entorno local.** La suite requiere PHP `^8.3` y `pdo_sqlite`; el PHP incluido con XAMPP (8.2) no satisface el requisito y el PHP 8.5 del entorno auditado necesita habilitar SQLite explícitamente. En CI debe conservarse la validación de dependencias; PHPUnit usa SQLite en memoria y no debe apuntarse a MySQL de XAMPP.
 3. **Checklist de cumplimiento manual.** La interfaz ya no presenta porcentajes ni certificaciones de producción; los estados editables del checklist son anotaciones locales y no miden cobertura, readiness ni disponibilidad.
 4. **Mocks/datos de demostración presentes.** `src/data/mockData.js` contiene perfiles, ofertas, notificaciones, incidentes y datos de informe estáticos. Separar fixtures de pantallas operativas y mantenerlos rotulados para evitar confundirlos con información real.
 5. **Componentes y hojas de estilo extensos.** Permanecen archivos grandes, entre ellos `mockData.js`, `App.css`, `index.css`, `InteractiveMap.jsx`, `AcademicReportViewer.jsx`, `authApi.js` y `TripExplorer.jsx`; evaluar su separación por responsabilidad sin alterar contratos públicos.
 6. **Fechas históricas de ofertas.** Las ofertas existentes con `departure_date = NULL` se conservan, pero quedan excluidas de búsqueda y recomendaciones; definir si se migran con fechas confirmadas o se archivan, sin inventar fechas.
 7. **Rutas/API configuradas para localhost.** `vite.config.js` fija el proxy a `127.0.0.1:8000`; no hay variable raíz configurada para cambiar API por entorno. Alinear configuración de despliegue/proxy con dominios reales.
-8. **Protección de secretos en raíz incompleta.** `backend/.gitignore` excluye `.env`, pero el `.gitignore` raíz no tiene regla explícita para `.env` raíz. Agregarla y comprobar que ningún secreto de Vite/credencial se añada al índice.
+8. **Protección de secretos en raíz.** El `.gitignore` raíz ahora excluye `.env` y `.env.*` sin excluir plantillas `*.example`; `backend/.gitignore` también protege el entorno de Laravel. Verificar que los archivos de entorno locales no se añadan al índice.
 9. **Persistencia de sesión y despliegue requieren configuración explícita.** Definir `SANCTUM_STATEFUL_DOMAINS`, CORS exacto, HTTPS, `SESSION_SECURE_COOKIE`, dominio/SameSite y CSRF por topología; no validar solo en localhost.
 10. **Integraciones de seguridad no equivalen a respuesta de emergencia.** Email/SMS/WhatsApp son best-effort y dependen de consentimiento, credenciales y cola/scheduler. Los fallos de transporte de verificación de correo ahora son visibles y reintentables; faltan pruebas operativas de proveedores, observabilidad externa y protocolo humano de incidentes.
 11. **Ubicación es dato sensible.** El backend mantiene solo la última coordenada por participante, la borra al completar/cancelar y expira coordenadas sin actualización después de 24 h mediante scheduler. Producción requiere verificar que el scheduler corra, y revisar permisos, almacenamiento, logs, copias, acceso administrativo, borrado y obligaciones locales de protección de datos.
@@ -431,12 +436,13 @@ Las rutas alias antiguas de auth (`/api/register`, `/api/login`, `/api/logout`, 
 14. **Monolito de API frontend restante.** `authApi.js` concentra llamadas de varios dominios; dividirlo por dominio preservando el contrato público y centralizar manejo de sesión, errores, abortos y timeout.
 15. **Configuración de TypeScript no verificada.** `strict: false`, `allowJs: true`; TypeScript no está declarado directamente en el package raíz y no existe gate de typecheck, aunque hay `tsconfig.json` y un archivo `.tsx`. Añadir dependencia/CI de forma explícita y migrar con chequeo estricto progresivo.
 17. **Dependencias UI redundantes.** Conviven Chakra, MUI, Bootstrap/React Bootstrap, Radix y Tailwind. Revisar uso real, peso de bundle, consistencia visual y superficie de mantenimiento antes de añadir más librerías.
-18. **Versión Node no fijada en el proyecto.** CI usa Node 22 pero no hay `engines`/`.nvmrc`; fijar política de runtime y advertir diferencias entre máquina local y CI.
+18. **Política de runtime Node atendida.** `.nvmrc` fija la línea 22, ambos manifiestos declaran `engines.node >=22` y los lockfiles se sincronizaron. CI usa Node 22; las pruebas locales también deben seguir esa línea para reproducibilidad.
 19. **Manifiesto frontend backend duplicado.** `backend/package.json` no tiene lockfile propio y Composer conserva scripts que llaman npm; documentar si es residual o integrarlo correctamente para evitar instalaciones/builds desde el directorio equivocado.
-20. **Estructura de prueba reducida en frontend.** Solo hay tres archivos Vitest (cinco pruebas en la ejecución auditada) frente a múltiples servicios, hooks, estados y componentes; ampliar casos para errores, accesibilidad, autorización visual y estados de carrera.
-21. **Script de prueba auxiliar fuera de CI.** `scripts/test-viajau-functions.js` se ejecuta manualmente pero no forma parte de `npm test`, scripts npm ni workflow. Integrarlo o retirarlo como prueba activa documentada.
+20. **Estructura de prueba reducida en frontend.** Hay siete archivos Vitest y once pruebas en la última ejecución observada frente a múltiples servicios, hooks, estados y componentes; ampliar casos para errores, accesibilidad, autorización visual y estados de carrera.
+21. **Script auxiliar sin aserciones.** `scripts/test-viajau-functions.js` imprime resultados de 39 funciones, pero no compara valores esperados y captura errores sin propagar un código de salida fallido. No debe tratarse como prueba ni añadirse a CI hasta convertir sus casos en aserciones automatizadas.
 22. **Compatibilidad SQL no demostrada fuera de SQLite.** El código configura varios motores, pero CI prueba SQLite. Confirmar índices, locks, constraints, transacciones y migraciones con el motor de producción elegido.
 23. **Límites/uso de servicios públicos.** Nominatim, OSRM y ArcGIS son dependencias de terceros sin SLA del proyecto; se necesitan política de rate-limit/cache, fallback explícito, atribución y monitoreo.
 24. **Documentación backend parcialmente heredada.** `backend/README.md` conserva contenido del esqueleto Laravel además de documentación ViajaU; consolidar instalación y comandos propios para reducir ambigüedad.
 25. **No hay despliegue repetible versionado.** No se encontró Docker/Compose ni manifiesto de infraestructura. Incorporar despliegue, health checks, secretos, migraciones, workers, scheduler, almacenamiento privado, backups y procedimiento de rollback antes de producción.
 26. **No inferir cumplimiento por el checklist.** Revisar privacidad, consentimiento, retención/borrado, términos, seguros, movilidad compartida y atención de incidentes con especialistas legales y operativos en cada jurisdicción.
+27. **Memoria del build React Bits en entorno Windows.** La compilación completa no se pudo verificar localmente: Vite excedió el heap predeterminado de Node durante la transformación. Medir en CI y en una máquina con memoria disponible; no subir el límite de heap sin comprobar el consumo total y la capacidad del runner.

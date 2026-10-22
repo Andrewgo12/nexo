@@ -117,7 +117,7 @@ export default function FolderFloat({
     };
     measure();
     document.fonts?.ready.then(measure);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [n, labelsKey]);
 
   const stopPhysics = useCallback(() => {

@@ -146,12 +146,12 @@ export default function SloshGauge({
       mq.removeEventListener('change', sync);
       cancelAnimationFrame(s.raf);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {
     paint();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [width, height, tilt, showValue, interactive, disabled]);
 
   const levelAt = (clientY, g) =>
