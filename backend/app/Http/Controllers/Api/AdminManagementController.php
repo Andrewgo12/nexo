@@ -113,9 +113,10 @@ class AdminManagementController extends Controller
                 $builder->where('active', ($filters['status'] ?? 'active') === 'active');
             });
         if ($request->user()->role === User::ROLE_UNIVERSITY) {
+            $university = $this->requireAssignedUniversity($request);
             $query->whereHas('studentProfile', fn ($profiles) => $profiles->where(
                 'university',
-                $request->user()->university ?? '',
+                $university,
             ));
         }
 
@@ -168,9 +169,8 @@ class AdminManagementController extends Controller
             'name' => ['required', 'string', 'max:120'],
         ]);
         $university = $request->user()->role === User::ROLE_UNIVERSITY
-            ? $request->user()->university
+            ? $this->requireAssignedUniversity($request)
             : $data['university'];
-        abort_if(! $university, 422, 'La cuenta institucional no tiene una universidad asignada.');
 
         $entry = InstitutionalCatalogEntry::query()->firstOrCreate(
             ['university' => $university, 'type' => $data['type'], 'name' => trim($data['name'])],
@@ -247,7 +247,7 @@ class AdminManagementController extends Controller
     private function catalogUniversity(Request $request): string
     {
         if ($request->user()->role === User::ROLE_UNIVERSITY) {
-            return $request->user()->university ?? '';
+            return $this->requireAssignedUniversity($request);
         }
 
         $data = $request->validate([
@@ -260,26 +260,35 @@ class AdminManagementController extends Controller
     private function scopeUsersToInstitution(Request $request, $query): void
     {
         if ($request->user()->role === User::ROLE_UNIVERSITY) {
-            $university = $request->user()->university ?? '';
+            $university = $this->requireAssignedUniversity($request);
             $query->whereHas('studentProfile', fn ($profiles) => $profiles->where('university', $university));
         }
     }
 
     private function assertInstitutionOwnsUser(Request $request, User $user): void
     {
-        abort_if(
-            $request->user()->role === User::ROLE_UNIVERSITY
-            && $user->studentProfile?->university !== $request->user()->university,
-            404,
-        );
+        if ($request->user()->role !== User::ROLE_UNIVERSITY) {
+            return;
+        }
+
+        $university = $this->requireAssignedUniversity($request);
+        abort_unless($user->studentProfile?->university === $university, 404);
     }
 
     private function assertInstitutionOwnsCatalogEntry(Request $request, InstitutionalCatalogEntry $entry): void
     {
-        abort_if(
-            $request->user()->role === User::ROLE_UNIVERSITY
-            && $entry->university !== $request->user()->university,
-            404,
-        );
+        if ($request->user()->role !== User::ROLE_UNIVERSITY) {
+            return;
+        }
+
+        abort_unless($entry->university === $this->requireAssignedUniversity($request), 404);
+    }
+
+    private function requireAssignedUniversity(Request $request): string
+    {
+        $university = $request->user()->university;
+        abort_unless(is_string($university) && trim($university) !== '', 403, 'La cuenta institucional no tiene una universidad asignada.');
+
+        return $university;
     }
 }

@@ -25,6 +25,7 @@ Los módulos 11–16 siguen en el inventario. El módulo 6 requiere configuraci�
 - Backend: desde `backend`, `composer install`, `php artisan migrate`, `php artisan serve`.
 - Suite backend: desde `backend`, `php artisan test`. Si PHP no carga SQLite automáticamente, habilita `pdo_sqlite` y `sqlite3` al ejecutar PHPUnit.
 - Configura `.env` de Laravel y la URL de API del frontend para el entorno local; no copies credenciales reales al repositorio.
+- El inicio de sesión del navegador usa sesiones Sanctum con cookies `HttpOnly`, no tokens bearer persistidos en Web Storage. En desarrollo, Vite proxya `/api` y `/sanctum` al backend. En despliegue, define `SANCTUM_STATEFUL_DOMAINS` con el host exacto del frontend y `CORS_ALLOWED_ORIGINS` con su origen completo; nunca habilites `*` junto con credenciales. Usa HTTPS y `SESSION_SECURE_COOKIE=true` en producción. Si frontend y API usan subdominios distintos, configura `SESSION_DOMAIN` para el dominio compartido y conserva ambos en el mismo sitio.
 
 La documentación de endpoints de autenticación e instalación se encuentra en [backend/README.md](./backend/README.md).
 
@@ -41,7 +42,7 @@ Pruebas focalizadas: `npm run test:routing` (proveedores externos simulados, no 
 
 ## Módulo 3: búsqueda, filtros y ordenamiento
 
-- `GET /api/trips` requiere token Sanctum y correo verificado. Devuelve únicamente ofertas activas con cupos de otros perfiles verificados y omite correo, contactos de emergencia y demás datos privados.
+- `GET /api/trips` requiere autenticación Sanctum y correo verificado. En el navegador se autentica mediante cookie `HttpOnly`; los clientes API que ya disponen de un Personal Access Token pueden seguir usando Bearer. Devuelve únicamente ofertas activas con cupos de otros perfiles verificados y omite correo, contactos de emergencia y demás datos privados.
 - La búsqueda permite filtrar por barrio incluido en origen/destino, hora de salida (misma hora), transporte, carrera y universidad. Los resultados se actualizan con una pausa breve mientras se escribe.
 - El orden de afinidad es una estimación explicable basada en barrio, transporte y jornada declarados; también se puede ordenar por hora o fecha de publicación. No equivale a reputación ni a una evaluación de seguridad.
 - Se retornan hasta 100 ofertas por búsqueda y se informa si hay más resultados. La afinidad se calcula con una función separada del puntaje usado por el módulo de emparejamiento.

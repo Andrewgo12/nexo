@@ -7,6 +7,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -175,6 +176,38 @@ class InsuranceTest extends TestCase
         $this->assertDatabaseHas('insurance_enrollments', [
             'id' => $enrollment->id,
             'status' => 'pending_review',
+        ]);
+    }
+
+    public function test_policy_document_is_removed_when_enrollment_update_rolls_back(): void
+    {
+        [$student] = $this->createStudent();
+        $enrollment = InsuranceEnrollment::create([
+            'user_id' => $student->id,
+            'product_key' => 'mapfre-accidentes-escolares',
+            'provider' => 'MAPFRE',
+            'product_name' => 'Accidentes Escolares',
+            'monthly_premium_cop' => 25000,
+            'status' => 'quoted',
+        ]);
+        Storage::fake('local');
+        DB::unprepared(
+            'CREATE TRIGGER fail_insurance_enrollment_update BEFORE UPDATE ON insurance_enrollments '
+            ."BEGIN SELECT RAISE(ABORT, 'forced update failure'); END;",
+        );
+
+        $this->actingAs($student, 'sanctum')->post("/api/insurance/enrollments/{$enrollment->id}/policy", [
+            'policy_number' => 'POL-ROLLBACK',
+            'coverage_starts_at' => today()->toDateString(),
+            'coverage_ends_at' => today()->addYear()->toDateString(),
+            'policy_document' => UploadedFile::fake()->create('poliza.pdf', 20, 'application/pdf'),
+        ])->assertServerError();
+
+        $this->assertSame([], Storage::disk('local')->allFiles('insurance/policies'));
+        $this->assertDatabaseHas('insurance_enrollments', [
+            'id' => $enrollment->id,
+            'status' => 'quoted',
+            'policy_document_path' => null,
         ]);
     }
 

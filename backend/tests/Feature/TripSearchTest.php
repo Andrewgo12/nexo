@@ -6,6 +6,7 @@ use App\Models\StudentProfile;
 use App\Models\TravelOffer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class TripSearchTest extends TestCase
@@ -79,6 +80,41 @@ class TripSearchTest extends TestCase
         )->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $matchingOffer->id);
+    }
+
+    public function test_search_caps_results_and_reports_truncation(): void
+    {
+        $viewer = User::factory()->create();
+        $this->createProfile($viewer);
+        $driver = User::factory()->create();
+        $profile = $this->createProfile($driver);
+
+        for ($index = 0; $index < 101; $index++) {
+            $this->createOffer($profile);
+        }
+
+        $token = $viewer->createToken('web')->plainTextToken;
+        $this->withToken($token)->getJson('/api/trips')->assertOk()
+            ->assertJsonCount(100, 'data')
+            ->assertJsonPath('meta.total', 101)
+            ->assertJsonPath('meta.limit', 100)
+            ->assertJsonPath('meta.truncated', true);
+    }
+
+    public function test_high_traffic_trip_queries_have_supporting_composite_indexes(): void
+    {
+        $this->assertContains('travel_offers_status_departure_index', Schema::getIndexListing('travel_offers'));
+        $this->assertContains('travel_offers_profile_created_index', Schema::getIndexListing('travel_offers'));
+        $this->assertContains(
+            'student_profiles_verified_status_user_index',
+            Schema::getIndexListing('student_profiles'),
+        );
+        $this->assertContains(
+            'trip_requests_requester_status_created_index',
+            Schema::getIndexListing('trip_requests'),
+        );
+        $this->assertContains('safety_alerts_active_created_index', Schema::getIndexListing('safety_alerts'));
+        $this->assertContains('trip_messages_offer_id_index', Schema::getIndexListing('trip_messages'));
     }
 
     public function test_matches_require_authentication_and_verified_email(): void

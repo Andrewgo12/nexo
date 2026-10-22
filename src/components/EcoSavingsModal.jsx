@@ -12,11 +12,11 @@ import {
 } from 'lucide-react';
 
 export default function EcoSavingsModal({ isOpen, onClose }) {
-  if (!isOpen) return null;
-
   const [tripsPerWeek, setTripsPerWeek] = useState(8);
   const [currentCostPerTrip, setCurrentCostPerTrip] = useState(14000); // e.g. Taxi / Uber solo
   const [avgDistanceKm, setAvgDistanceKm] = useState(14); // Average distance in Cali from South to North/East
+
+  if (!isOpen) return null;
 
   // Calculated metrics
   const sharedCostPerTrip = 3500; // Carpooling or MIO average

@@ -68,6 +68,22 @@ class AdminManagementTest extends TestCase
         ])->assertNotFound();
     }
 
+    public function test_unassigned_university_manager_cannot_manage_students_without_profiles(): void
+    {
+        $student = User::factory()->create([
+            'role' => User::ROLE_STUDENT,
+            'email_verified_at' => now(),
+        ]);
+        $manager = $this->createManager(User::ROLE_UNIVERSITY);
+
+        $this->actingAs($manager, 'sanctum')->getJson('/api/admin/users')->assertForbidden();
+        $this->actingAs($manager, 'sanctum')->patchJson("/api/admin/users/{$student->id}", [
+            'status' => User::STATUS_BLOCKED,
+        ])->assertForbidden();
+
+        $this->assertSame(User::STATUS_ACTIVE, $student->fresh()->status);
+    }
+
     public function test_university_scope_uses_the_student_profile_university_as_the_authority(): void
     {
         $student = $this->createStudent('UNIAJC');

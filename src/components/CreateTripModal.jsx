@@ -21,8 +21,6 @@ export default function CreateTripModal({
   activeUniversity,
   studentUser 
 }) {
-  if (!isOpen) return null;
-
   const [transportMode, setTransportMode] = useState('car'); // car, moto, mio, walk, taxi
   const [originCampus, setOriginCampus] = useState(activeUniversity.shortName);
   const [destinationNeighborhoodId, setDestinationNeighborhoodId] = useState('el-caney');
@@ -35,6 +33,8 @@ export default function CreateTripModal({
   const [priceContribution, setPriceContribution] = useState(3500);
   const [insuranceActive, setInsuranceActive] = useState(true);
   const [onlyGirls, setOnlyGirls] = useState(false);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();

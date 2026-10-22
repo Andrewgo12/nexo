@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -6,11 +6,8 @@ import {
   GraduationCap, 
   CheckCircle2, 
   Upload, 
-  Lock, 
-  Sparkles,
   QrCode
 } from 'lucide-react';
-import { UNIVERSITIES } from '../data/mockData';
 
 export default function InstitutionalVerificationModal({ 
   isOpen, 
@@ -18,15 +15,49 @@ export default function InstitutionalVerificationModal({
   studentUser, 
   onVerificationComplete 
 }) {
-  if (!isOpen) return null;
-
   const [step, setStep] = useState(1);
   const [eduEmail, setEduEmail] = useState(studentUser.email || 'kgonzalez@uniajc.edu.co');
-  const [carnetFile, setCarnetFile] = useState(null);
   const [carnetPreview, setCarnetPreview] = useState(null);
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
+  const verificationTimeouts = useRef([]);
+
+  useEffect(() => {
+    if (!carnetPreview) return undefined;
+    return () => URL.revokeObjectURL(carnetPreview);
+  }, [carnetPreview]);
+
+  useEffect(() => () => {
+    verificationTimeouts.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    verificationTimeouts.current = [];
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      verificationTimeouts.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      verificationTimeouts.current = [];
+    }
+  }, [isOpen]);
+
+  const scheduleVerificationTimeout = (callback, delay) => {
+    const timeoutId = window.setTimeout(() => {
+      verificationTimeouts.current = verificationTimeouts.current.filter((id) => id !== timeoutId);
+      callback();
+    }, delay);
+    verificationTimeouts.current.push(timeoutId);
+  };
+
+  const handleClose = () => {
+    verificationTimeouts.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    verificationTimeouts.current = [];
+    setIsVerifying(false);
+    setCarnetPreview(null);
+    setSuccess(false);
+    onClose();
+  };
+
+  if (!isOpen) return null;
 
   const handleSimulateSendCode = (e) => {
     e.preventDefault();
@@ -40,24 +71,23 @@ export default function InstitutionalVerificationModal({
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setCarnetFile(file);
       setCarnetPreview(URL.createObjectURL(file));
     }
   };
 
   const handleCompleteVerification = () => {
     setIsVerifying(true);
-    setTimeout(() => {
+    scheduleVerificationTimeout(() => {
       setIsVerifying(false);
       setSuccess(true);
-      setTimeout(() => {
-        onVerificationComplete && onVerificationComplete({
+      scheduleVerificationTimeout(() => {
+        onVerificationComplete?.({
           ...studentUser,
           verifiedEmail: true,
           verifiedCarnet: true,
           trustLevel: 3
         });
-        onClose();
+        handleClose();
       }, 1500);
     }, 1200);
   };
@@ -78,7 +108,7 @@ export default function InstitutionalVerificationModal({
               </p>
             </div>
           </div>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+          <button className="modal-close" onClick={handleClose}><X size={20} /></button>
         </div>
 
         {/* Content */}
@@ -127,7 +157,7 @@ export default function InstitutionalVerificationModal({
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-                <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+                <button type="button" className="btn-secondary" onClick={handleClose}>Cancelar</button>
                 <button type="submit" className="btn-primary" style={{ minWidth: '150px', justifyContent: 'center' }}>
                   Continuar al Paso 2
                 </button>

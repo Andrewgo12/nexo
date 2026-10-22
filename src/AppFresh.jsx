@@ -55,7 +55,6 @@ import {
   resendVerification,
   registerAccount,
   resetPassword,
-  storeAuthToken,
   updateCurrentProfile,
   uploadProfilePhoto,
 } from './services/authApi';
@@ -216,7 +215,7 @@ const dashboardChecklist = [
   { label: 'Compartir ubicación/ruta desde el chat', done: false },
 ];
 
-const initialStudent = { name: 'Kevin González', email: 'kevin.gonzalez@uniajc.edu.co', career: 'Ingeniería de Sistemas', semester: '8vo Semestre', shift: 'Nocturna', neighborhood: 'El Caney', transport: 'MIO + caminata', emergency: 'María González', privacy: 'Zona aproximada' };
+const initialStudent = { name: '', email: '', career: '', semester: '', shift: '', neighborhood: '', transport: '', emergency: '', privacy: 'Zona aproximada' };
 
 const kpis = [
   ['Usuarios registrados', '18.4K'], ['Viajes activos', '2.1K'], ['Tasa de coincidencia', '89%'], ['Viajes seguros', '96%']
@@ -272,12 +271,12 @@ const formatInsurancePremium = (amount) => new Intl.NumberFormat('es-CO', {
 export default function AppFresh() {
   const persisted = useMemo(() => readAppData(), []);
   const [active, setActive] = useState(persisted.activeTab || 'auth');
-  const [student, setStudent] = useState(persisted.student || initialStudent);
-  const [uni, setUni] = useState(universities.find((u) => u.id === (persisted.university?.id || 'uniajc')) || universities[0]);
-  const [email, setEmail] = useState(persisted.email || initialStudent.email);
+  const [student, setStudent] = useState(initialStudent);
+  const [uni, setUni] = useState(universities[0]);
+  const [email, setEmail] = useState('');
   const [privacy, setPrivacy] = useState(persisted.privacy || 'Zona aproximada');
   const [toast, setToast] = useState('');
-  const [route, setRoute] = useState(persisted.route || { origin: 'UNIAJC Sede Sur', destination: 'El Caney', mode: 'MIO + caminata', time: '9:45 PM' });
+  const [route, setRoute] = useState({ origin: '', destination: '', mode: 'MIO + caminata', time: '' });
   const [searchState, setSearchState] = useState({
     zone: '',
     time: '',
@@ -485,20 +484,15 @@ export default function AppFresh() {
       if (new URLSearchParams(window.location.search).get('verified') === '1') {
         setToast('Correo institucional verificado. Ya puedes iniciar sesión.');
       }
-      const token = getAuthToken();
-      if (token) {
-        try {
-          const { user } = await getCurrentAccount(token);
-          if (!cancelled) {
-            applyAuthenticatedUser(user);
-            setIsLoggedIn(true);
-          }
-        } catch (error) {
-          if (!cancelled) {
-            if (error.status === 401) clearAuthToken();
-            else setToast(error.message);
-          }
+      clearAuthToken();
+      try {
+        const { user } = await getCurrentAccount();
+        if (!cancelled) {
+          applyAuthenticatedUser(user);
+          setIsLoggedIn(true);
         }
+      } catch (error) {
+        if (!cancelled && error.status !== 401) setToast(error.message);
       }
       if (!cancelled) setIsBooting(false);
     };
@@ -508,18 +502,12 @@ export default function AppFresh() {
 
   useEffect(() => {
     writeAppData({
-      student,
-      university: uni,
-      email,
-      privacy,
-      route,
-      searchState,
       notifications,
       advancedMode,
       executionState,
       activeTab: active
     });
-  }, [student, uni, email, privacy, route, searchState, notifications, advancedMode, executionState, active]);
+  }, [notifications, advancedMode, executionState, active]);
 
   useEffect(() => {
     const canViewAdminDashboard = active === 'admin'
@@ -1849,9 +1837,12 @@ export default function AppFresh() {
           neighborhood: loginForm.neighborhood || undefined,
           emergency_contact: loginForm.emergency_contact || undefined,
         })
-        : await loginAccount({ email: loginForm.email, password: loginForm.password });
+        : await loginAccount({
+          email: loginForm.email,
+          password: loginForm.password,
+          remember: loginForm.remember,
+        });
 
-      storeAuthToken(response.token, loginForm.remember);
       applyAuthenticatedUser(response.user);
       setIsLoggedIn(true);
       setToast(response.message);

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { MessageSquare, X, Send, ShieldCheck, CheckCheck } from 'lucide-react';
 
 export default function ActiveTripChat({ isOpen, onClose, trip, messages, onSendMessage, studentUser }) {
-  if (!isOpen || !trip) return null;
-
   const [inputVal, setInputVal] = useState('');
+
+  if (!isOpen || !trip) return null;
 
   const quickReplies = [
     'Voy bajando del salón',

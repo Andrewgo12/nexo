@@ -59,23 +59,30 @@ The Laravel framework is open-sourced software licensed under the [MIT license](
 
 ## API de autenticación ViajaU
 
-La API expone registro y login con tokens revocables de Laravel Sanctum:
+La autenticación usa dos flujos Sanctum:
+
+- El navegador de primera parte inicia y cierra sesión con una cookie de sesión `HttpOnly`; los cambios de estado requieren la cookie CSRF de Sanctum.
+- Los clientes de API que no envían `Origin` ni `Referer` reciben Personal Access Tokens revocables; el frontend web no almacena ni envía esos tokens.
 
 - `POST /api/register` y `POST /api/login`: reciben los datos de registro o login.
-- `GET /api/me` devuelve la cuenta y `POST /api/logout` revoca el token actual.
+- `GET /api/me` devuelve la cuenta y `POST /api/logout` termina la sesión del navegador o revoca el token actual del cliente API.
 - Las rutas equivalentes `/api/auth/register`, `/api/auth/login`, `/api/auth/me` y `/api/auth/logout` se mantienen como alias.
 - `POST /api/auth/email/verification-notification`: reenvía el enlace de verificación.
 - `POST /api/auth/forgot-password` y `POST /api/auth/reset-password`: recuperación por correo.
 - `PUT /api/auth/profile` y `PUT /api/auth/change-password`: actualizan los datos de la propia cuenta.
 - `POST /api/profile/photo`: sube una foto JPG, PNG o WebP de hasta 2 MB.
 
-El campo `university` usa una de estas claves: `uniajc`, `univalle`, `javeriana` o `icesi`. El correo debe coincidir con el dominio configurado para esa universidad. Las rutas privadas requieren la cabecera `Authorization: Bearer <token>`. El frontend utiliza un proxy de Vite hacia `http://127.0.0.1:8000` durante el desarrollo local; configura `VITE_API_URL` si el backend está en otro origen.
+El campo `university` usa una de estas claves: `uniajc`, `univalle`, `javeriana` o `icesi`. El correo debe coincidir con el dominio configurado para esa universidad. Las rutas privadas aceptan la cookie de sesión de primera parte o, para clientes API, la cabecera `Authorization: Bearer <token>`. En desarrollo, Vite proxya `/api` y `/sanctum` a `http://127.0.0.1:8000`. En producción, configura `SANCTUM_STATEFUL_DOMAINS` con el host exacto del frontend y `CORS_ALLOWED_ORIGINS` con su origen completo; usa HTTPS, `SESSION_SECURE_COOKIE=true` y `SESSION_HTTP_ONLY=true`. Para subdominios distintos en el mismo sitio, configura `SESSION_DOMAIN` al dominio compartido. No habilites orígenes CORS comodín con credenciales.
 
-El sistema admite roles `student`, `admin`, `security` y `university`; el registro público solo asigna `student`. La asignación de roles privilegiados debe hacerse mediante un proceso interno confiable, nunca desde el formulario público. Admin/university pueden consultar el dashboard y security/admin las alertas de seguridad. Las rutas de viajes, matches y alertas exigen correo verificado. El login bloquea credenciales tras cinco fallos por cuenta/IP y también tiene límite general por IP. Los tokens vencen a los siete días por defecto (`SANCTUM_TOKEN_EXPIRATION`, en minutos).
+El sistema admite roles `student`, `admin`, `security` y `university`; el registro público solo asigna `student`. La asignación de roles privilegiados debe hacerse mediante un proceso interno confiable, nunca desde el formulario público. Admin/university pueden consultar el dashboard y security/admin las alertas de seguridad. Las rutas de viajes, matches y alertas exigen correo verificado. El login bloquea credenciales tras cinco fallos por cuenta/IP y también tiene límite general por IP. Los Personal Access Tokens vencen a los siete días por defecto (`SANCTUM_TOKEN_EXPIRATION`, en minutos); la vigencia de las cookies de navegador se controla con la configuración de sesión.
+
+Las consultas de búsqueda de viajes y analítica están separadas en `TravelOfferSearchService` y `DashboardAnalyticsService`; los controladores validan la entrada y gestionan la respuesta HTTP. El dashboard agrupa los conteos de solicitudes en una consulta y devuelve `null` para la tasa cuando no hay solicitudes. La migración `2026_10_21_000013_add_trip_query_indexes` añade índices compuestos para búsquedas/ordenamiento de ofertas, paneles de actividad, alertas y mensajes; los filtros de texto parcial con comodines iniciales siguen requiriendo evaluar el plan y volumen reales de cada base de datos.
 
 El panel `GET /api/dashboard` devuelve agregados de viajes, solicitudes, alertas, perfiles y calificaciones verificables por universidad, barrio y jornada. Las cuentas `university` solo reciben resultados de su propia institución; `admin` ve los agregados globales. La respuesta reciente omite coordenadas y contactos. La exportación disponible en la interfaz incluye únicamente los agregados del dashboard. La tasa de aceptación se define como solicitudes aceptadas divididas por todas las solicitudes; el promedio de confianza se deriva exclusivamente de valoraciones de viajes completados y es `null` si aún no existen.
 
 El panel administrativo incluye `GET /api/admin/users`, `PATCH /api/admin/users/{id}`, `GET /api/admin/incidents` y administración de catálogos con `/api/admin/catalog`. Las cuentas institucionales quedan limitadas a sus estudiantes, catálogos e incidentes; nunca pueden modificar roles. Admin puede importar snapshots con `POST /api/admin/transit-feed/import`, usando `feed_version`, `stops` (`stops.txt`) y `routes` (`routes.txt`) como multipart/form-data. Se validan IDs, encabezados, coordenadas, nombres y duplicados antes de guardar en una transacción. El feed solo almacena paradas y rutas: no importa trips, horarios o calendarios y no sustituye el proveedor público utilizado por el planificador. Endpoint del último snapshot: `GET /api/admin/transit-feed/latest`.
+
+Las cuentas `university` sin institución asignada no pueden acceder a funciones administrativas; las verificaciones de propiedad también fallan de forma segura si el estudiante no tiene perfil institucional. La creación de viajes y solicitudes tiene límite de 10 operaciones por minuto por cliente autenticado; las transiciones de solicitudes, 20 por minuto. Cotizaciones, checkouts pendientes y revisiones de pólizas serializan las transiciones con bloqueos de fila; si una actualización de póliza falla, se elimina el archivo privado que no quedó asociado a un registro.
 
 La gestión de viajes incluye `GET /api/trips/mine`, `POST /api/trips/{id}/requests`, `PATCH /api/trip-requests/{id}` y `PATCH /api/trips/{id}`. El último permite cancelar, iniciar o completar una oferta respetando sus transiciones válidas; los cupos se descuentan al aceptar solicitudes.
 

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
+  clearAuthToken,
   getMyTrips,
   getTravelMatches,
   getTravelOffers,
+  loginAccount,
   createSafetyAlert,
   createTripCheckIn,
   getTripSafetyStatus,
@@ -19,6 +21,78 @@ import { getOsrmRoute, searchAddressNominatim } from '../src/services/routingApi
 import { getCurrentDeviceLocation } from '../src/services/locationApi.js';
 import { getMioRoute } from '../src/services/mioRoutingApi.js';
 import { calculateCompatibilityScore, calculateTravelAffinityScore, filterTravelMatches } from '../src/services/viajauCore.js';
+import { DEFAULT_APP_DATA, readAppData, writeAppData } from '../src/services/appDatabase.js';
+
+const jsonResponse = (payload, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  text: async () => JSON.stringify(payload),
+});
+const appStorage = new Map();
+const localStorage = {
+  getItem: (key) => appStorage.get(key) ?? null,
+  setItem: (key, value) => appStorage.set(key, value),
+  removeItem: (key) => appStorage.delete(key),
+};
+globalThis.window = { localStorage, sessionStorage: localStorage };
+localStorage.setItem('viajau-local-db-v1', JSON.stringify({
+  name: 'Ana Example',
+  email: 'ana@example.com',
+  emergency_contact: '+573001234567',
+  activeTab: 'trips',
+  executionState: 'not-an-array',
+  notifications: [{ title: 'Injected label', channel: 'Injected channel', active: true }],
+}));
+const safeAppData = readAppData();
+assert.equal(safeAppData.email, undefined);
+assert.equal(safeAppData.emergency_contact, undefined);
+assert.equal(safeAppData.notifications[0].title, DEFAULT_APP_DATA.notifications[0].title);
+assert.equal(safeAppData.notifications[0].active, true);
+assert.equal(JSON.parse(localStorage.getItem('viajau-local-db-v1')).name, undefined);
+writeAppData({ name: 'Ana Example', email: 'ana@example.com', activeTab: 'profile' });
+assert.equal(JSON.parse(localStorage.getItem('viajau-local-db-v1')).email, undefined);
+
+globalThis.document = { cookie: '' };
+const authRequests = [];
+globalThis.fetch = async (url, options) => {
+  authRequests.push({ url: String(url), options });
+  if (String(url) === '/sanctum/csrf-cookie') {
+    globalThis.document.cookie = 'XSRF-TOKEN=csrf%2Btoken';
+    return { ok: true, status: 204 };
+  }
+  return jsonResponse({ user: { id: 1 } });
+};
+const loginResponse = await loginAccount({
+  email: 'ana@example.com',
+  password: 'password',
+  remember: true,
+});
+assert.equal(loginResponse.user.id, 1);
+assert.deepEqual(authRequests.map(({ url }) => url), ['/sanctum/csrf-cookie', '/api/login']);
+assert.equal(authRequests[0].options.credentials, 'include');
+assert.equal(authRequests[1].options.credentials, 'include');
+assert.equal(authRequests[1].options.headers.get('X-XSRF-TOKEN'), 'csrf+token');
+assert.equal(authRequests[1].options.headers.get('Authorization'), null);
+localStorage.setItem('viajau-auth-token', 'stale-browser-token');
+clearAuthToken();
+assert.equal(localStorage.getItem('viajau-auth-token'), null);
+
+globalThis.fetch = async () => jsonResponse(null, 200);
+await assert.rejects(getTravelMatches(), (error) => {
+  assert.equal(error.status, 200);
+  assert.match(error.message, /JSON inválida/);
+  return true;
+});
+globalThis.fetch = async () => ({
+  ok: false,
+  status: 503,
+  text: async () => '<html>Unavailable</html>',
+});
+await assert.rejects(getTravelMatches(), (error) => {
+  assert.equal(error.status, 503);
+  assert.match(error.message, /503/);
+  return true;
+});
 
 let fetchCalls = 0;
 const requestedUrls = [];
@@ -241,9 +315,10 @@ assert.deepEqual(filterTravelMatches({
 ]).map(({ name }) => name), ['Oferta nueva', 'Oferta anterior']);
 
 let offersRequest;
+globalThis.document = { cookie: 'XSRF-TOKEN=test-xsrf-token' };
 globalThis.fetch = async (url, options) => {
   offersRequest = { url: String(url), options };
-  return { ok: true, json: async () => ({ data: [] }) };
+  return jsonResponse({ data: [] });
 };
 const offersResponse = await getTravelOffers({
   zone: 'El Caney',
@@ -262,21 +337,23 @@ assert.equal(offersUrl.searchParams.get('faculty'), 'Ingeniería');
 assert.equal(offersUrl.searchParams.get('university'), 'UNIAJC');
 assert.equal(offersUrl.searchParams.get('transport'), 'MIO');
 assert.equal(offersUrl.searchParams.has('sort'), false);
-assert.equal(offersRequest.options.headers.Authorization, 'Bearer test-session-token');
+assert.equal(offersRequest.options.headers.get('Authorization'), null);
+assert.equal(offersRequest.options.credentials, 'include');
 
 globalThis.fetch = async (url, options) => {
   offersRequest = { url: String(url), options };
-  return { ok: true, json: async () => ({ data: [], meta: { profile_available: true } }) };
+  return jsonResponse({ data: [], meta: { profile_available: true } });
 };
 const matchesResponse = await getTravelMatches('test-session-token');
 assert.deepEqual(matchesResponse.data, []);
 assert.equal(new URL(offersRequest.url, 'http://localhost').pathname, '/api/matches');
-assert.equal(offersRequest.options.headers.Authorization, 'Bearer test-session-token');
+assert.equal(offersRequest.options.headers.get('Authorization'), null);
+assert.equal(offersRequest.options.credentials, 'include');
 
 const tripApiCalls = [];
 globalThis.fetch = async (url, options) => {
   tripApiCalls.push({ url: String(url), options });
-  return { ok: true, json: async () => ({ data: { offers: [], requests: [] } }) };
+  return jsonResponse({ data: { offers: [], requests: [] } });
 };
 await getMyTrips('test-session-token');
 await publishTravelOffer({ origin: 'El Caney', destination: 'UNIAJC' }, 'test-session-token');
@@ -296,12 +373,14 @@ assert.equal(tripApiCalls[2].options.method, 'POST');
 assert.equal(tripApiCalls[3].options.method, 'PATCH');
 assert.deepEqual(JSON.parse(tripApiCalls[3].options.body), { status: 'accepted' });
 assert.deepEqual(JSON.parse(tripApiCalls[4].options.body), { status: 'en-curso' });
-assert.equal(tripApiCalls[0].options.headers.Authorization.endsWith('test-session-token'), true);
+assert.equal(tripApiCalls[0].options.headers.get('Authorization'), null);
+assert.equal(tripApiCalls[1].options.headers.get('X-XSRF-TOKEN'), 'test-xsrf-token');
+assert.equal(tripApiCalls[1].options.credentials, 'include');
 
 const safetyTripApiCalls = [];
 globalThis.fetch = async (url, options) => {
   safetyTripApiCalls.push({ url: String(url), options });
-  return { ok: true, json: async () => ({ data: { locations: [], check_ins: [] } }) };
+  return jsonResponse({ data: { locations: [], check_ins: [] } });
 };
 await shareTripLocation(44, { latitude: 3.45, longitude: -76.53 }, 'test-session-token');
 await stopSharingTripLocation(44, 'test-session-token');
@@ -323,7 +402,7 @@ assert.deepEqual(JSON.parse(safetyTripApiCalls[3].options.body), { type: 'arriva
 const safetyApiCalls = [];
 globalThis.fetch = async (url, options) => {
   safetyApiCalls.push({ url: String(url), options });
-  return { ok: true, json: async () => ({ data: [] }) };
+  return jsonResponse({ data: [] });
 };
 await createSafetyAlert({ latitude: 3.45, longitude: -76.53 }, 'test-session-token');
 await getSafetyAlerts('test-session-token');
@@ -337,7 +416,9 @@ assert.equal(safetyApiCalls[0].options.method, 'POST');
 assert.deepEqual(JSON.parse(safetyApiCalls[0].options.body), { latitude: 3.45, longitude: -76.53 });
 assert.equal(safetyApiCalls[1].options.method, undefined);
 assert.equal(safetyApiCalls[2].options.method, 'PATCH');
-assert.equal(safetyApiCalls[0].options.headers.Authorization.endsWith('test-session-token'), true);
+assert.equal(safetyApiCalls[0].options.headers.get('Authorization'), null);
+assert.equal(safetyApiCalls[0].options.headers.get('X-XSRF-TOKEN'), 'test-xsrf-token');
+assert.equal(safetyApiCalls[0].options.credentials, 'include');
 
 globalThis.fetch = async () => {
   throw new TypeError('offline');

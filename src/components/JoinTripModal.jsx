@@ -23,12 +23,12 @@ export default function JoinTripModal({
   onConfirmJoin, 
   studentUser 
 }) {
-  if (!isOpen || !trip) return null;
-
   const [includeInsurance, setIncludeInsurance] = useState(true);
   const [pickupNote, setPickupNote] = useState('');
   const [securityPin] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [confirmed, setConfirmed] = useState(false);
+
+  if (!isOpen || !trip) return null;
 
   const insuranceFee = includeInsurance ? 1500 : 0;
   const baseCost = trip.priceContribution || 0;

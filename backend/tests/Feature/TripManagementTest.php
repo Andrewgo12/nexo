@@ -30,6 +30,27 @@ class TripManagementTest extends TestCase
             ->assertJsonPath('data.status', 'oferta-activa');
     }
 
+    public function test_trip_creation_is_rate_limited_per_authenticated_client(): void
+    {
+        $owner = User::factory()->create();
+        $profile = $this->createProfile($owner);
+        $token = $owner->createToken('web')->plainTextToken;
+        $payload = [
+            'origin' => 'El Caney',
+            'destination' => 'UNIAJC',
+            'departure_time' => '19:45',
+            'seats' => 2,
+        ];
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->withToken($token)->postJson('/api/trips', $payload)->assertCreated();
+        }
+        $this->withToken($token)->postJson('/api/trips', $payload)->assertTooManyRequests();
+
+        $this->assertDatabaseCount('travel_offers', 10);
+        $this->assertDatabaseHas('travel_offers', ['student_profile_id' => $profile->id]);
+    }
+
     public function test_student_can_request_a_seat_and_only_offer_owner_can_accept_it(): void
     {
         $owner = User::factory()->create();

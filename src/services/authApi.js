@@ -1,46 +1,100 @@
-const API_BASE_URL = import.meta.env?.VITE_API_URL || '/api';
+const API_BASE_URL = (import.meta.env?.VITE_API_URL || '/api').replace(/\/$/, '');
+const API_ROOT_URL = API_BASE_URL.replace(/\/api(?:\/v\d+)?$/, '');
 const TOKEN_KEY = 'viajau-auth-token';
+let csrfCookiePromise;
 
-function getTokenStorage() {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(TOKEN_KEY) !== null
-    ? window.localStorage
-    : window.sessionStorage;
+function getXsrfToken() {
+  if (typeof document === 'undefined') return null;
+  const cookie = document.cookie.split('; ').find((item) => item.startsWith('XSRF-TOKEN='));
+  if (!cookie) return null;
+  return decodeURIComponent(cookie.slice('XSRF-TOKEN='.length));
+}
+
+async function readJsonResponse(response) {
+  const body = await response.text();
+  if (!body) {
+    if (response.status === 204 || !response.ok) return {};
+    const error = new Error('El servidor devolvió una respuesta JSON vacía.');
+    error.status = response.status;
+    throw error;
+  }
+  try {
+    const payload = JSON.parse(body);
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new TypeError('Expected a JSON object response.');
+    }
+    return payload;
+  } catch {
+    const error = new Error(response.ok
+      ? 'El servidor devolvió una respuesta JSON inválida.'
+      : `El servidor respondió con el estado ${response.status} y un cuerpo JSON inválido.`);
+    error.status = response.status;
+    throw error;
+  }
+}
+
+async function ensureCsrfCookie(force = false) {
+  if (!force && getXsrfToken()) return;
+  csrfCookiePromise ??= fetch(`${API_ROOT_URL}/sanctum/csrf-cookie`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  }).then((response) => {
+    if (!response.ok) throw new Error('No fue posible iniciar la protección CSRF de la sesión.');
+  }).finally(() => {
+    csrfCookiePromise = undefined;
+  });
+  await csrfCookiePromise;
+  if (!getXsrfToken()) {
+    throw new Error('El servidor no devolvió la cookie CSRF. Verifica el dominio y la configuración de cookies.');
+  }
 }
 
 export function getAuthToken() {
-  return getTokenStorage()?.getItem(TOKEN_KEY) ?? null;
-}
-
-export function storeAuthToken(token, remember = false) {
-  if (typeof window === 'undefined') return;
-  clearAuthToken();
-  const storage = remember ? window.localStorage : window.sessionStorage;
-  storage.setItem(TOKEN_KEY, token);
+  return null;
 }
 
 export function clearAuthToken() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(TOKEN_KEY);
   window.sessionStorage.removeItem(TOKEN_KEY);
+  csrfCookiePromise = undefined;
 }
 
-async function request(path, { token, ...options } = {}) {
+async function request(path, requestOptions = {}) {
+  const options = { ...requestOptions };
+  delete options.token;
   const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      ...(isMultipart ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
+  const method = (options.method || 'GET').toUpperCase();
+  const isUnsafeMethod = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const sendRequest = () => {
+    const xsrfToken = getXsrfToken();
+    const headers = new Headers(options.headers);
+    headers.set('Accept', 'application/json');
+    if (isMultipart) {
+      headers.delete('Content-Type');
+    } else if (options.body != null && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    headers.delete('Authorization');
+    if (isUnsafeMethod && xsrfToken) headers.set('X-XSRF-TOKEN', xsrfToken);
+    return fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers,
+    });
+  };
+  if (isUnsafeMethod) await ensureCsrfCookie();
+  let response = await sendRequest();
+  if (response.status === 419 && isUnsafeMethod) {
+    csrfCookiePromise = undefined;
+    await ensureCsrfCookie(true);
+    response = await sendRequest();
+  }
+  const payload = await readJsonResponse(response);
 
   if (!response.ok) {
     const validationErrors = Object.values(payload.errors || {}).flat();
-    const error = new Error(validationErrors[0] || payload.message || 'No fue posible conectar con el servidor.');
+    const error = new Error(validationErrors[0] || payload.message || `La solicitud falló con el estado ${response.status}.`);
     error.status = response.status;
     throw error;
   }
@@ -168,16 +222,18 @@ export function updateAdminInsuranceEnrollment(enrollmentId, data, token = getAu
   });
 }
 
-export async function downloadAdminInsurancePolicy(enrollmentId, token = getAuthToken()) {
+export async function downloadAdminInsurancePolicy(enrollmentId) {
   const response = await fetch(`${API_BASE_URL}/admin/insurance/enrollments/${enrollmentId}/document`, {
+    credentials: 'include',
     headers: {
       Accept: 'application/pdf',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.message || 'No fue posible descargar el documento de póliza.');
+    const payload = await readJsonResponse(response);
+    const error = new Error(payload.message || `No fue posible descargar el documento de póliza (estado ${response.status}).`);
+    error.status = response.status;
+    throw error;
   }
   return response.blob();
 }

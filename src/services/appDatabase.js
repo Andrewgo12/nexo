@@ -1,38 +1,6 @@
 const STORAGE_KEY = 'viajau-local-db-v1';
 
 export const DEFAULT_APP_DATA = {
-  student: {
-    name: 'Kevin González',
-    email: 'kevin.gonzalez@uniajc.edu.co',
-    career: 'Ingeniería de Sistemas',
-    semester: '8vo Semestre',
-    shift: 'Nocturna',
-    neighborhood: 'El Caney',
-    transport: 'MIO + caminata',
-    emergency: 'María González',
-    privacy: 'Zona aproximada'
-  },
-  university: {
-    id: 'uniajc',
-    name: 'UNIAJC',
-    domain: '@uniajc.edu.co'
-  },
-  email: 'kevin.gonzalez@uniajc.edu.co',
-  privacy: 'Zona aproximada',
-  route: {
-    origin: 'UNIAJC Sede Sur',
-    destination: 'El Caney',
-    mode: 'MIO + caminata',
-    time: '9:45 PM'
-  },
-  searchState: {
-    zone: '',
-    time: '',
-    faculty: '',
-    university: 'Cualquiera',
-    transport: 'Cualquiera',
-    sort: 'Compatibilidad'
-  },
   notifications: [
     { title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
     { title: 'Check-in de llegada', channel: 'En la app', active: false },
@@ -56,6 +24,38 @@ export const DEFAULT_APP_DATA = {
   activeTab: 'auth'
 };
 
+function safeAppData(payload = {}) {
+  const data = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+  const savedExecutionState = Array.isArray(data.executionState) ? data.executionState : [];
+  const savedExecutionStateById = new Map(savedExecutionState
+    .filter((task) => task && typeof task.id === 'string')
+    .map((task) => [task.id, task.done]));
+
+  return {
+    activeTab: typeof data.activeTab === 'string' ? data.activeTab : DEFAULT_APP_DATA.activeTab,
+    notifications: DEFAULT_APP_DATA.notifications.map((notification, index) => ({
+      ...notification,
+      active: typeof data.notifications?.[index]?.active === 'boolean'
+        ? data.notifications[index].active
+        : notification.active
+    })),
+    advancedMode: Object.fromEntries(
+      Object.keys(DEFAULT_APP_DATA.advancedMode).map((key) => [
+        key,
+        typeof data.advancedMode?.[key] === 'boolean'
+          ? data.advancedMode[key]
+          : DEFAULT_APP_DATA.advancedMode[key]
+      ])
+    ),
+    executionState: DEFAULT_APP_DATA.executionState.map((task) => ({
+      ...task,
+      done: typeof savedExecutionStateById.get(task.id) === 'boolean'
+        ? savedExecutionStateById.get(task.id)
+        : task.done
+    }))
+  };
+}
+
 export function readAppData() {
   if (typeof window === 'undefined') {
     return DEFAULT_APP_DATA;
@@ -67,38 +67,9 @@ export function readAppData() {
       return DEFAULT_APP_DATA;
     }
 
-    const parsed = JSON.parse(raw);
-    delete parsed.adminState;
-    delete parsed.pricing;
-    const savedExecutionState = Array.isArray(parsed.executionState)
-      ? parsed.executionState
-      : DEFAULT_APP_DATA.executionState;
-    const safetyTask = DEFAULT_APP_DATA.executionState.find((task) => task.id === 'safety-alerts');
-    const paymentTask = DEFAULT_APP_DATA.executionState.find((task) => task.id === 'payment-coverage');
-    return {
-      ...DEFAULT_APP_DATA,
-      ...parsed,
-      student: { ...DEFAULT_APP_DATA.student, ...(parsed.student || {}) },
-      university: { ...DEFAULT_APP_DATA.university, ...(parsed.university || {}) },
-      route: { ...DEFAULT_APP_DATA.route, ...(parsed.route || {}) },
-      searchState: { ...DEFAULT_APP_DATA.searchState, ...(parsed.searchState || {}) },
-      notifications: (Array.isArray(parsed.notifications) ? parsed.notifications : DEFAULT_APP_DATA.notifications)
-        .map((item) => ['SMS', 'WhatsApp'].includes(item?.channel)
-          ? { ...item, title: 'Notificación externa no configurada', channel: 'No configurado', active: false }
-          : item),
-      advancedMode: { ...DEFAULT_APP_DATA.advancedMode, ...(parsed.advancedMode || {}) },
-      safetyState: {
-        ...DEFAULT_APP_DATA.safetyState,
-        ...(parsed.safetyState || {}),
-        geofence: false,
-        emergency: false
-      },
-      executionState: savedExecutionState.map((task) => {
-        if (task?.id === 'safety-alerts') return { ...task, ...safetyTask, done: false };
-        if (task?.id === 'payment-coverage') return { ...task, ...paymentTask, done: false };
-        return task;
-      })
-    };
+    const safeData = safeAppData(JSON.parse(raw));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(safeData));
+    return { ...DEFAULT_APP_DATA, ...safeData };
   } catch {
     return DEFAULT_APP_DATA;
   }
@@ -109,7 +80,7 @@ export function writeAppData(payload) {
     return;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(safeAppData(payload)));
 }
 
 export function resetAppData() {

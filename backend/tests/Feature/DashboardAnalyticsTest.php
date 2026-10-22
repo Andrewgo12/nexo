@@ -123,6 +123,9 @@ class DashboardAnalyticsTest extends TestCase
             ->assertJsonPath('scope.university', null)
             ->assertJsonPath('stats.students', 0)
             ->assertJsonPath('stats.trips', 0)
+            ->assertJsonPath('stats.trip_requests', 0)
+            ->assertJsonPath('stats.accepted_requests', 0)
+            ->assertJsonPath('stats.request_acceptance_rate', null)
             ->assertJsonCount(0, 'distribution.by_university');
     }
 

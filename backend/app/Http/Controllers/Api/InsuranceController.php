@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\InsuranceEnrollment;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class InsuranceController extends Controller
 {
@@ -60,21 +63,32 @@ class InsuranceController extends Controller
         $data = $request->validate([
             'product_key' => ['required', Rule::in(array_keys(config('insurance.products')))],
         ]);
-        $openRequestExists = InsuranceEnrollment::query()
-            ->where('user_id', $request->user()->id)
-            ->where('product_key', $data['product_key'])
-            ->whereIn('status', ['quote_requested', 'quoted', 'pending_review', 'active'])
-            ->exists();
-        abort_if($openRequestExists, 409, 'Ya tienes una cotización o póliza vigente para este producto.');
-
         $product = config('insurance.products.'.$data['product_key']);
-        $enrollment = InsuranceEnrollment::create([
-            'user_id' => $request->user()->id,
-            'product_key' => $data['product_key'],
-            'provider' => $product['provider'],
-            'product_name' => $product['name'],
-            'status' => 'quote_requested',
-        ]);
+        $enrollment = DB::transaction(function () use ($request, $data, $product): InsuranceEnrollment {
+            $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
+            abort_unless(
+                $user->role === User::ROLE_STUDENT
+                && $user->status === User::STATUS_ACTIVE
+                && $user->studentProfile?->verified
+                && $user->studentProfile?->status === 'activo',
+                403,
+                'Necesitas una cuenta y perfil estudiantil activos y verificados.',
+            );
+            $openRequestExists = InsuranceEnrollment::query()
+                ->where('user_id', $request->user()->id)
+                ->where('product_key', $data['product_key'])
+                ->whereIn('status', ['quote_requested', 'quoted', 'pending_review', 'active'])
+                ->exists();
+            abort_if($openRequestExists, 409, 'Ya tienes una cotización o póliza vigente para este producto.');
+
+            return InsuranceEnrollment::create([
+                'user_id' => $request->user()->id,
+                'product_key' => $data['product_key'],
+                'provider' => $product['provider'],
+                'product_name' => $product['name'],
+                'status' => 'quote_requested',
+            ]);
+        });
 
         return response()->json([
             'message' => 'Solicitud de cotización registrada. Aún no existe cobertura activa ni precio confirmado.',
@@ -101,16 +115,46 @@ class InsuranceController extends Controller
         $path = $data['policy_document']->store('insurance/policies', 'local');
         abort_unless(is_string($path), 500, 'No se pudo guardar el documento de póliza.');
 
-        $enrollment->update([
-            'policy_number' => trim($data['policy_number']),
-            'coverage_starts_at' => $data['coverage_starts_at'],
-            'coverage_ends_at' => $data['coverage_ends_at'],
-            'policy_document_path' => $path,
-            'status' => 'pending_review',
-            'review_note' => null,
-            'reviewed_by' => null,
-            'reviewed_at' => null,
-        ]);
+        try {
+            $enrollment = DB::transaction(function () use ($request, $enrollment, $data, $path): InsuranceEnrollment {
+                $lockedEnrollment = InsuranceEnrollment::query()->lockForUpdate()->findOrFail($enrollment->id);
+                abort_unless((int) $lockedEnrollment->user_id === (int) $request->user()->id, 404);
+                abort_unless(
+                    $lockedEnrollment->status === 'quoted',
+                    409,
+                    'Solo puedes registrar una póliza para una cotización aprobada.',
+                );
+                abort_if(
+                    $lockedEnrollment->monthly_premium_cop > config('insurance.monthly_budget_cop'),
+                    422,
+                    'La prima supera el presupuesto mensual máximo configurado.',
+                );
+                $lockedEnrollment->update([
+                    'policy_number' => trim($data['policy_number']),
+                    'coverage_starts_at' => $data['coverage_starts_at'],
+                    'coverage_ends_at' => $data['coverage_ends_at'],
+                    'policy_document_path' => $path,
+                    'status' => 'pending_review',
+                    'review_note' => null,
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                ]);
+
+                return $lockedEnrollment;
+            });
+        } catch (Throwable $exception) {
+            if (
+                Storage::disk('local')->exists($path)
+                && ! Storage::disk('local')->delete($path)
+            ) {
+                Log::error('Failed to remove an uncommitted insurance policy document.', [
+                    'enrollment_id' => $enrollment->id,
+                    'path' => $path,
+                    'exception' => $exception->getMessage(),
+                ]);
+            }
+            throw $exception;
+        }
 
         return response()->json([
             'message' => 'Póliza recibida y pendiente de validación administrativa; aún no está activa en ViajaU.',
@@ -170,42 +214,47 @@ class InsuranceController extends Controller
             ],
         ]);
 
-        if ($data['status'] === 'active') {
-            abort_unless(
-                $enrollment->status === 'pending_review'
-                && $enrollment->policy_document_path
-                && Storage::disk('local')->exists($enrollment->policy_document_path)
-                && $enrollment->policy_number
-                && $enrollment->coverage_starts_at
-                && $enrollment->coverage_ends_at
-                && $enrollment->coverage_starts_at->lte(today())
-                && $enrollment->coverage_ends_at->gte(today())
-                && $enrollment->monthly_premium_cop <= config('insurance.monthly_budget_cop'),
-                409,
-                'La cobertura requiere documento, fechas, prima dentro del presupuesto y revisión de una póliza recibida.',
-            );
-        }
-        if ($data['status'] === 'quoted') {
-            abort_unless(
-                $enrollment->status === 'quote_requested',
-                409,
-                'Solo puedes cotizar una solicitud pendiente de cotización.',
-            );
-            $data['review_note'] = null;
-        }
-        if ($data['status'] === 'rejected') {
-            abort_unless(
-                in_array($enrollment->status, ['quote_requested', 'quoted', 'pending_review'], true),
-                409,
-                'No puedes rechazar una cotización que ya está activa.',
-            );
-        }
+        $enrollment = DB::transaction(function () use ($request, $enrollment, $data): InsuranceEnrollment {
+            $lockedEnrollment = InsuranceEnrollment::query()->lockForUpdate()->findOrFail($enrollment->id);
+            if ($data['status'] === 'active') {
+                abort_unless(
+                    $lockedEnrollment->status === 'pending_review'
+                    && $lockedEnrollment->policy_document_path
+                    && Storage::disk('local')->exists($lockedEnrollment->policy_document_path)
+                    && $lockedEnrollment->policy_number
+                    && $lockedEnrollment->coverage_starts_at
+                    && $lockedEnrollment->coverage_ends_at
+                    && $lockedEnrollment->coverage_starts_at->lte(today())
+                    && $lockedEnrollment->coverage_ends_at->gte(today())
+                    && $lockedEnrollment->monthly_premium_cop <= config('insurance.monthly_budget_cop'),
+                    409,
+                    'La cobertura requiere documento, fechas, prima dentro del presupuesto y revisión de una póliza recibida.',
+                );
+            }
+            if ($data['status'] === 'quoted') {
+                abort_unless(
+                    $lockedEnrollment->status === 'quote_requested',
+                    409,
+                    'Solo puedes cotizar una solicitud pendiente de cotización.',
+                );
+                $data['review_note'] = null;
+            }
+            if ($data['status'] === 'rejected') {
+                abort_unless(
+                    in_array($lockedEnrollment->status, ['quote_requested', 'quoted', 'pending_review'], true),
+                    409,
+                    'No puedes rechazar una cotización que ya está activa.',
+                );
+            }
 
-        $enrollment->update([
-            ...$data,
-            'reviewed_by' => $request->user()->id,
-            'reviewed_at' => now(),
-        ]);
+            $lockedEnrollment->update([
+                ...$data,
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+            ]);
+
+            return $lockedEnrollment;
+        });
 
         return response()->json([
             'message' => 'Estado de cotización/póliza actualizado.',

@@ -1,27 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
-  Mic, 
   Video, 
-  HelpCircle, 
   CheckCircle2, 
   Download, 
   Copy, 
-  Sparkles, 
-  ArrowRight,
-  ClipboardList
 } from 'lucide-react';
 import { INTERVIEW_QUESTIONS } from '../data/mockData';
 
 export default function InterviewRecorderModal({ isOpen, onClose }) {
-  if (!isOpen) return null;
-
   const [studentName, setStudentName] = useState('');
   const [university, setUniversity] = useState('UNIAJC');
   const [transportMode, setTransportMode] = useState('Transporte Público MIO');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [copied, setCopied] = useState(false);
+  const copiedTimeout = useRef(null);
+
+  useEffect(() => () => {
+    if (copiedTimeout.current !== null) {
+      window.clearTimeout(copiedTimeout.current);
+    }
+  }, []);
 
   // Five Whys state for Question #8
   const [whys, setWhys] = useState({
@@ -31,6 +31,8 @@ export default function InterviewRecorderModal({ isOpen, onClose }) {
     w4: '',
     rootCause: ''
   });
+
+  if (!isOpen) return null;
 
   const handleAnswerChange = (text) => {
     setAnswers(prev => ({
@@ -57,6 +59,7 @@ export default function InterviewRecorderModal({ isOpen, onClose }) {
     a.href = url;
     a.download = `Entrevista_ViajaU_${(studentName || 'Estudiante').replace(/\s+/g, '_')}.json`;
     a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const handleCopySummary = () => {
@@ -84,7 +87,11 @@ Causa Raíz: ${whys.rootCause || 'N/A'}
 
     navigator.clipboard.writeText(summaryText);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    if (copiedTimeout.current !== null) window.clearTimeout(copiedTimeout.current);
+    copiedTimeout.current = window.setTimeout(() => {
+      copiedTimeout.current = null;
+      setCopied(false);
+    }, 2500);
   };
 
   const q = INTERVIEW_QUESTIONS[currentQuestionIndex];

@@ -8,12 +8,12 @@ use App\Models\StudentProfile;
 use App\Models\TravelOffer;
 use App\Models\TripCheckIn;
 use App\Models\TripLocation;
-use App\Models\TripMatch;
 use App\Models\TripRequest;
-use App\Models\TripReview;
 use App\Models\TripSafetyEvent;
 use App\Models\User;
+use App\Services\DashboardAnalyticsService;
 use App\Services\SafetyNotificationService;
+use App\Services\TravelOfferSearchService;
 use App\Services\TrustedContactProfileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -86,7 +86,7 @@ class ViajauController extends Controller
         ]);
     }
 
-    public function listTrips(Request $request)
+    public function listTrips(Request $request, TravelOfferSearchService $search)
     {
         $filters = $request->validate([
             'zone' => ['nullable', 'string', 'max:120'],
@@ -96,77 +96,7 @@ class ViajauController extends Controller
             'transport' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $query = TravelOffer::query()
-            ->with(['studentProfile' => fn ($profileQuery) => $profileQuery
-                ->select(['id', 'user_id', 'name', 'university', 'career'])
-                ->withAvg('reviewsReceived', 'rating')
-                ->withCount('reviewsReceived')])
-            ->where('status', 'oferta-activa')
-            ->where('seats', '>', 0)
-            ->whereHas('studentProfile', function ($query) use ($request): void {
-                $query->where('verified', true)
-                    ->where('status', 'activo')
-                    ->where('user_id', '<>', $request->user()->id)
-                    ->whereHas('user', function ($userQuery): void {
-                        $userQuery->where('status', User::STATUS_ACTIVE)
-                            ->whereNotNull('email_verified_at');
-                    });
-            })
-            ->when($filters['zone'] ?? null, function ($query, string $zone): void {
-                $query->where(function ($routeQuery) use ($zone): void {
-                    $routeQuery->where('origin', 'like', '%'.$zone.'%')
-                        ->orWhere('destination', 'like', '%'.$zone.'%');
-                });
-            })
-            ->when($filters['time'] ?? null, function ($query, string $time): void {
-                $query->where('departure_time', 'like', substr($time, 0, 2).':%');
-            })
-            ->when($filters['transport'] ?? null, function ($query, string $transport): void {
-                $query->where('mode', 'like', '%'.$transport.'%');
-            })
-            ->when($filters['faculty'] ?? null, function ($query, string $faculty): void {
-                $query->whereHas('studentProfile', function ($profileQuery) use ($faculty): void {
-                    $profileQuery->where('career', 'like', '%'.$faculty.'%');
-                });
-            })
-            ->when($filters['university'] ?? null, function ($query, string $university): void {
-                $query->whereHas('studentProfile', function ($profileQuery) use ($university): void {
-                    $profileQuery->where('university', 'like', '%'.$university.'%');
-                });
-            });
-        $total = (clone $query)->count();
-        $offers = $query->orderBy('departure_time')
-            ->limit(100)
-            ->get()
-            ->map(fn (TravelOffer $offer): array => [
-                'id' => $offer->id,
-                'name' => $offer->studentProfile->name,
-                'profile_id' => $offer->studentProfile->id,
-                'rating_average' => $offer->studentProfile->reviews_received_avg_rating
-                    ? round((float) $offer->studentProfile->reviews_received_avg_rating, 1)
-                    : null,
-                'rating_count' => $offer->studentProfile->reviews_received_count,
-                'origin' => $offer->origin,
-                'destination' => $offer->destination,
-                'zone' => $offer->origin.' '.$offer->destination,
-                'time' => $offer->departure_time,
-                'faculty' => $offer->studentProfile->career,
-                'university' => $offer->studentProfile->university,
-                'transport' => $offer->mode,
-                'seats' => $offer->seats,
-                'cost' => $offer->cost,
-                'created_at' => $offer->created_at?->toISOString(),
-            ])
-            ->values();
-
-        return response()->json([
-            'data' => $offers,
-            'meta' => [
-                'total' => $total,
-                'limit' => 100,
-                'truncated' => $total > 100,
-            ],
-        ]);
+        return response()->json($search->search((int) $request->user()->id, $filters));
     }
 
     public function createTrip(Request $request)
@@ -932,84 +862,8 @@ class ViajauController extends Controller
         ];
     }
 
-    public function dashboard(Request $request)
+    public function dashboard(Request $request, DashboardAnalyticsService $analytics)
     {
-        $user = $request->user();
-        $isUniversityScoped = $user->role === User::ROLE_UNIVERSITY;
-        $university = $user->university;
-        $scopeProfiles = fn ($query) => $isUniversityScoped
-            ? $query->where('university', $university ?? '')
-            : $query;
-        $profiles = $scopeProfiles(StudentProfile::query());
-        $offers = TravelOffer::query()->whereHas('studentProfile', $scopeProfiles);
-        $alerts = SafetyAlert::query()->whereHas('studentProfile', $scopeProfiles);
-        $requests = TripRequest::query()->where(function ($query) use ($offers, $profiles): void {
-            $query->whereIn('travel_offer_id', (clone $offers)->select('id'))
-                ->orWhereIn('requester_profile_id', (clone $profiles)->select('id'));
-        });
-        $matches = TripMatch::query()->where(function ($query) use ($profiles): void {
-            $query->whereIn('student_profile_id', (clone $profiles)->select('id'))
-                ->orWhereIn('matched_student_id', (clone $profiles)->select('id'));
-        });
-        $registeredUsers = User::query()
-            ->where('role', User::ROLE_STUDENT)
-            ->when($isUniversityScoped, fn ($query) => $query->where('university', $university ?? ''));
-        $byUniversity = StudentProfile::query();
-        if ($isUniversityScoped) {
-            $byUniversity->where('university', $university ?? '');
-        }
-
-        return response()->json([
-            'stats' => [
-                'students' => (clone $profiles)->count(),
-                'registered_users' => $registeredUsers->count(),
-                'trips' => (clone $offers)->count(),
-                'active_trips' => (clone $offers)->whereIn('status', ['oferta-activa', 'en-curso'])->count(),
-                'completed_trips' => (clone $offers)->where('status', 'completada')->count(),
-                'matches' => $matches->count(),
-                'alerts' => (clone $alerts)->count(),
-                'active_alerts' => (clone $alerts)->where('active', true)->count(),
-                'trip_requests' => (clone $requests)->count(),
-                'accepted_requests' => (clone $requests)->where('status', 'accepted')->count(),
-                'request_acceptance_rate' => (clone $requests)->count() > 0
-                    ? round((clone $requests)->where('status', 'accepted')->count() / (clone $requests)->count() * 100, 1)
-                    : null,
-                'trust_score_avg' => TripReview::query()
-                    ->whereIn('reviewee_profile_id', (clone $profiles)->select('id'))
-                    ->avg('rating'),
-            ],
-            'scope' => [
-                'university' => $isUniversityScoped ? $university : null,
-                'global' => ! $isUniversityScoped,
-            ],
-            'distribution' => [
-                'by_university' => $byUniversity
-                    ->selectRaw('university as label, COUNT(*) as total')
-                    ->groupBy('university')
-                    ->orderByDesc('total')
-                    ->limit(10)
-                    ->get(),
-                'by_neighborhood' => (clone $profiles)
-                    ->selectRaw("COALESCE(NULLIF(TRIM(neighborhood), ''), 'Sin declarar') as label, COUNT(*) as total")
-                    ->groupBy('label')
-                    ->orderByDesc('total')
-                    ->limit(10)
-                    ->get(),
-                'by_shift' => (clone $profiles)
-                    ->selectRaw("COALESCE(NULLIF(TRIM(shift), ''), 'Sin declarar') as label, COUNT(*) as total")
-                    ->groupBy('label')
-                    ->orderByDesc('total')
-                    ->limit(10)
-                    ->get(),
-            ],
-            'recent_alerts' => (clone $alerts)
-                ->latest()
-                ->limit(5)
-                ->get(['id', 'type', 'severity', 'active', 'created_at']),
-            'recent_trips' => (clone $offers)
-                ->latest()
-                ->limit(5)
-                ->get(['id', 'origin', 'destination', 'status', 'created_at']),
-        ]);
+        return response()->json($analytics->build($request->user()));
     }
 }

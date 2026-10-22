@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   User, 
   ShieldCheck, 
@@ -8,16 +8,11 @@ import {
   GraduationCap, 
   Check, 
   Edit3, 
-  Car, 
-  Bike, 
-  Bus, 
-  Footprints, 
   Star, 
   Lock, 
   QrCode,
-  AlertTriangle
 } from 'lucide-react';
-import { NEIGHBORHOODS, UNIVERSITIES } from '../data/mockData';
+import { NEIGHBORHOODS } from '../data/mockData';
 
 export default function StudentProfile({ 
   studentUser, 
@@ -27,6 +22,13 @@ export default function StudentProfile({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const savedSuccessTimeout = useRef(null);
+
+  useEffect(() => () => {
+    if (savedSuccessTimeout.current !== null) {
+      window.clearTimeout(savedSuccessTimeout.current);
+    }
+  }, []);
 
   // Form states
   const [name, setName] = useState(studentUser.name);
@@ -63,7 +65,11 @@ export default function StudentProfile({
     onUpdateProfile(updated);
     setIsEditing(false);
     setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3500);
+    if (savedSuccessTimeout.current !== null) window.clearTimeout(savedSuccessTimeout.current);
+    savedSuccessTimeout.current = window.setTimeout(() => {
+      savedSuccessTimeout.current = null;
+      setSavedSuccess(false);
+    }, 3500);
   };
 
   return (

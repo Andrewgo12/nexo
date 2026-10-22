@@ -1,19 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   ShieldCheck, 
   AlertTriangle, 
   PhoneCall, 
-  Radio, 
   MapPin, 
-  Heart, 
   Lock, 
   FileText, 
-  CheckCircle2, 
-  X,
-  ExternalLink,
   ShieldAlert
 } from 'lucide-react';
-import { MIO_STATIONS } from '../data/mockData';
 
 export default function SafetyCenter({ 
   studentUser, 
@@ -27,19 +21,33 @@ export default function SafetyCenter({
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [sosCountdown, setSosCountdown] = useState(5);
   const [sosActive, setSosActive] = useState(false);
-  const [countdownInterval, setCountdownInterval] = useState(null);
+  const countdownInterval = useRef(null);
+
+  useEffect(() => () => {
+    if (countdownInterval.current !== null) {
+      window.clearInterval(countdownInterval.current);
+    }
+  }, []);
+
+  const clearCountdown = () => {
+    if (countdownInterval.current !== null) {
+      window.clearInterval(countdownInterval.current);
+      countdownInterval.current = null;
+    }
+  };
 
   const startSOS = () => {
+    clearCountdown();
     setShowSOSModal(true);
     setSosCountdown(5);
     setSosActive(false);
 
     let count = 5;
-    const interval = setInterval(() => {
+    countdownInterval.current = window.setInterval(() => {
       count--;
       setSosCountdown(count);
       if (count <= 0) {
-        clearInterval(interval);
+        clearCountdown();
         setSosActive(true);
         onTriggerSOS({
           timestamp: new Date().toLocaleTimeString(),
@@ -50,11 +58,10 @@ export default function SafetyCenter({
         });
       }
     }, 1000);
-    setCountdownInterval(interval);
   };
 
   const cancelSOS = () => {
-    if (countdownInterval) clearInterval(countdownInterval);
+    clearCountdown();
     setShowSOSModal(false);
     setSosActive(false);
   };
@@ -273,7 +280,7 @@ export default function SafetyCenter({
                   <button className="btn-secondary" onClick={cancelSOS} style={{ padding: '10px 24px', fontWeight: 700 }}>
                     Cancelar Alerta Falsa
                   </button>
-                  <button className="btn-danger" onClick={() => { if (countdownInterval) clearInterval(countdownInterval); setSosActive(true); onTriggerSOS({ timestamp: new Date().toLocaleTimeString(), user: studentUser.name, campus: activeUniversity.shortName, coords: activeUniversity.coords, contact: studentUser.emergencyContact }); }}>
+                  <button className="btn-danger" onClick={() => { clearCountdown(); setSosActive(true); onTriggerSOS({ timestamp: new Date().toLocaleTimeString(), user: studentUser.name, campus: activeUniversity.shortName, coords: activeUniversity.coords, contact: studentUser.emergencyContact }); }}>
                     Enviar Ya
                   </button>
                 </div>

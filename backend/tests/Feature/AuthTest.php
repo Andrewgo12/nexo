@@ -20,6 +20,16 @@ class AuthTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withHeaders([
+            'Origin' => 'http://localhost:5173',
+            'Referer' => 'http://localhost:5173/',
+        ]);
+    }
+
     public function test_student_can_register_with_a_matching_university_domain(): void
     {
         Notification::fake();
@@ -36,7 +46,8 @@ class AuthTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('user.email', 'ana@uniajc.edu.co')
             ->assertJsonMissingPath('user.password')
-            ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email', 'role', 'status']]);
+            ->assertJsonMissingPath('token')
+            ->assertJsonStructure(['user' => ['id', 'name', 'email', 'role', 'status']]);
 
         $user = User::firstOrFail();
         $this->assertTrue(Hash::check('Estudiante2026!', $user->password));
@@ -45,7 +56,10 @@ class AuthTest extends TestCase
         $this->assertSame($user->id, StudentProfile::firstOrFail()->user_id);
         $this->assertFalse(StudentProfile::firstOrFail()->verified);
         Notification::assertSentTo($user, VerifyEmail::class);
-        $this->withToken($response->json('token'))->getJson('/api/trips')->assertForbidden();
+        $sessionCookie = $response->getCookie(config('session.cookie'), false);
+        $this->assertNotNull($sessionCookie);
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->getJson('/api/trips')->assertForbidden();
     }
 
     public function test_registration_rejects_an_email_from_another_university(): void
@@ -78,7 +92,7 @@ class AuthTest extends TestCase
         $this->assertDatabaseCount('users', 1);
     }
 
-    public function test_student_can_log_in_and_revoke_their_token(): void
+    public function test_student_can_log_in_and_revoke_their_session(): void
     {
         $user = User::factory()->create([
             'email' => 'ana@uniajc.edu.co',
@@ -88,17 +102,61 @@ class AuthTest extends TestCase
         $login = $this->postJson('/api/auth/login', [
             'email' => $user->email,
             'password' => 'Estudiante2026!',
-        ])->assertOk()->assertJsonStructure(['token', 'user']);
+        ])->assertOk()->assertJsonMissingPath('token')->assertJsonStructure(['user']);
 
+        $sessionCookie = $login->getCookie(config('session.cookie'), false);
+        $this->assertNotNull($sessionCookie);
+        $this->assertTrue($sessionCookie->isHttpOnly());
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->getJson('/api/auth/me')->assertOk()
+            ->assertJsonPath('user.id', $user->id);
+
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->postJson('/api/auth/logout')->assertOk();
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->app['auth']->forgetGuards();
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->getJson('/api/auth/me')->assertUnauthorized();
+    }
+
+    public function test_non_browser_api_client_can_receive_and_revoke_a_personal_access_token(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'api@uniajc.edu.co',
+            'password' => Hash::make('Estudiante2026!'),
+        ]);
+
+        $login = $this->withoutHeaders(['Origin', 'Referer'])
+            ->postJson('/api/login', [
+                'email' => $user->email,
+                'password' => 'Estudiante2026!',
+            ])->assertOk()->assertJsonStructure(['token', 'user']);
         $token = $login->json('token');
 
         $this->withToken($token)->getJson('/api/auth/me')->assertOk()
             ->assertJsonPath('user.id', $user->id);
-
         $this->withToken($token)->postJson('/api/auth/logout')->assertOk();
         $this->assertDatabaseCount('personal_access_tokens', 0);
-        $this->app['auth']->forgetGuards();
-        $this->withToken($token)->getJson('/api/auth/me')->assertUnauthorized();
+    }
+
+    public function test_untrusted_browser_origin_cannot_fall_back_to_a_bearer_token(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'browser@uniajc.edu.co',
+            'password' => Hash::make('Estudiante2026!'),
+        ]);
+
+        $this->withHeaders([
+            'Origin' => 'https://attacker.example',
+            'Referer' => 'https://attacker.example/',
+        ])->postJson('/api/login', [
+            'email' => $user->email,
+            'password' => 'Estudiante2026!',
+        ])->assertStatus(400);
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_private_routes_reject_requests_without_a_token(): void
@@ -175,7 +233,7 @@ class AuthTest extends TestCase
     public function test_registration_login_me_and_logout_aliases_work(): void
     {
         Notification::fake();
-        $registration = $this->postJson('/api/register', [
+        $this->postJson('/api/register', [
             'name' => 'Ana López',
             'email' => 'ana@uniajc.edu.co',
             'password' => 'Estudiante2026!',
@@ -184,16 +242,19 @@ class AuthTest extends TestCase
         ])->assertCreated();
         $user = User::firstOrFail();
 
-        $this->postJson('/api/login', [
+        $login = $this->postJson('/api/login', [
             'email' => $user->email,
             'password' => 'Estudiante2026!',
         ])->assertOk()->assertJsonPath('user.id', $user->id);
 
-        $token = $registration->json('token');
-        $this->withToken($token)->getJson('/api/me')->assertOk()
+        $sessionCookie = $login->getCookie(config('session.cookie'), false);
+        $this->assertNotNull($sessionCookie);
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->getJson('/api/me')->assertOk()
             ->assertJsonPath('user.email', $user->email);
-        $this->withToken($token)->postJson('/api/logout')->assertOk();
-        $this->assertSame(1, $user->tokens()->count());
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->postJson('/api/logout')->assertOk();
+        $this->assertSame(0, $user->tokens()->count());
     }
 
     public function test_login_allows_pending_accounts_to_verify_email_but_not_blocked_accounts(): void
@@ -360,6 +421,34 @@ class AuthTest extends TestCase
         $this->assertSame(1, $user->tokens()->count());
         $this->app['auth']->forgetGuards();
         $this->withToken($token)->getJson('/api/auth/me')->assertOk();
+    }
+
+    public function test_user_can_change_password_with_a_browser_session(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('Estudiante2026!'),
+        ]);
+        $accessToken = $user->createToken('legacy-client');
+        $login = $this->postJson('/api/login', [
+            'email' => $user->email,
+            'password' => 'Estudiante2026!',
+        ])->assertOk();
+        $sessionCookie = $login->getCookie(config('session.cookie'), false);
+        $this->assertNotNull($sessionCookie);
+
+        $passwordChange = $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->putJson('/api/auth/change-password', [
+                'current_password' => 'Estudiante2026!',
+                'password' => 'NuevaClave2026Segura',
+                'password_confirmation' => 'NuevaClave2026Segura',
+            ])->assertOk();
+
+        $this->assertTrue(Hash::check('NuevaClave2026Segura', $user->fresh()->password));
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $accessToken->accessToken->id]);
+        $rotatedSessionCookie = $passwordChange->getCookie(config('session.cookie'), false);
+        $this->assertNotNull($rotatedSessionCookie);
+        $this->withCookie(config('session.cookie'), $rotatedSessionCookie->getValue())
+            ->getJson('/api/auth/me')->assertOk();
     }
 
     public function test_student_cannot_create_a_trip_using_another_students_profile(): void

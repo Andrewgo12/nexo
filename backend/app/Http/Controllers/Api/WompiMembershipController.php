@@ -30,24 +30,29 @@ class WompiMembershipController extends Controller
             'Wompi solo se permite con llaves y secretos de sandbox.',
         );
 
-        $payment = MembershipPayment::query()
-            ->where('user_id', $user->id)
-            ->where('status', 'pending')
-            ->where('environment', 'sandbox')
-            ->latest()
-            ->first();
-        if (! $payment) {
+        $payment = DB::transaction(function () use ($user): MembershipPayment {
+            User::query()->lockForUpdate()->findOrFail($user->id);
+            $payment = MembershipPayment::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'pending')
+                ->where('environment', 'sandbox')
+                ->latest()
+                ->first();
+            if ($payment) {
+                return $payment;
+            }
+
             $amount = config('membership.monthly_price_cop') * 100;
-            $reference = 'viajau-membership-'.Str::lower(Str::random(32));
-            $payment = MembershipPayment::create([
+
+            return MembershipPayment::create([
                 'user_id' => $user->id,
                 'provider' => 'wompi',
-                'reference' => $reference,
+                'reference' => 'viajau-membership-'.Str::lower(Str::random(32)),
                 'amount_in_cents' => $amount,
                 'currency' => 'COP',
                 'environment' => 'sandbox',
             ]);
-        }
+        });
         $amount = $payment->amount_in_cents;
         $reference = $payment->reference;
         $integrity = hash('sha256', $reference.$amount.'COP'.config('membership.wompi.integrity_secret'));

@@ -21,15 +21,13 @@ export default function ArrivalCheckinModal({
   onConfirmArrival,
   onTriggerSOS 
 }) {
-  if (!isOpen) return null;
-
   // Initial countdown 35 minutes in seconds
   const [timeLeft, setTimeLeft] = useState(35 * 60);
   const [isRunning, setIsRunning] = useState(true);
   const [arrivalConfirmed, setArrivalConfirmed] = useState(false);
 
   useEffect(() => {
-    if (!isRunning || timeLeft <= 0) return;
+    if (!isOpen || !isRunning || timeLeft <= 0) return;
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -41,7 +39,9 @@ export default function ArrivalCheckinModal({
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isRunning, timeLeft]);
+  }, [isOpen, isRunning, timeLeft]);
+
+  if (!isOpen) return null;
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

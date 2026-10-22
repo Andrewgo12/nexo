@@ -9,6 +9,7 @@ use App\Services\TrustedContactProfileService;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -17,11 +18,13 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
+        $this->ensureBrowserSession($request);
         $request->merge([
             'email' => strtolower(trim((string) $request->input('email'))),
         ]);
@@ -47,7 +50,7 @@ class AuthController extends Controller
             ]);
         }
 
-        [$user, $token] = DB::transaction(function () use ($data, $email, $university): array {
+        $user = DB::transaction(function () use ($data, $email, $university): User {
             $user = User::create([
                 'name' => trim($data['name']),
                 'email' => $email,
@@ -78,25 +81,28 @@ class AuthController extends Controller
             ]);
             $profile->save();
 
-            return [$user, $user->createToken('web')->plainTextToken];
+            return $user;
         });
+        $token = $this->authenticateClient($request, $user);
         $user->sendEmailVerificationNotification();
 
         return response()->json([
             'message' => 'Cuenta creada. Revisa tu correo institucional para verificarla.',
-            'token' => $token,
+            ...($token ? ['token' => $token] : []),
             'user' => $user,
         ], 201);
     }
 
     public function login(Request $request): JsonResponse
     {
+        $this->ensureBrowserSession($request);
         $request->merge([
             'email' => strtolower(trim((string) $request->input('email'))),
         ]);
         $data = $request->validate([
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+            'remember' => ['sometimes', 'boolean'],
         ]);
 
         $limiterKey = 'login:'.hash('sha256', $data['email'].'|'.$request->ip());
@@ -130,17 +136,48 @@ class AuthController extends Controller
         }
 
         RateLimiter::clear($limiterKey);
+        $token = $this->authenticateClient($request, $user, (bool) ($data['remember'] ?? false));
 
         return response()->json([
             'message' => 'Sesión iniciada correctamente.',
-            'token' => $user->createToken('web')->plainTextToken,
+            ...($token ? ['token' => $token] : []),
             'user' => $user,
         ]);
     }
 
+    private function ensureBrowserSession(Request $request): void
+    {
+        $isBrowserRequest = $request->headers->has('origin') || $request->headers->has('referer');
+        abort_if(
+            $isBrowserRequest && ! $request->hasSession(),
+            400,
+            'La sesión de navegador no está configurada como una solicitud de primera parte.',
+        );
+    }
+
+    private function authenticateClient(Request $request, User $user, bool $remember = false): ?string
+    {
+        if (! $request->hasSession()) {
+            return $user->createToken('api')->plainTextToken;
+        }
+
+        Auth::guard('web')->login($user, $remember);
+        $request->session()->regenerate();
+
+        return null;
+    }
+
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $accessToken = $request->user()->currentAccessToken();
+        if ($accessToken instanceof PersonalAccessToken) {
+            $accessToken->delete();
+        }
+        if ($request->hasSession()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         return response()->json(['message' => 'Sesión cerrada correctamente.']);
     }
@@ -218,7 +255,15 @@ class AuthController extends Controller
         }
 
         $user->update(['password' => $data['password']]);
-        $user->tokens()->where('id', '!=', $user->currentAccessToken()->getKey())->delete();
+        $currentAccessToken = $user->currentAccessToken();
+        if ($currentAccessToken instanceof PersonalAccessToken) {
+            $user->tokens()->where('id', '!=', $currentAccessToken->getKey())->delete();
+        } else {
+            $user->tokens()->delete();
+        }
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 
         return response()->json(['message' => 'Contraseña actualizada correctamente.']);
     }

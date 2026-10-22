@@ -19,14 +19,14 @@ export default function IncidentReportModal({
   activeUniversity, 
   studentUser 
 }) {
-  if (!isOpen) return null;
-
   const [type, setType] = useState('mio_delay');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [locationName, setLocationName] = useState(activeUniversity.shortName);
   const [submitted, setSubmitted] = useState(false);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();

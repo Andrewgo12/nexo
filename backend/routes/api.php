@@ -61,9 +61,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/trips/{trip}/reports', [ReputationController::class, 'report'])
             ->middleware('throttle:5,1');
         Route::get('/trips', [ViajauController::class, 'listTrips']);
-        Route::post('/trips', [ViajauController::class, 'createTrip']);
+        Route::post('/trips', [ViajauController::class, 'createTrip'])->middleware('throttle:10,1');
         Route::get('/trips/mine', [ViajauController::class, 'myTrips']);
-        Route::post('/trips/{trip}/requests', [ViajauController::class, 'createTripRequest']);
+        Route::post('/trips/{trip}/requests', [ViajauController::class, 'createTripRequest'])
+            ->middleware('throttle:10,1');
         Route::patch('/trips/{trip}', [ViajauController::class, 'cancelTrip']);
         Route::post('/trips/{trip}/location', [ViajauController::class, 'shareTripLocation'])
             ->middleware('throttle:30,1');
@@ -71,7 +72,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/trips/{trip}/safety', [ViajauController::class, 'tripSafetyStatus']);
         Route::post('/trips/{trip}/check-ins', [ViajauController::class, 'createTripCheckIn'])
             ->middleware('throttle:10,1');
-        Route::patch('/trip-requests/{tripRequest}', [ViajauController::class, 'updateTripRequest']);
+        Route::patch('/trip-requests/{tripRequest}', [ViajauController::class, 'updateTripRequest'])
+            ->middleware('throttle:20,1');
         Route::get('/matches', [ViajauController::class, 'listMatches']);
         Route::post('/alerts', [ViajauController::class, 'createAlert'])->middleware('throttle:3,1');
     });
