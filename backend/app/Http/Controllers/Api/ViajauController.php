@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ViajauController extends Controller
 {
@@ -102,6 +103,7 @@ class ViajauController extends Controller
             'origin' => 'required|string|max:120',
             'destination' => 'required|string|max:120',
             'mode' => 'nullable|string|max:80',
+            'departure_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'departure_time' => ['nullable', 'date_format:H:i'],
             'seats' => 'nullable|integer|min:1|max:20',
             'cost' => 'nullable|string|max:40',
@@ -111,6 +113,15 @@ class ViajauController extends Controller
             'safety_route.*.1' => ['required', 'numeric', 'between:-180,180'],
             'safety_route_duration_minutes' => ['required_with:safety_route', 'integer', 'min:1', 'max:600'],
         ])->validate();
+        $departureTime = $data['departure_time'] ?? '19:45';
+        if (
+            $data['departure_date'] === today()->toDateString()
+            && ! today()->setTimeFromTimeString($departureTime)->isFuture()
+        ) {
+            throw ValidationException::withMessages([
+                'departure_time' => ['La hora de salida debe ser futura para la fecha seleccionada.'],
+            ]);
+        }
 
         $profile = $request->user()->studentProfile;
         abort_unless(
@@ -128,7 +139,8 @@ class ViajauController extends Controller
             'origin' => $data['origin'],
             'destination' => $data['destination'],
             'mode' => $data['mode'] ?? 'MIO + caminata',
-            'departure_time' => $data['departure_time'] ?? '19:45',
+            'departure_date' => $data['departure_date'],
+            'departure_time' => $departureTime,
             'seats' => $data['seats'] ?? 2,
             'cost' => $data['cost'] ?? '2500 COP',
             'status' => 'oferta-activa',
@@ -144,6 +156,8 @@ class ViajauController extends Controller
                 'student_profile_id' => $trip->student_profile_id,
                 'origin' => $trip->origin,
                 'destination' => $trip->destination,
+                'departure_date' => $trip->departure_date?->toDateString(),
+                'departure_time' => $trip->departure_time,
                 'status' => $trip->status,
                 'safety_geofence_enabled' => $trip->safety_route !== null,
             ],
@@ -169,6 +183,7 @@ class ViajauController extends Controller
                 'id' => $offer->id,
                 'origin' => $offer->origin,
                 'destination' => $offer->destination,
+                'departure_date' => $offer->departure_date?->toDateString(),
                 'mode' => $offer->mode,
                 'departure_time' => $offer->departure_time,
                 'seats' => $offer->seats,
@@ -197,6 +212,7 @@ class ViajauController extends Controller
                     'id' => $tripRequest->travelOffer->id,
                     'origin' => $tripRequest->travelOffer->origin,
                     'destination' => $tripRequest->travelOffer->destination,
+                    'departure_date' => $tripRequest->travelOffer->departure_date?->toDateString(),
                     'departure_time' => $tripRequest->travelOffer->departure_time,
                     'seats' => $tripRequest->travelOffer->seats,
                     'status' => $tripRequest->travelOffer->status,
@@ -220,6 +236,7 @@ class ViajauController extends Controller
             $lockedTrip = TravelOffer::query()->lockForUpdate()->findOrFail($trip->id);
             abort_if($lockedTrip->student_profile_id === $profile->id, 422, 'No puedes solicitar un cupo en tu propia oferta.');
             abort_unless($lockedTrip->status === 'oferta-activa' && $lockedTrip->seats > 0, 409, 'La oferta ya no tiene cupos disponibles.');
+            abort_unless($lockedTrip->isUpcoming(), 409, 'La oferta ya venció.');
             abort_if(
                 TripRequest::query()
                     ->where('travel_offer_id', $lockedTrip->id)
@@ -274,6 +291,7 @@ class ViajauController extends Controller
 
             if ($status === 'accepted') {
                 abort_unless($offer->status === 'oferta-activa' && $offer->seats > 0, 409, 'La oferta ya no tiene cupos disponibles.');
+                abort_unless($offer->isUpcoming(), 409, 'La oferta ya venció.');
                 $offer->decrement('seats');
             } elseif ($status === 'cancelled') {
                 abort_unless($offer->status === 'oferta-activa', 409, 'La oferta ya no está activa.');

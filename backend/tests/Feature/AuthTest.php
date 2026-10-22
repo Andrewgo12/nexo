@@ -302,6 +302,35 @@ class AuthTest extends TestCase
         $this->assertSame('activo', $profile->fresh()->status);
     }
 
+    public function test_signed_verification_link_does_not_reactivate_a_blocked_account(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'ana@uniajc.edu.co',
+            'university' => 'UNIAJC',
+            'status' => User::STATUS_BLOCKED,
+        ]);
+        $profile = StudentProfile::create([
+            'user_id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'university' => 'UNIAJC',
+            'verified' => false,
+            'status' => 'pendiente-verificacion',
+        ]);
+        $url = URL::temporarySignedRoute(
+            'verification.verify',
+            now()->addMinutes(60),
+            ['id' => $user->id, 'hash' => sha1($user->email)],
+        );
+
+        $this->get($url)->assertForbidden();
+
+        $this->assertSame(User::STATUS_BLOCKED, $user->fresh()->status);
+        $this->assertNull($user->fresh()->email_verified_at);
+        $this->assertFalse($profile->fresh()->verified);
+        $this->assertSame('pendiente-verificacion', $profile->fresh()->status);
+    }
+
     public function test_forgot_password_sends_a_reset_link_and_reset_revokes_existing_tokens(): void
     {
         Notification::fake();

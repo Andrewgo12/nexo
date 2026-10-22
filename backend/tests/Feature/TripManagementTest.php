@@ -22,11 +22,13 @@ class TripManagementTest extends TestCase
         $this->withToken($token)->postJson('/api/trips', [
             'origin' => 'El Caney',
             'destination' => 'UNIAJC',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '19:45',
             'seats' => 2,
             'status' => 'cancelada',
         ])->assertCreated()
             ->assertJsonPath('data.student_profile_id', $profile->id)
+            ->assertJsonPath('data.departure_date', today()->addDay()->toDateString())
             ->assertJsonPath('data.status', 'oferta-activa');
     }
 
@@ -38,6 +40,7 @@ class TripManagementTest extends TestCase
         $payload = [
             'origin' => 'El Caney',
             'destination' => 'UNIAJC',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '19:45',
             'seats' => 2,
         ];
@@ -81,6 +84,34 @@ class TripManagementTest extends TestCase
             'requester_profile_id' => $requesterProfile->id,
             'status' => 'accepted',
         ]);
+    }
+
+    public function test_expired_offer_cannot_receive_or_accept_seat_requests(): void
+    {
+        $owner = User::factory()->create();
+        $offer = $this->createOffer($this->createProfile($owner), [
+            'departure_date' => today()->subDay()->toDateString(),
+            'seats' => 1,
+        ]);
+        $requester = User::factory()->create();
+        $profile = $this->createProfile($requester);
+        $token = $requester->createToken('web')->plainTextToken;
+
+        $this->withToken($token)->postJson("/api/trips/{$offer->id}/requests")
+            ->assertConflict();
+
+        $tripRequest = TripRequest::create([
+            'travel_offer_id' => $offer->id,
+            'requester_profile_id' => $profile->id,
+            'status' => 'pending',
+        ]);
+
+        $this->flushHeaders()->actingAs($owner, 'sanctum')
+            ->patchJson("/api/trip-requests/{$tripRequest->id}", ['status' => 'accepted'])
+            ->assertConflict();
+
+        $this->assertDatabaseHas('trip_requests', ['id' => $tripRequest->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('travel_offers', ['id' => $offer->id, 'seats' => 1]);
     }
 
     public function test_offer_owner_cannot_request_a_seat_on_their_own_offer(): void
@@ -269,6 +300,7 @@ class TripManagementTest extends TestCase
             'origin' => 'UNIAJC',
             'destination' => 'El Caney',
             'mode' => 'MIO + caminata',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '19:45',
             'seats' => 2,
             'cost' => '2500 COP',

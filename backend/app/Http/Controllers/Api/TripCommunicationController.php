@@ -41,6 +41,7 @@ class TripCommunicationController extends Controller
                 'id' => $offer->id,
                 'origin' => $offer->origin,
                 'destination' => $offer->destination,
+                'departure_date' => $offer->departure_date?->toDateString(),
                 'departure_time' => $offer->departure_time,
                 'status' => $offer->status,
                 'message_count' => $offer->messages_count,

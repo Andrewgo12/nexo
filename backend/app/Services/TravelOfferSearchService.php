@@ -50,6 +50,7 @@ class TravelOfferSearchService
                 'rating_count' => $offer->studentProfile->reviews_received_count,
                 'origin' => $offer->origin,
                 'destination' => $offer->destination,
+                'departure_date' => $offer->departure_date?->toDateString(),
                 'zone' => $offer->origin.' '.$offer->destination,
                 'time' => $offer->departure_time,
                 'faculty' => $offer->studentProfile->career,
@@ -74,6 +75,7 @@ class TravelOfferSearchService
     private function eligibleOffers(int $viewerId): Builder
     {
         return TravelOffer::query()
+            ->upcoming()
             ->with(['studentProfile' => function (BelongsTo $profileQuery): void {
                 $profileQuery->select(['id', 'user_id', 'name', 'university', 'career'])
                     ->withAvg('reviewsReceived', 'rating')

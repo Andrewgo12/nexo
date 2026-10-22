@@ -128,6 +128,7 @@ class TripCommunicationTest extends TestCase
             'origin' => 'Sede Sur',
             'destination' => 'El Caney',
             'mode' => 'MIO',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '18:00',
             'seats' => 1,
             'cost' => '2500 COP',

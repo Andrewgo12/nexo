@@ -262,6 +262,7 @@ class SafetyNotificationsTest extends TestCase
             'origin' => 'Universidad',
             'destination' => 'Destino',
             'mode' => 'Carro',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '09:00',
             'seats' => 1,
             'safety_route' => [[3.45, -76.53], [3.47, -76.51]],

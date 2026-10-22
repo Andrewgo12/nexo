@@ -44,6 +44,7 @@ class TripSearchTest extends TestCase
         $response->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $activeOffer->id)
+            ->assertJsonPath('data.0.departure_date', today()->addDay()->toDateString())
             ->assertJsonPath('data.0.name', 'Ana Conductora')
             ->assertJsonPath('data.0.university', 'UNIAJC')
             ->assertJsonPath('meta.total', 1)
@@ -104,6 +105,7 @@ class TripSearchTest extends TestCase
     public function test_high_traffic_trip_queries_have_supporting_composite_indexes(): void
     {
         $this->assertContains('travel_offers_status_departure_index', Schema::getIndexListing('travel_offers'));
+        $this->assertContains('travel_offers_status_date_time_index', Schema::getIndexListing('travel_offers'));
         $this->assertContains('travel_offers_profile_created_index', Schema::getIndexListing('travel_offers'));
         $this->assertContains(
             'student_profiles_verified_status_user_index',
@@ -299,6 +301,55 @@ class TripSearchTest extends TestCase
             ->assertJsonPath('meta.truncated', true);
     }
 
+    public function test_search_and_matches_exclude_past_or_undated_offers(): void
+    {
+        $viewer = User::factory()->create();
+        $this->createProfile($viewer, [
+            'neighborhood' => 'El Caney',
+            'shift' => 'Nocturna',
+            'transport' => 'MIO',
+        ]);
+        $driver = User::factory()->create();
+        $profile = $this->createProfile($driver);
+        $pastOffer = $this->createOffer($profile, [
+            'departure_date' => today()->subDay()->toDateString(),
+            'origin' => 'El Caney',
+        ]);
+        $undatedOffer = $this->createOffer($profile, [
+            'departure_date' => null,
+            'origin' => 'El Caney',
+        ]);
+
+        $token = $viewer->createToken('web')->plainTextToken;
+        $this->withToken($token)->getJson('/api/trips')->assertOk()->assertJsonCount(0, 'data');
+        $this->withToken($token)->getJson('/api/matches')->assertOk()->assertJsonCount(0, 'data');
+        $this->assertDatabaseHas('travel_offers', ['id' => $pastOffer->id]);
+        $this->assertDatabaseHas('travel_offers', ['id' => $undatedOffer->id, 'departure_date' => null]);
+    }
+
+    public function test_trip_creation_requires_a_future_date_and_time(): void
+    {
+        $user = User::factory()->create();
+        $profile = $this->createProfile($user);
+        $token = $user->createToken('web')->plainTextToken;
+
+        $this->withToken($token)->postJson('/api/trips', [
+            'student_profile_id' => $profile->id,
+            'origin' => 'El Caney',
+            'destination' => 'UNIAJC',
+            'departure_date' => today()->subDay()->toDateString(),
+            'departure_time' => '19:45',
+        ])->assertUnprocessable()->assertJsonValidationErrors('departure_date');
+
+        $this->withToken($token)->postJson('/api/trips', [
+            'student_profile_id' => $profile->id,
+            'origin' => 'El Caney',
+            'destination' => 'UNIAJC',
+            'departure_date' => today()->toDateString(),
+            'departure_time' => now()->subMinute()->format('H:i'),
+        ])->assertUnprocessable()->assertJsonValidationErrors('departure_time');
+    }
+
     public function test_trip_creation_rejects_malformed_departure_time(): void
     {
         $user = User::factory()->create();
@@ -309,6 +360,7 @@ class TripSearchTest extends TestCase
             'student_profile_id' => $profile->id,
             'origin' => 'El Caney',
             'destination' => 'UNIAJC',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '25:90',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors('departure_time');
@@ -354,6 +406,7 @@ class TripSearchTest extends TestCase
             'origin' => 'UNIAJC',
             'destination' => 'El Caney',
             'mode' => 'MIO + caminata',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '19:45',
             'seats' => 2,
             'cost' => '2500 COP',

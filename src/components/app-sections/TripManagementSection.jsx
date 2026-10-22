@@ -14,7 +14,7 @@ export default function TripManagementSection(props) {
           {props.tripCards.map((offer) => (
             <div key={offer.id} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div><div style={{ fontSize: 20, fontWeight: 800 }}>{offer.name}</div><div style={{ color: '#dbeafe' }}>{offer.origin} → {offer.destination} • {offer.time}</div></div>
+                <div><div style={{ fontSize: 20, fontWeight: 800 }}>{offer.name}</div><div style={{ color: '#dbeafe' }}>{offer.origin} → {offer.destination} • {offer.departure_date} {offer.time}</div></div>
                 <div style={{ color: '#fbbf24', fontWeight: 800 }}>{offer.university}</div>
               </div>
               <div style={{ marginTop: 8, color: '#dbeafe' }}>Modo: {offer.transport} • {offer.seats} cupo(s) • {offer.cost}</div>
@@ -34,7 +34,7 @@ export default function TripManagementSection(props) {
         <div style={{ display: 'grid', gap: 12 }}>
           {props.myTripData.offers.map((offer) => (
             <div key={offer.id} style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 14, padding: 16 }}>
-              <div style={{ fontWeight: 800 }}>{offer.origin} → {offer.destination} • {offer.departure_time}</div>
+              <div style={{ fontWeight: 800 }}>{offer.origin} → {offer.destination} • {offer.departure_date} {offer.departure_time}</div>
               <div style={{ marginTop: 4, color: '#cbd5e1' }}>{props.tripStatusLabels[offer.status] || offer.status} • {offer.seats} cupo(s) disponibles • {offer.cost}</div>
               {offer.requests.map((tripRequest) => (
                 <div key={tripRequest.id} style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(148,163,184,.18)' }}>
@@ -67,7 +67,7 @@ export default function TripManagementSection(props) {
         <div style={{ display: 'grid', gap: 10 }}>
           {props.myTripData.requests.map((tripRequest) => (
             <div key={tripRequest.id} style={{ background: 'rgba(59,130,246,.08)', borderRadius: 12, padding: 14 }}>
-              <div>{tripRequest.offer.owner} • {tripRequest.offer.origin} → {tripRequest.offer.destination} • {tripRequest.offer.departure_time}</div>
+              <div>{tripRequest.offer.owner} • {tripRequest.offer.origin} → {tripRequest.offer.destination} • {tripRequest.offer.departure_date} {tripRequest.offer.departure_time}</div>
               <div style={{ color: '#cbd5e1', marginTop: 4 }}>Solicitud: {props.tripStatusLabels[tripRequest.status] || tripRequest.status} • Viaje: {props.tripStatusLabels[tripRequest.offer.status] || tripRequest.offer.status}</div>
               {['pending', 'accepted'].includes(tripRequest.status) && tripRequest.offer.status === 'oferta-activa' && (
                 <button onClick={() => props.runTripAction(`withdraw-${tripRequest.id}`, () => props.updateTravelRequest(tripRequest.id, 'cancelled'), tripRequest.status === 'accepted' ? 'Participación cancelada y cupo liberado.' : 'Solicitud cancelada.')} style={{ ...props.field, marginTop: 8, padding: '7px 10px', cursor: 'pointer' }}>
@@ -188,6 +188,7 @@ export default function TripManagementSection(props) {
         <form onSubmit={props.submitTripOffer} style={{ display: 'grid', gap: 12, marginTop: 16 }}>
           <label style={{ display: 'grid', gap: 6 }}>Origen<input required maxLength={120} value={props.tripOfferForm.origin} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, origin: event.target.value }))} style={props.field} /></label>
           <label style={{ display: 'grid', gap: 6 }}>Destino<input required maxLength={120} value={props.tripOfferForm.destination} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, destination: event.target.value }))} style={props.field} /></label>
+          <label style={{ display: 'grid', gap: 6 }}>Fecha de salida<input required type="date" min={props.tripOfferMinimumDate} value={props.tripOfferForm.departure_date} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, departure_date: event.target.value }))} style={props.field} /></label>
           <label style={{ display: 'grid', gap: 6 }}>Hora de salida<input required type="time" value={props.tripOfferForm.departure_time} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, departure_time: event.target.value }))} style={props.field} /></label>
           <label style={{ display: 'grid', gap: 6 }}>Transporte<input required maxLength={80} value={props.tripOfferForm.mode} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, mode: event.target.value }))} style={props.field} /></label>
           <label style={{ display: 'grid', gap: 6 }}>Cupos<input required type="number" min="1" max="20" value={props.tripOfferForm.seats} onChange={(event) => props.setTripOfferForm((current) => ({ ...current, seats: event.target.value }))} style={props.field} /></label>

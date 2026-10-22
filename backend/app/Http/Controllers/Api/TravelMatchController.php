@@ -19,6 +19,7 @@ class TravelMatchController extends Controller
         }
 
         $eligibleOffers = TravelOffer::query()
+            ->upcoming()
             ->where('status', 'oferta-activa')
             ->where('seats', '>', 0)
             ->whereHas('studentProfile', function ($query) use ($viewer): void {
@@ -89,6 +90,7 @@ class TravelMatchController extends Controller
                     'traveler' => $candidate->name,
                     'origin' => $offer->origin,
                     'destination' => $offer->destination,
+                    'departure_date' => $offer->departure_date?->toDateString(),
                     'zone' => $offer->origin.' → '.$offer->destination,
                     'time' => $offer->departure_time,
                     'mode' => $offer->mode,

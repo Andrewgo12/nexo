@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react';
 import { executionChecklist } from '../data/appSectionData';
 
+function localDateString(date = new Date()) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
+
 export default function useAppState(persisted, { initialStudent, universities }) {
   const [active, setActive] = useState(persisted.activeTab || 'auth');
   const [student, setStudent] = useState(initialStudent);
@@ -102,9 +107,11 @@ export default function useAppState(persisted, { initialStudent, universities })
   const [deviceLocation, setDeviceLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [tripCards, setTripCards] = useState([]);
+  const [tripOfferMinimumDate] = useState(localDateString);
   const [tripOfferForm, setTripOfferForm] = useState({
       origin: 'UNIAJC Sede Sur',
       destination: 'El Caney',
+      departure_date: localDateString(),
       departure_time: '19:45',
       mode: 'MIO + caminata',
       seats: '2',
@@ -192,7 +199,7 @@ export default function useAppState(persisted, { initialStudent, universities })
     routeSearchLoading, setRouteSearchLoading, routeLoading, setRouteLoading,
     routeError, setRouteError, deviceLocation, setDeviceLocation,
     locationLoading, setLocationLoading, tripCards, setTripCards,
-    tripOfferForm, setTripOfferForm, tripGeofenceConsent, setTripGeofenceConsent,
+    tripOfferMinimumDate, tripOfferForm, setTripOfferForm, tripGeofenceConsent, setTripGeofenceConsent,
     tripGeofencePreview, setTripGeofencePreview, alertFeed, setAlertFeed,
     safetyActionLoading, setSafetyActionLoading, safetyError, setSafetyError,
     safetyLocationError, setSafetyLocationError, includeSafetyLocation, setIncludeSafetyLocation,

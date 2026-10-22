@@ -46,6 +46,7 @@ export default function useAppViewModel(state) {
   const geofenceRouteFingerprint = JSON.stringify([
     tripOfferForm.origin,
     tripOfferForm.destination,
+    tripOfferForm.departure_date,
     tripOfferForm.mode,
     tripOfferForm.safety_route_duration_minutes,
   ]);

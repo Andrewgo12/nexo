@@ -329,13 +329,27 @@ class AuthController extends Controller
 
         abort_unless(hash_equals(sha1($user->getEmailForVerification()), $hash), 403);
 
-        if ($user->markEmailAsVerified()) {
-            $user->forceFill(['status' => User::STATUS_ACTIVE])->save();
-            $user->studentProfile()->update([
+        DB::transaction(function () use ($user): void {
+            $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
+            abort_unless(
+                in_array($lockedUser->status, [User::STATUS_PENDING, User::STATUS_ACTIVE], true),
+                403,
+                'La cuenta no puede activarse con este enlace.',
+            );
+
+            if (! $lockedUser->hasVerifiedEmail()) {
+                $lockedUser->markEmailAsVerified();
+            }
+
+            if ($lockedUser->status === User::STATUS_PENDING) {
+                $lockedUser->forceFill(['status' => User::STATUS_ACTIVE])->save();
+            }
+
+            $lockedUser->studentProfile()->update([
                 'verified' => true,
                 'status' => 'activo',
             ]);
-        }
+        });
 
         return redirect()->away(config('viajau.frontend_url').'?verified=1');
     }

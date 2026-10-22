@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,6 +15,7 @@ class TravelOffer extends Model
         'origin',
         'destination',
         'mode',
+        'departure_date',
         'departure_time',
         'seats',
         'cost',
@@ -55,9 +57,38 @@ class TravelOffer extends Model
         return $this->hasMany(TripSafetyEvent::class);
     }
 
+    public function scopeUpcoming(Builder $query): Builder
+    {
+        $now = now();
+
+        return $query->where(function (Builder $query) use ($now): void {
+            $query->whereDate('departure_date', '>', $now->toDateString())
+                ->orWhere(function (Builder $query) use ($now): void {
+                    $query->whereDate('departure_date', $now->toDateString())
+                        ->where('departure_time', '>=', $now->format('H:i'));
+                });
+        });
+    }
+
+    public function isUpcoming(): bool
+    {
+        $departureDate = $this->departure_date;
+        $now = now();
+
+        return $departureDate !== null
+            && (
+                $departureDate->isAfter($now->copy()->startOfDay())
+                || (
+                    $departureDate->isSameDay($now)
+                    && $this->departure_time >= $now->format('H:i')
+                )
+            );
+    }
+
     protected function casts(): array
     {
         return [
+            'departure_date' => 'date',
             'safety_route' => 'array',
             'safety_route_duration_minutes' => 'integer',
             'started_at' => 'datetime',
