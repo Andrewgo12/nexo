@@ -45,11 +45,11 @@ export const backendFunctions = [
 ];
 
 export const completionAreas = [
-  { label: 'Usuarios y validación', progress: 100, status: 'Completado', items: 'Registro, perfil, correo institucional, privacidad, seguridad' },
-  { label: 'Mapas, rutas y búsqueda', progress: 100, status: 'Completado', items: 'Geolocalización, routing, filtros, ordenamiento y matching' },
-  { label: 'Gestión de viajes y seguridad', progress: 70, status: 'Parcial', items: 'Ofertas, SOS, GPS consentido, geocercas y avisos opt-in; falta integración con servicios de emergencia' },
-  { label: 'Pago, confianza y monetización', progress: 55, status: 'Parcial', items: 'Reputación implementada; cotización y revisión manual de pólizas; pagos y activación automática pendientes' },
-  { label: 'Infraestructura avanzada', progress: 92, status: 'Listo para producción', items: 'Logs, cache, sincronización GTFS, auditoría y monitoreo' },
+  { label: 'Usuarios y validación', status: 'Parcial', items: 'Registro, inicio de sesión, verificación de correo, perfiles y roles; no acredita identidad real.' },
+  { label: 'Mapas, rutas y búsqueda', status: 'Parcial', items: 'Mapa, proveedores externos de rutas y búsqueda; GTFS no incluye horarios completos ni garantiza disponibilidad externa.' },
+  { label: 'Gestión de viajes y seguridad', status: 'Parcial', items: 'Ofertas, SOS y GPS consentido; la geocerca automática espera verificación de ruta en servidor y no hay respuesta automática de autoridades.' },
+  { label: 'Pago, confianza y monetización', status: 'Parcial', items: 'Reputación, cotizaciones y revisión manual; pagos reales y activación automática de seguro no están habilitados.' },
+  { label: 'Infraestructura avanzada', status: 'En desarrollo', items: 'Hay controles y pruebas, pero no existe evidencia de certificación de producción, monitoreo externo ni disponibilidad operativa de colas/scheduler.' },
 ];
 
 export const roadmapPhases = [

@@ -334,8 +334,9 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 
 | Método | Ruta / componente | Descripción | Estado de implementación |
 |---|---|---|---|
-| `GET` | `/api/health` | Health check del backend. | Implementado; no es monitoreo externo. |
-| `POST` | `/api/register`, `/api/auth/register` | Registro institucional; límite 5/min. | Implementado; usuario público se registra como estudiante. |
+| `GET` | `/api/health` | Liveness del proceso; no consulta dependencias. | Implementado; responde aunque la base de datos no esté disponible. |
+| `GET` | `/api/ready` | Readiness que ejecuta una consulta simple a la base de datos. | Implementado; devuelve `503` y registra el fallo sin exponer detalles de conexión. |
+| `POST` | `/api/register`, `/api/auth/register` | Registro institucional; límite 5/min. | Implementado; un fallo SMTP queda explícito en `verification_email_sent` y se puede reintentar por el endpoint de verificación. |
 | `POST` | `/api/login`, `/api/auth/login` | Inicio de sesión; límite general 10/min y control adicional por credenciales/IP. | Implementado; sesión browser o token API según contexto. |
 | `POST` | `/api/auth/forgot-password` | Solicita recuperación de contraseña; 5/min. | Implementado; requiere mailer. |
 | `POST` | `/api/auth/reset-password` | Restablece contraseña con token por correo; 5/min. | Implementado; requiere mailer/token válido. |
@@ -343,7 +344,7 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 | `GET` | `/api/user` | Devuelve usuario autenticado activo. | Implementado; Sanctum + `account.active`. |
 | `POST` | `/api/logout`, `/api/auth/logout` | Cierra sesión o revoca token actual. | Implementado; Sanctum. |
 | `GET` | `/api/me`, `/api/auth/me` | Devuelve cuenta actual. | Implementado; Sanctum. |
-| `POST` | `/api/auth/email/verification-notification` | Reenvía correo de verificación; 6/min. | Implementado; entrega depende del mailer. |
+| `POST` | `/api/auth/email/verification-notification` | Envía/reintenta correo de verificación; 6/min. | Implementado; devuelve `503` si el transporte SMTP falla para que el cliente pueda reintentar. |
 | `PUT` | `/api/profile`, `/api/auth/profile` | Actualiza perfil de la cuenta. | Implementado; Sanctum + cuenta activa. |
 | `POST` | `/api/profile/photo` | Sube foto de perfil mediante `AuthController::updateProfile`. | Implementada; acepta JPG/JPEG/PNG/WebP hasta 2 MB y la almacena en el disco `public`. |
 | `PUT` | `/api/auth/change-password` | Cambia contraseña; límite 5/min. | Implementado; requiere cuenta autenticada. |
@@ -415,21 +416,20 @@ Las rutas alias antiguas de auth (`/api/register`, `/api/login`, `/api/logout`, 
 ## 8. Deuda técnica y puntos de mejora observados
 
 1. **No hay cobertura cuantificada.** Vitest y PHPUnit no configuran reporte porcentual; agregar cobertura y umbrales por capa antes de usar una cifra de calidad.
-2. **Suite backend no reproducible en el entorno auditado.** La falta de `pdo_sqlite` causa 114 errores; mantener extensiones documentadas localmente y validar el job `product-backend` en GitHub antes de release.
-3. **Lint estricto bloqueado.** Se observaron 45 diagnósticos; varios son imports/variables sin uso, además de llamadas de tiempo impuras durante render y una dependencia incompleta de efecto React. Corregir y conservar `--deny-warnings`.
-4. **Estado de progreso contradictorio en interfaz.** `src/data/appSectionData.js` muestra áreas como 100%/“Completado” e infraestructura “Listo para producción” mientras la auditoría identifica colas/proveedores opcionales, pagos apagados, features faltantes y lint/tests pendientes. No usar esos porcentajes como estado técnico.
-5. **Mocks/datos de demostración presentes.** `src/data/mockData.js` tiene 999 líneas y contiene perfiles, ofertas, notificaciones, incidentes y datos de informe estáticos. Separar los fixtures de las pantallas operativas y rotularlos como demo para evitar confundirlos con información real.
-6. **Archivos grandes aún fuera del objetivo de 350 líneas** (conteo de líneas del checkout revisado): `mockData.js` 999, `App.css` 661, `index.css` 516, `InteractiveMap.jsx` 502, `AcademicReportViewer.jsx` 422, `authApi.js` 391 y `TripExplorer.jsx` 356. `InteractiveMap` además tiene imports no usados y un warning de dependencias de efecto.
-7. **Fechas históricas de ofertas.** Las ofertas existentes con `departure_date = NULL` se conservan, pero quedan excluidas de búsqueda y recomendaciones; definir si se migran con fechas confirmadas o se archivan, sin inventar fechas.
-8. **Rutas/API configuradas para localhost.** `vite.config.js` fija el proxy a `127.0.0.1:8000`; no hay variable raíz configurada para cambiar API por entorno. Alinear configuración de despliegue/proxy con dominios reales.
-9. **Protección de secretos en raíz incompleta.** `backend/.gitignore` excluye `.env`, pero el `.gitignore` raíz no tiene regla explícita para `.env` raíz. Agregarla y comprobar que ningún secreto de Vite/credencial se añada al índice.
-10. **Persistencia de sesión y despliegue requieren configuración explícita.** Definir `SANCTUM_STATEFUL_DOMAINS`, CORS exacto, HTTPS, `SESSION_SECURE_COOKIE`, dominio/SameSite y CSRF por topología; no validar solo en localhost.
-11. **Integraciones de seguridad no equivalen a respuesta de emergencia.** Email/SMS/WhatsApp son best-effort y dependen de consentimiento, credenciales y cola/scheduler. Faltan pruebas operativas de entrega, reintentos, observabilidad externa y protocolo humano de incidentes.
-12. **Ubicación es dato sensible.** El backend mantiene solo la última coordenada por participante, la borra al completar/cancelar y expira coordenadas sin actualización después de 24 h mediante scheduler. Producción requiere verificar que el scheduler corra, y revisar permisos, almacenamiento, logs, copias, acceso administrativo, borrado y obligaciones locales de protección de datos.
-13. **GTFS parcial y proveedor externo.** Importador acepta `stops.txt`/`routes.txt`, no viajes, `stop_times` ni calendarios; evitar presentar frecuencias u horarios activos. Añadir actualización, versionamiento y supervisión de fallos del feed.
-14. **Pagos/seguros no son producción.** `payments_enabled=false`, Wompi sandbox y revisión manual; falta integración comercial/contractual, reconciliación, idempotencia de pagos reales y pruebas end-to-end con proveedor.
-15. **Monolito de API frontend restante.** `authApi.js` concentra llamadas de varios dominios; dividirlo por dominio preservando el contrato público y centralizar manejo de sesión, errores, abortos y timeout.
-16. **Configuración de TypeScript no verificada.** `strict: false`, `allowJs: true`; TypeScript no está declarado directamente en el package raíz y no existe gate de typecheck, aunque hay `tsconfig.json` y un archivo `.tsx`. Añadir dependencia/CI de forma explícita y migrar con chequeo estricto progresivo.
+2. **Pruebas backend y entorno local.** La suite requiere PHP `^8.3` y `pdo_sqlite`; el PHP incluido con XAMPP (8.2) no satisface el requisito y el PHP 8.5 del entorno auditado necesita habilitar SQLite explícitamente. En CI debe conservarse la validación de dependencias; PHPUnit usa SQLite en memoria y no debe apuntarse a MySQL de XAMPP.
+3. **Checklist de cumplimiento manual.** La interfaz ya no presenta porcentajes ni certificaciones de producción; los estados editables del checklist son anotaciones locales y no miden cobertura, readiness ni disponibilidad.
+4. **Mocks/datos de demostración presentes.** `src/data/mockData.js` contiene perfiles, ofertas, notificaciones, incidentes y datos de informe estáticos. Separar fixtures de pantallas operativas y mantenerlos rotulados para evitar confundirlos con información real.
+5. **Componentes y hojas de estilo extensos.** Permanecen archivos grandes, entre ellos `mockData.js`, `App.css`, `index.css`, `InteractiveMap.jsx`, `AcademicReportViewer.jsx`, `authApi.js` y `TripExplorer.jsx`; evaluar su separación por responsabilidad sin alterar contratos públicos.
+6. **Fechas históricas de ofertas.** Las ofertas existentes con `departure_date = NULL` se conservan, pero quedan excluidas de búsqueda y recomendaciones; definir si se migran con fechas confirmadas o se archivan, sin inventar fechas.
+7. **Rutas/API configuradas para localhost.** `vite.config.js` fija el proxy a `127.0.0.1:8000`; no hay variable raíz configurada para cambiar API por entorno. Alinear configuración de despliegue/proxy con dominios reales.
+8. **Protección de secretos en raíz incompleta.** `backend/.gitignore` excluye `.env`, pero el `.gitignore` raíz no tiene regla explícita para `.env` raíz. Agregarla y comprobar que ningún secreto de Vite/credencial se añada al índice.
+9. **Persistencia de sesión y despliegue requieren configuración explícita.** Definir `SANCTUM_STATEFUL_DOMAINS`, CORS exacto, HTTPS, `SESSION_SECURE_COOKIE`, dominio/SameSite y CSRF por topología; no validar solo en localhost.
+10. **Integraciones de seguridad no equivalen a respuesta de emergencia.** Email/SMS/WhatsApp son best-effort y dependen de consentimiento, credenciales y cola/scheduler. Los fallos de transporte de verificación de correo ahora son visibles y reintentables; faltan pruebas operativas de proveedores, observabilidad externa y protocolo humano de incidentes.
+11. **Ubicación es dato sensible.** El backend mantiene solo la última coordenada por participante, la borra al completar/cancelar y expira coordenadas sin actualización después de 24 h mediante scheduler. Producción requiere verificar que el scheduler corra, y revisar permisos, almacenamiento, logs, copias, acceso administrativo, borrado y obligaciones locales de protección de datos.
+12. **GTFS parcial y proveedor externo.** Importador acepta `stops.txt`/`routes.txt`, no viajes, `stop_times` ni calendarios; evitar presentar frecuencias u horarios activos. Añadir actualización, versionamiento y supervisión de fallos del feed.
+13. **Pagos/seguros no son producción.** `payments_enabled=false`, Wompi sandbox y revisión manual; falta integración comercial/contractual, reconciliación, idempotencia de pagos reales y pruebas end-to-end con proveedor.
+14. **Monolito de API frontend restante.** `authApi.js` concentra llamadas de varios dominios; dividirlo por dominio preservando el contrato público y centralizar manejo de sesión, errores, abortos y timeout.
+15. **Configuración de TypeScript no verificada.** `strict: false`, `allowJs: true`; TypeScript no está declarado directamente en el package raíz y no existe gate de typecheck, aunque hay `tsconfig.json` y un archivo `.tsx`. Añadir dependencia/CI de forma explícita y migrar con chequeo estricto progresivo.
 17. **Dependencias UI redundantes.** Conviven Chakra, MUI, Bootstrap/React Bootstrap, Radix y Tailwind. Revisar uso real, peso de bundle, consistencia visual y superficie de mantenimiento antes de añadir más librerías.
 18. **Versión Node no fijada en el proyecto.** CI usa Node 22 pero no hay `engines`/`.nvmrc`; fijar política de runtime y advertir diferencias entre máquina local y CI.
 19. **Manifiesto frontend backend duplicado.** `backend/package.json` no tiene lockfile propio y Composer conserva scripts que llaman npm; documentar si es residual o integrarlo correctamente para evitar instalaciones/builds desde el directorio equivocado.

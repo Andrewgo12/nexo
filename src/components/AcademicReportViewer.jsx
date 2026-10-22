@@ -7,16 +7,10 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   Printer, 
-  Download, 
-  Users, 
   GraduationCap, 
-  ShieldCheck, 
   Sparkles,
   BookOpen,
-  PieChart,
-  Search,
   ExternalLink,
-  Info
 } from 'lucide-react';
 import { 
   REPORT_SURVEY_DATA, 

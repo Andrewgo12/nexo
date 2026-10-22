@@ -3,18 +3,13 @@ import {
   X, 
   Leaf, 
   DollarSign, 
-  TrendingDown, 
-  Sparkles, 
-  ShieldCheck, 
-  Award,
-  Trees,
-  Car
+  Award
 } from 'lucide-react';
 
 export default function EcoSavingsModal({ isOpen, onClose }) {
   const [tripsPerWeek, setTripsPerWeek] = useState(8);
   const [currentCostPerTrip, setCurrentCostPerTrip] = useState(14000); // e.g. Taxi / Uber solo
-  const [avgDistanceKm, setAvgDistanceKm] = useState(14); // Average distance in Cali from South to North/East
+  const avgDistanceKm = 14;
 
   if (!isOpen) return null;
 

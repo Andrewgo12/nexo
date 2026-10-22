@@ -7,14 +7,10 @@ import {
   Bus, 
   Footprints, 
   Users, 
-  Moon, 
-  Sun, 
   Heart, 
-  DollarSign, 
   Check, 
   RotateCcw 
 } from 'lucide-react';
-import { NEIGHBORHOODS } from '../data/mockData';
 
 export default function AdvancedFiltersModal({ 
   isOpen, 

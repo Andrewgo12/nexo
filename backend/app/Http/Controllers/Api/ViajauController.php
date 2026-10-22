@@ -7,8 +7,8 @@ use App\Models\StudentProfile;
 use App\Models\TravelOffer;
 use App\Models\TripRequest;
 use App\Services\DashboardAnalyticsService;
+use App\Services\StudentProfileUpdateService;
 use App\Services\TravelOfferSearchService;
-use App\Services\TrustedContactProfileService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -17,16 +17,6 @@ use Illuminate\Validation\ValidationException;
 
 class ViajauController extends Controller
 {
-    public function health()
-    {
-        return response()->json([
-            'status' => 'ok',
-            'app' => 'ViajaU',
-            'mode' => 'backend-foundation',
-            'moment' => now()->toISOString(),
-        ]);
-    }
-
     public function showStudent(Request $request, string $id)
     {
         $profile = StudentProfile::where('user_id', $request->user()->id)->findOrFail($id);
@@ -34,45 +24,11 @@ class ViajauController extends Controller
         return response()->json(['data' => $profile]);
     }
 
-    public function updateProfile(Request $request, string $id, TrustedContactProfileService $trustedContactProfile)
+    public function updateProfile(Request $request, string $id, StudentProfileUpdateService $profileUpdater)
     {
         $profile = StudentProfile::where('user_id', $request->user()->id)->findOrFail($id);
-        $data = $request->validate([
-            'name' => 'sometimes|required|string|max:120',
-            'career' => 'sometimes|nullable|string|max:120',
-            'semester' => 'sometimes|nullable|string|max:40',
-            'shift' => 'sometimes|nullable|string|max:40',
-            'neighborhood' => 'sometimes|nullable|string|max:120',
-            'transport' => 'sometimes|nullable|string|max:120',
-            'emergency_contact' => 'sometimes|nullable|string|max:160',
-            'trusted_contact_email' => ['sometimes', 'nullable', 'email', 'max:255'],
-            'trusted_contact_phone' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
-            'trusted_contact_consent' => ['sometimes', 'boolean'],
-            'privacy' => 'sometimes|nullable|string|max:120',
-        ]);
-
-        DB::transaction(function () use ($profile, $request, $data, $trustedContactProfile): void {
-            $trustedContactProfile->update($request->user(), $data);
-            $profile->fill(collect($data)->only([
-                'name',
-                'career',
-                'semester',
-                'shift',
-                'neighborhood',
-                'transport',
-                'emergency_contact',
-                'privacy',
-            ])->all());
-            $profile->save();
-            $request->user()->update(collect($data)->only([
-                'name',
-                'career',
-                'semester',
-                'shift',
-                'neighborhood',
-                'emergency_contact',
-            ])->all());
-        });
+        $data = $request->validate($profileUpdater->validationRules());
+        $profileUpdater->update($request->user(), $data, $profile);
 
         return response()->json([
             'message' => 'Perfil actualizado.',

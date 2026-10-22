@@ -12,10 +12,12 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -47,6 +49,7 @@ class AuthTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('user.email', 'ana@uniajc.edu.co')
+            ->assertJsonPath('verification_email_sent', true)
             ->assertJsonMissingPath('user.password')
             ->assertJsonMissingPath('token')
             ->assertJsonStructure(['user' => ['id', 'name', 'email', 'role', 'status']]);
@@ -62,6 +65,45 @@ class AuthTest extends TestCase
         $this->assertNotNull($sessionCookie);
         $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
             ->getJson('/api/trips')->assertForbidden();
+    }
+
+    public function test_registration_can_retry_verification_email_after_a_transport_failure(): void
+    {
+        $notificationAttempts = 0;
+        Notification::shouldReceive('send')->twice()->andReturnUsing(
+            function () use (&$notificationAttempts): void {
+                $notificationAttempts++;
+                if ($notificationAttempts === 1) {
+                    throw new TransportException('SMTP unavailable');
+                }
+            },
+        );
+        Log::shouldReceive('warning')->once();
+
+        $response = $this->postJson('/api/auth/register', [
+            'name' => 'Ana López',
+            'email' => 'ana@uniajc.edu.co',
+            'password' => 'Estudiante2026!',
+            'password_confirmation' => 'Estudiante2026!',
+            'university' => 'uniajc',
+        ])->assertCreated()
+            ->assertJsonPath('verification_email_sent', false)
+            ->assertJsonPath(
+                'message',
+                'Cuenta creada, pero no se pudo enviar el correo. Solicita un nuevo enlace desde tu cuenta.',
+            );
+
+        $this->assertDatabaseCount('users', 1);
+        $user = User::firstOrFail();
+        $this->assertSame(User::STATUS_PENDING, $user->status);
+        $sessionCookie = $response->getCookie(config('session.cookie'), false);
+        $this->assertNotNull($sessionCookie);
+
+        $this->withCookie(config('session.cookie'), $sessionCookie->getValue())
+            ->postJson('/api/auth/email/verification-notification')->assertOk()
+            ->assertJsonPath('verification_email_sent', true)
+            ->assertJsonPath('message', 'Enviamos un nuevo enlace de verificación.');
+        $this->assertSame(2, $notificationAttempts);
     }
 
     public function test_registration_rejects_an_email_from_another_university(): void
@@ -434,6 +476,32 @@ class AuthTest extends TestCase
         $this->assertNotNull($user->fresh()->email_verified_at);
         $this->assertTrue($profile->fresh()->verified);
         $this->assertSame('Diseño', $profile->fresh()->career);
+    }
+
+    public function test_student_profile_alias_uses_the_same_profile_update_flow(): void
+    {
+        $user = User::factory()->create();
+        $profile = StudentProfile::create([
+            'user_id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'university' => 'UNIAJC',
+            'verified' => true,
+            'status' => 'activo',
+        ]);
+        $token = $user->createToken('web')->plainTextToken;
+
+        $this->withToken($token)->putJson("/api/students/{$profile->id}/profile", [
+            'name' => 'Ana Pérez',
+            'transport' => 'MIO',
+            'privacy' => 'Privacidad máxima',
+        ])->assertOk()
+            ->assertJsonPath('data.name', 'Ana Pérez')
+            ->assertJsonPath('data.transport', 'MIO')
+            ->assertJsonPath('data.privacy', 'Privacidad máxima');
+
+        $this->assertSame('Ana Pérez', $user->fresh()->name);
+        $this->assertSame('MIO', $profile->fresh()->transport);
     }
 
     public function test_user_can_change_their_password_and_keep_the_current_session(): void

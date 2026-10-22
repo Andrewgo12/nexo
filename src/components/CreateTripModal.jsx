@@ -6,11 +6,7 @@ import {
   Bus, 
   Footprints, 
   Users, 
-  ShieldCheck, 
-  Clock, 
-  MapPin, 
-  DollarSign,
-  AlertCircle
+  ShieldCheck
 } from 'lucide-react';
 import { UNIVERSITIES, NEIGHBORHOODS } from '../data/mockData';
 

@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { MessageSquare, X, Send, ShieldCheck, CheckCheck } from 'lucide-react';
+import { MessageSquare, X, Send } from 'lucide-react';
+
+let nextLocalMessageId = 0;
+
+const createLocalMessageId = () => `msg-${++nextLocalMessageId}`;
+const formatCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 export default function ActiveTripChat({ isOpen, onClose, trip, messages, onSendMessage, studentUser }) {
   const [inputVal, setInputVal] = useState('');
@@ -18,12 +23,12 @@ export default function ActiveTripChat({ isOpen, onClose, trip, messages, onSend
     if (!text.trim()) return;
 
     onSendMessage({
-      id: `msg-${Date.now()}`,
+      id: createLocalMessageId(),
       sender: studentUser.name.split(' ')[0],
       senderRole: 'Pasajero',
       isMe: true,
       text: text.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: formatCurrentTime()
     });
 
     if (!textToSend) setInputVal('');

@@ -9,13 +9,11 @@ import {
   Footprints, 
   Users, 
   Clock, 
-  ShieldCheck, 
   Leaf, 
   ArrowRight,
   TrendingUp,
   Sparkles,
-  Search,
-  ExternalLink
+  Search
 } from 'lucide-react';
 import { UNIVERSITIES, NEIGHBORHOODS } from '../data/mockData';
 import { calculateMultimodalDetails, searchAddressNominatim } from '../services/routingApi';

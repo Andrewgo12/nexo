@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\StudentProfile;
 use App\Models\User;
-use App\Services\TrustedContactProfileService;
+use App\Services\StudentProfileUpdateService;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 class AuthController extends Controller
@@ -86,11 +87,14 @@ class AuthController extends Controller
             return $user;
         });
         $token = $this->authenticateClient($request, $user);
-        $user->sendEmailVerificationNotification();
+        $verificationEmailSent = $this->sendVerificationNotification($user);
 
         return response()->json([
-            'message' => 'Cuenta creada. Revisa tu correo institucional para verificarla.',
+            'message' => $verificationEmailSent
+                ? 'Cuenta creada. Revisa tu correo institucional para verificarla.'
+                : 'Cuenta creada, pero no se pudo enviar el correo. Solicita un nuevo enlace desde tu cuenta.',
             ...($token ? ['token' => $token] : []),
+            'verification_email_sent' => $verificationEmailSent,
             'user' => $user,
         ], 201);
     }
@@ -190,20 +194,10 @@ class AuthController extends Controller
         return response()->json(['user' => $request->user()]);
     }
 
-    public function updateProfile(Request $request, TrustedContactProfileService $trustedContactProfile): JsonResponse
+    public function updateProfile(Request $request, StudentProfileUpdateService $profileUpdater): JsonResponse
     {
         $data = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:120'],
-            'career' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'semester' => ['sometimes', 'nullable', 'string', 'max:40'],
-            'shift' => ['sometimes', 'nullable', 'string', 'max:40'],
-            'neighborhood' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'transport' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'emergency_contact' => ['sometimes', 'nullable', 'string', 'max:160'],
-            'trusted_contact_email' => ['sometimes', 'nullable', 'email', 'max:255'],
-            'trusted_contact_phone' => ['sometimes', 'nullable', 'regex:/^\+[1-9]\d{7,14}$/'],
-            'trusted_contact_consent' => ['sometimes', 'boolean'],
-            'privacy' => ['sometimes', 'nullable', 'string', 'max:120'],
+            ...$profileUpdater->validationRules(),
             'photo' => ['sometimes', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
         $user = $request->user();
@@ -215,27 +209,7 @@ class AuthController extends Controller
             $user->profile_photo_path = $newPhotoPath;
         }
         try {
-            DB::transaction(function () use ($user, $data, $trustedContactProfile): void {
-                $trustedContactProfile->update($user, $data);
-                $user->fill(collect($data)->only([
-                    'name',
-                    'career',
-                    'semester',
-                    'shift',
-                    'neighborhood',
-                    'emergency_contact',
-                ])->all())->save();
-                $user->studentProfile()->update(collect($data)->only([
-                    'name',
-                    'career',
-                    'semester',
-                    'shift',
-                    'neighborhood',
-                    'transport',
-                    'emergency_contact',
-                    'privacy',
-                ])->all());
-            });
+            $profileUpdater->update($user, $data);
         } catch (Throwable $exception) {
             if ($newPhotoPath !== null) {
                 try {
@@ -315,12 +289,40 @@ class AuthController extends Controller
     public function resendVerification(Request $request): JsonResponse
     {
         if ($request->user()->hasVerifiedEmail()) {
-            return response()->json(['message' => 'El correo ya está verificado.']);
+            return response()->json([
+                'message' => 'El correo ya está verificado.',
+                'verification_email_sent' => false,
+            ]);
         }
 
-        $request->user()->sendEmailVerificationNotification();
+        $sent = $this->sendVerificationNotification($request->user());
+        if (! $sent) {
+            return response()->json([
+                'message' => 'No fue posible enviar el correo de verificación. Inténtalo de nuevo más tarde.',
+                'verification_email_sent' => false,
+            ], 503);
+        }
 
-        return response()->json(['message' => 'Enviamos un nuevo enlace de verificación.']);
+        return response()->json([
+            'message' => 'Enviamos un nuevo enlace de verificación.',
+            'verification_email_sent' => true,
+        ]);
+    }
+
+    private function sendVerificationNotification(User $user): bool
+    {
+        try {
+            $user->sendEmailVerificationNotification();
+
+            return true;
+        } catch (TransportExceptionInterface $exception) {
+            Log::warning('Email verification notification could not be delivered.', [
+                'user_id' => $user->id,
+                'exception' => $exception::class,
+            ]);
+
+            return false;
+        }
     }
 
     public function verifyEmail(string $id, string $hash)

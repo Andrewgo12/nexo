@@ -6,14 +6,11 @@ import {
   Bus, 
   Footprints, 
   Users, 
-  Clock, 
   MapPin, 
   ShieldCheck, 
-  Sparkles, 
   Check, 
   Plus,
   Heart,
-  Calendar,
   AlertCircle
 } from 'lucide-react';
 
@@ -24,9 +21,7 @@ export default function TripExplorer({
   onOpenCreateTrip,
   activeUniversity,
   onRequestSeat,
-  studentUser,
   onOpenJoinModal,
-  onOpenAdvancedFilters
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMode, setSelectedMode] = useState('all'); // all, car, moto, mio, walk, taxi, bike, intermunicipal

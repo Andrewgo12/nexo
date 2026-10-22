@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\InsuranceController;
 use App\Http\Controllers\Api\MembershipController;
 use App\Http\Controllers\Api\ReputationController;
@@ -14,7 +15,8 @@ use App\Http\Controllers\Api\WompiMembershipController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/health', [ViajauController::class, 'health']);
+Route::get('/health', [HealthController::class, 'live']);
+Route::get('/ready', [HealthController::class, 'ready']);
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
 Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
