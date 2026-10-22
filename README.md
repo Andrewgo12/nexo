@@ -21,6 +21,12 @@ Plataforma universitaria para compartir viajes con perfiles verificados, búsque
 
 Los módulos 11–16 siguen en el inventario. El módulo 6 requiere configuración de correo/Twilio y workers para entrega externa; no existe integración automática con autoridades ni servicios de emergencia. La aplicación no es un servicio de emergencia.
 
+## Estructura modular de la interfaz (en curso)
+
+`src/AppFresh.jsx` es únicamente el punto de entrada que importa y exporta `src/AppRoot.jsx`. El orquestador `AppRoot` compone el estado compartido, el view model, las acciones y los hooks de efectos; las vistas están separadas por responsabilidad en `src/components/app-sections/`, y el shell autenticado está en `src/components/app-shell/`. El selector de secciones se mantiene por debajo de 350 líneas. El mapa, dashboard, reputación, seguridad, autenticación, búsqueda y las vistas informativas tienen componentes independientes. `src/components/Metric.jsx`, `Panel.jsx` y `ConfirmationModal.jsx` reúnen elementos de interfaz compartidos; `src/services/dashboardSummary.js` contiene la transformación testeable del resumen del dashboard y `src/data/appSectionData.js` los catálogos de las vistas.
+
+La modularización de `AppFresh.jsx` quedó completada: el archivo raíz solo reexporta el orquestador y la lógica compartida se distribuye en hooks y componentes. Esto no significa que todos los archivos del repositorio estén por debajo del límite de 350 líneas; otros archivos grandes siguen fuera de esta extracción.
+
 ## Cómo ejecutar y validar
 
 - Frontend: `npm install`, `npm run dev`, `npm run build`, `npm run test:unit`, `npm run test:routing`.

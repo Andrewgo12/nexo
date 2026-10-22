@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { buildDashboardSummary } from '../services/dashboardSummary';
+import { dashboardChecklist } from '../data/appSectionData';
 import Metric from './Metric';
 
 export default function DashboardSection({
@@ -16,7 +17,6 @@ export default function DashboardSection({
   chatReadOnly,
   chatAction,
   chatDraft,
-  dashboardChecklist,
   field,
   tripStatusLabels,
   onNavigate,

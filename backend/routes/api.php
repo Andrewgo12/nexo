@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ReputationController;
 use App\Http\Controllers\Api\SafetyAlertController;
 use App\Http\Controllers\Api\TravelMatchController;
 use App\Http\Controllers\Api\TripCommunicationController;
+use App\Http\Controllers\Api\TripSafetyController;
 use App\Http\Controllers\Api\ViajauController;
 use App\Http\Controllers\Api\WompiMembershipController;
 use Illuminate\Http\Request;
@@ -71,11 +72,11 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
         Route::post('/trips/{trip}/requests', [ViajauController::class, 'createTripRequest'])
             ->middleware('throttle:10,1');
         Route::patch('/trips/{trip}', [ViajauController::class, 'cancelTrip']);
-        Route::post('/trips/{trip}/location', [ViajauController::class, 'shareTripLocation'])
+        Route::post('/trips/{trip}/location', [TripSafetyController::class, 'shareTripLocation'])
             ->middleware('throttle:30,1');
-        Route::delete('/trips/{trip}/location', [ViajauController::class, 'stopSharingTripLocation']);
-        Route::get('/trips/{trip}/safety', [ViajauController::class, 'tripSafetyStatus']);
-        Route::post('/trips/{trip}/check-ins', [ViajauController::class, 'createTripCheckIn'])
+        Route::delete('/trips/{trip}/location', [TripSafetyController::class, 'stopSharingTripLocation']);
+        Route::get('/trips/{trip}/safety', [TripSafetyController::class, 'tripSafetyStatus']);
+        Route::post('/trips/{trip}/check-ins', [TripSafetyController::class, 'createTripCheckIn'])
             ->middleware('throttle:10,1');
         Route::patch('/trip-requests/{tripRequest}', [ViajauController::class, 'updateTripRequest'])
             ->middleware('throttle:20,1');
