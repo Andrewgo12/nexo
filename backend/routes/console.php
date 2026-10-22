@@ -20,3 +20,7 @@ $queueConnection = config('queue.default');
 Schedule::command("queue:monitor {$queueConnection}:safety,{$queueConnection}:default --max=100")
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('viajau:prune-trip-locations')
+    ->hourly()
+    ->withoutOverlapping();

@@ -12,5 +12,6 @@ return [
         'route_corridor_meters' => (int) env('SAFETY_ROUTE_CORRIDOR_METERS', 500),
         'arrival_radius_meters' => (int) env('SAFETY_ARRIVAL_RADIUS_METERS', 300),
         'checkin_grace_minutes' => (int) env('SAFETY_CHECKIN_GRACE_MINUTES', 15),
+        'location_retention_hours' => max(1, (int) env('SAFETY_LOCATION_RETENTION_HOURS', 24)),
     ],
 ];

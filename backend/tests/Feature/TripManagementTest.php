@@ -221,6 +221,7 @@ class TripManagementTest extends TestCase
 
         $this->assertDatabaseHas('travel_offers', ['id' => $offer->id, 'status' => 'cancelada']);
         $this->assertDatabaseHas('trip_requests', ['id' => $requests[1]->id, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('trip_requests', ['id' => $requests[0]->id, 'status' => 'cancelled']);
     }
 
     public function test_owner_can_start_and_complete_a_trip_only_after_accepting_a_passenger(): void

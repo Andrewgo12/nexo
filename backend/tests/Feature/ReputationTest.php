@@ -182,6 +182,7 @@ class ReputationTest extends TestCase
             'origin' => 'Sede Sur',
             'destination' => 'El Caney',
             'mode' => 'Carro',
+            'departure_date' => today()->addDay()->toDateString(),
             'departure_time' => '18:00',
             'seats' => 1,
             'cost' => '0',

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\StudentProfile;
 use App\Models\TravelOffer;
+use App\Models\TripLocation;
 use App\Models\TripRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -196,6 +197,34 @@ class TripSafetyTrackingTest extends TestCase
         $this->actingAs($owner, 'sanctum')->getJson("/api/trips/{$offer->id}/safety")
             ->assertOk()
             ->assertJsonCount(0, 'data.locations');
+        $this->assertDatabaseCount('trip_locations', 1);
+    }
+
+    public function test_expired_locations_are_pruned_but_recent_locations_are_retained(): void
+    {
+        [, $oldPassenger, $oldOffer] = $this->createActiveTrip();
+        [, $currentPassenger, $currentOffer] = $this->createActiveTrip();
+        $retentionHours = (int) config('viajau.safety.location_retention_hours');
+
+        TripLocation::create([
+            'travel_offer_id' => $oldOffer->id,
+            'user_id' => $oldPassenger->id,
+            'latitude' => 3.45,
+            'longitude' => -76.53,
+            'captured_at' => Carbon::now()->subHours($retentionHours + 1),
+        ]);
+        TripLocation::create([
+            'travel_offer_id' => $currentOffer->id,
+            'user_id' => $currentPassenger->id,
+            'latitude' => 3.46,
+            'longitude' => -76.52,
+            'captured_at' => Carbon::now()->subHours($retentionHours)->addMinute(),
+        ]);
+
+        $this->artisan('viajau:prune-trip-locations')->assertSuccessful();
+
+        $this->assertDatabaseMissing('trip_locations', ['travel_offer_id' => $oldOffer->id]);
+        $this->assertDatabaseHas('trip_locations', ['travel_offer_id' => $currentOffer->id]);
         $this->assertDatabaseCount('trip_locations', 1);
     }
 

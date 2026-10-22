@@ -304,7 +304,7 @@ class AuthTest extends TestCase
 
     public function test_signed_verification_link_does_not_reactivate_a_blocked_account(): void
     {
-        $user = User::factory()->create([
+        $user = User::factory()->unverified()->create([
             'email' => 'ana@uniajc.edu.co',
             'university' => 'UNIAJC',
             'status' => User::STATUS_BLOCKED,

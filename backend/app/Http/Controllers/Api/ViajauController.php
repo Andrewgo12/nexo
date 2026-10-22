@@ -366,8 +366,12 @@ class ViajauController extends Controller
                 $lockedTrip->locations()->delete();
             }
             $lockedTrip->update($tripChanges);
-            if (in_array($nextStatus, ['en-curso', 'cancelada'], true)) {
+            if ($nextStatus === 'en-curso') {
                 $lockedTrip->requests()->where('status', 'pending')->update(['status' => 'cancelled']);
+            } elseif ($nextStatus === 'cancelada') {
+                $lockedTrip->requests()
+                    ->whereIn('status', ['pending', 'accepted'])
+                    ->update(['status' => 'cancelled']);
             }
         });
 
