@@ -7,6 +7,7 @@ export default function MatchSection({
   matchProfileAvailable,
   matchResults,
   matchTruncated,
+  matchCanLoadMore,
   field,
   onLoadMore,
   onNavigate,
@@ -18,7 +19,11 @@ export default function MatchSection({
         <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#a7f3d0', fontWeight: 800 }}>MÓDULO 4</div>
         <h2 style={{ margin: '10px 0 20px', fontSize: 34 }}>Emparejamiento de viajes</h2>
         <p style={{ color: '#cbd5e1', lineHeight: 1.6 }}>Recomendaciones calculadas desde ofertas activas y verificadas, comparando tu zona, jornada y transporte. No son una garantía de seguridad.</p>
-        {matchLoading && <div role="status" style={{ color: '#bae6fd', marginTop: 16 }}>Buscando viajes compatibles…</div>}
+        {matchLoading && (
+          <div role="status" style={{ color: '#bae6fd', marginTop: 16 }}>
+            {matchResults.length ? 'Cargando más recomendaciones…' : 'Buscando viajes compatibles…'}
+          </div>
+        )}
         {matchError && <div role="alert" style={{ color: '#fecaca', background: 'rgba(127,29,29,.3)', padding: 12, borderRadius: 10, marginTop: 16 }}>{matchError}</div>}
         {!matchLoading && !matchError && matchLoaded && !matchProfileAvailable && (
           <div role="status" style={{ color: '#fde68a', background: 'rgba(120,53,15,.25)', padding: 12, borderRadius: 10, marginTop: 16 }}>
@@ -52,8 +57,8 @@ export default function MatchSection({
             </div>
           ))}
         </div>
-        {!matchLoading && matchLoaded && matchTruncated && (
-          <button type="button" onClick={onLoadMore} style={{ ...field, marginTop: 12, padding: '9px 12px', cursor: 'pointer' }}>
+        {!matchLoading && matchLoaded && matchTruncated && matchCanLoadMore && (
+          <button type="button" onClick={onLoadMore} disabled={matchLoading} style={{ ...field, marginTop: 12, padding: '9px 12px', cursor: 'pointer' }}>
             Cargar más recomendaciones
           </button>
         )}
@@ -63,19 +68,18 @@ export default function MatchSection({
         <div style={{ marginTop: 12, color: '#cbd5e1' }}>El puntaje es explicable: zona 50%, jornada 35% y transporte 15%. Solo se consideran datos declarados y ofertas publicadas; se muestran coincidencias desde 30 puntos.</div>
         <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{matchFunctions.map((item) => <span key={item} style={{ padding: '6px 8px', fontSize: 10, borderRadius: 999, background: 'rgba(16,185,129,.12)', color: '#d1fae5' }}>{item}</span>)}</div>
         <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 20, paddingTop: 16 }}>
-          <strong>Checklist del módulo 4</strong>
-          <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13 }}>
-            {[
-              { label: '4.1 Leer perfil propio verificado sin usar datos de demostración', done: matchLoaded && matchProfileAvailable },
-              { label: '4.2 Encontrar ofertas activas de otros estudiantes verificados', done: true },
-              { label: '4.3 Comparar barrio con origen y destino publicados', done: true },
-              { label: '4.4 Comparar hora con la jornada declarada', done: true },
-              { label: '4.5 Comparar transporte declarado con el de la oferta', done: true },
-              { label: '4.6 Mostrar puntaje explicable y motivos de coincidencia', done: true },
-              { label: '4.7 Proteger datos privados y probar acceso y filtros', done: true },
-            ].map((item) => <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>{item.done ? '☑' : '☐'} {item.label}</div>)}
-          </div>
-          <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>{6 + Number(matchLoaded && matchProfileAvailable)}/7 completados. El paso pendiente es cargar las recomendaciones del perfil actual; los controles de cupo pertenecen al módulo de gestión de viajes.</small>
+          <strong>Criterios que compara el recomendador</strong>
+          <ul style={{ display: 'grid', gap: 8, margin: '10px 0 0', paddingLeft: 20, fontSize: 13, color: '#cbd5e1' }}>
+            <li>Zona declarada frente al origen y destino publicados: hasta 50 puntos.</li>
+            <li>Jornada declarada frente a la hora de salida: hasta 35 puntos.</li>
+            <li>Transporte preferido frente al modo del viaje: hasta 15 puntos.</li>
+            <li>Solo se muestran ofertas activas con cupos y perfiles verificados; no se calcula una puntuación de seguridad.</li>
+          </ul>
+          <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>
+            {matchLoaded && matchProfileAvailable
+              ? 'El perfil verificado se leyó y las recomendaciones se calcularon con ofertas activas. El puntaje expresa afinidad de datos; no evalúa seguridad ni garantiza compatibilidad.'
+              : 'La lectura del perfil y el cálculo de recomendaciones requieren completar la carga con un perfil verificado.'}
+          </small>
         </div>
       </div>
     </section>

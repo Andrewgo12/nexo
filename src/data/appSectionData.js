@@ -77,7 +77,7 @@ export const dashboardChecklist = [
   { label: 'Historial de ofertas y participaciones registradas', done: true },
   { label: 'Chat persistente entre responsable y pasajeros aceptados', done: true },
   { label: 'Cerrar el chat para nuevos mensajes al terminar el viaje', done: true },
-  { label: 'Fecha del viaje para calcular próximos trayectos', done: false },
+  { label: 'Fecha del viaje para calcular próximos trayectos', done: true },
   { label: 'Notificaciones push y comunicación externa', done: false },
   { label: 'Compartir ubicación/ruta desde el chat', done: false },
 ];

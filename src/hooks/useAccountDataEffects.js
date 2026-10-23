@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { getAuthToken, getMyReputation, getAdminReports, getMyMembership, getInsuranceProducts, getMyInsuranceEnrollments, getAdminInsuranceEnrollments, getMyTrips, getCommunicationTrips, getTripMessages } from '../services/authApi';
+import { mergeChatMessages } from '../services/chatMessages';
 
 export default function useAccountDataEffects(state) {
-  const { active, adminReportsPage, authUser, insuranceRefresh, isEmailVerified, isLoggedIn, reputationRefresh, selectedChatTripId, setAdminInsuranceEnrollments, setAdminReports, setAdminReportsMeta, setChatError, setChatLoading, setChatMessages, setChatReadOnly, setDashboardConversations, setDashboardError, setDashboardLoading, setDashboardReputation, setDashboardTrips, setInsuranceError, setInsuranceLoading, setInsuranceProducts, setMembershipInfo, setMyInsuranceEnrollments, setReputationData, setReputationError, setReputationLoading, setSelectedChatTripId, tripRefreshKey } = state;
+  const { active, adminReportsPage, authUser, insuranceRefresh, isEmailVerified, isLoggedIn, reputationRefresh, selectedChatTripId, setAdminInsuranceEnrollments, setAdminReports, setAdminReportsMeta, setChatError, setChatHasOlder, setChatLoading, setChatLoadingOlder, setChatMessages, setChatReadOnly, setDashboardConversations, setDashboardError, setDashboardLoading, setDashboardReputation, setDashboardTrips, setInsuranceError, setInsuranceLoading, setInsuranceProducts, setMembershipInfo, setMyInsuranceEnrollments, setReputationData, setReputationError, setReputationLoading, setSelectedChatTripId, tripRefreshKey } = state;
 
   useEffect(() => {
     setDashboardTrips({ offers: [], requests: [] });
@@ -26,6 +27,8 @@ export default function useAccountDataEffects(state) {
     setChatReadOnly(false);
     setChatError('');
     setChatLoading(false);
+    setChatLoadingOlder(false);
+    setChatHasOlder(false);
   }, [
     authUser?.id,
     authUser?.role,
@@ -33,7 +36,9 @@ export default function useAccountDataEffects(state) {
     setAdminReports,
     setAdminReportsMeta,
     setChatError,
+    setChatHasOlder,
     setChatLoading,
+    setChatLoadingOlder,
     setChatMessages,
     setChatReadOnly,
     setDashboardConversations,
@@ -185,20 +190,37 @@ export default function useAccountDataEffects(state) {
       const controller = new AbortController();
       let cancelled = false;
       let loading = false;
+      let lastMessageId = null;
+      setChatMessages([]);
+      setChatError('');
+      setChatReadOnly(false);
+      setChatHasOlder(false);
+      setChatLoadingOlder(false);
       const loadChat = async () => {
         if (loading) return;
         loading = true;
+        const initialLoad = lastMessageId === null;
         try {
-          const response = await getTripMessages(selectedChatTripId, getAuthToken(), controller.signal);
+          const response = await getTripMessages(
+            selectedChatTripId,
+            getAuthToken(),
+            controller.signal,
+            lastMessageId === null ? {} : { sinceId: lastMessageId },
+          );
           if (!Array.isArray(response.data)) throw new Error('El servidor devolvió mensajes inválidos.');
+          const receivedMessages = mergeChatMessages([], response.data);
           if (!cancelled) {
-            setChatMessages(response.data);
+            const receivedIds = receivedMessages
+              .map((message) => Number(message.id))
+              .filter(Number.isSafeInteger);
+            lastMessageId = Math.max(lastMessageId ?? 0, ...receivedIds);
+            setChatMessages((current) => mergeChatMessages(current, receivedMessages));
             setChatReadOnly(Boolean(response.meta?.read_only));
+            if (initialLoad) setChatHasOlder(Boolean(response.meta?.has_older));
             setChatError('');
           }
         } catch (error) {
           if (!cancelled && error.name !== 'AbortError') {
-            setChatMessages([]);
             setChatError(error.message || 'No fue posible cargar el chat de este viaje.');
           }
         } finally {
@@ -208,12 +230,19 @@ export default function useAccountDataEffects(state) {
       };
       setChatLoading(true);
       loadChat();
-      const intervalId = window.setInterval(loadChat, 12000);
+      const intervalId = window.setInterval(() => {
+        if (!document.hidden) loadChat();
+      }, 12000);
+      const handleVisibilityChange = () => {
+        if (!document.hidden) loadChat();
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
 
       return () => {
         cancelled = true;
         controller.abort();
         window.clearInterval(intervalId);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
-    }, [active, authUser?.id, isEmailVerified, isLoggedIn, selectedChatTripId, setChatLoading, setChatMessages, setChatReadOnly, setChatError]);
+    }, [active, authUser?.id, isEmailVerified, isLoggedIn, selectedChatTripId, setChatLoading, setChatMessages, setChatReadOnly, setChatError, setChatHasOlder, setChatLoadingOlder]);
 }

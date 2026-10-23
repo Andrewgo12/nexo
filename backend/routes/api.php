@@ -30,6 +30,10 @@ Route::middleware(['auth:sanctum', 'account.active'])->get('/user', function (Re
     return $request->user();
 });
 
+Route::middleware('auth:sanctum')
+    ->get('/account/export', [AuthController::class, 'exportAccountData'])
+    ->middleware('throttle:6,1');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);

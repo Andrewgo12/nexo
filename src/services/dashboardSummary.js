@@ -1,6 +1,7 @@
 export function buildDashboardSummary(dashboardTrips, dashboardReputation, statusLabels) {
   const ownedOffers = dashboardTrips.offers;
   const outgoingRequests = dashboardTrips.requests;
+  const now = Date.now();
   const activeOffers = ownedOffers.filter((trip) => trip.status === 'oferta-activa');
   const inProgress = ownedOffers.filter((trip) => trip.status === 'en-curso').length
     + outgoingRequests.filter((request) => request.status === 'accepted' && request.offer.status === 'en-curso').length;
@@ -32,15 +33,34 @@ export function buildDashboardSummary(dashboardTrips, dashboardReputation, statu
       key: `offer-${trip.id}`,
       route: `${trip.origin} → ${trip.destination}`,
       status: trip.status,
-      detail: `Oferta como responsable · ${trip.departure_time}`,
+      detail: `Oferta como responsable · ${trip.departure_date || 'Fecha no registrada'} · ${trip.departure_time || 'Hora no registrada'}`,
     })),
     ...outgoingRequests.map((request) => ({
       key: `request-${request.id}`,
       route: `${request.offer.origin} → ${request.offer.destination}`,
       status: request.offer.status === 'completada' ? 'completada' : request.status,
-      detail: `Solicitud como pasajero · ${request.offer.departure_time}`,
+      detail: `Solicitud como pasajero · ${request.offer.departure_date || 'Fecha no registrada'} · ${request.offer.departure_time || 'Hora no registrada'}`,
     })),
   ];
+  const upcoming = [
+    ...ownedOffers
+      .filter((trip) => trip.status === 'oferta-activa')
+      .map((trip) => ({ ...trip, role: 'Responsable' })),
+    ...outgoingRequests
+      .filter((request) => request.status === 'accepted' && request.offer.status === 'oferta-activa')
+      .map((request) => ({ ...request.offer, role: 'Pasajero' })),
+  ]
+    .map((trip) => ({
+      ...trip,
+      departureAt: trip.departure_date && trip.departure_time
+        ? new Date(`${trip.departure_date}T${String(trip.departure_time).slice(0, 5)}:00`).getTime()
+        : Number.NaN,
+    }))
+    .filter((trip) => Number.isFinite(trip.departureAt) && trip.departureAt > now)
+    .sort((first, second) => first.departureAt - second.departureAt)
+    .filter((trip, index, trips) => (
+      trips.findIndex((candidate) => String(candidate.id) === String(trip.id)) === index
+    ));
 
   return {
     metrics: [
@@ -56,5 +76,6 @@ export function buildDashboardSummary(dashboardTrips, dashboardReputation, statu
     ],
     activity,
     history,
+    upcoming,
   };
 }

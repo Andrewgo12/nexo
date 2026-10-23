@@ -161,6 +161,10 @@ export function getCurrentAccount(token = getAuthToken()) {
   return request('/auth/me', { token });
 }
 
+export function getAccountDataExport(token = getAuthToken(), signal) {
+  return request('/account/export', { token, signal });
+}
+
 export function getTravelOffers(filters, token = getAuthToken(), signal) {
   const params = new URLSearchParams();
   for (const key of [
@@ -197,8 +201,27 @@ export function getCommunicationTrips(token = getAuthToken(), signal) {
   return request('/communication/trips', { token, signal });
 }
 
-export function getTripMessages(tripId, token = getAuthToken(), signal) {
-  return request(`/trips/${tripId}/messages`, { token, signal });
+export function getTripMessages(tripId, token = getAuthToken(), signal, cursor = {}) {
+  if (!cursor || typeof cursor !== 'object' || Array.isArray(cursor)) {
+    throw new TypeError('El cursor del chat debe ser un objeto.');
+  }
+  const hasSinceId = cursor.sinceId !== undefined;
+  const hasBeforeId = cursor.beforeId !== undefined;
+  if (hasSinceId && hasBeforeId) {
+    throw new TypeError('El cursor del chat no puede incluir sinceId y beforeId al mismo tiempo.');
+  }
+  if (hasSinceId && (!Number.isSafeInteger(cursor.sinceId) || cursor.sinceId < 0)) {
+    throw new RangeError('sinceId debe ser un entero seguro mayor o igual a cero.');
+  }
+  if (hasBeforeId && (!Number.isSafeInteger(cursor.beforeId) || cursor.beforeId < 1)) {
+    throw new RangeError('beforeId debe ser un entero seguro mayor que cero.');
+  }
+  const query = hasSinceId
+    ? `?since_id=${cursor.sinceId}`
+    : hasBeforeId
+      ? `?before_id=${cursor.beforeId}`
+      : '';
+  return request(`/trips/${tripId}/messages${query}`, { token, signal });
 }
 
 export function sendTripMessage(tripId, body, token = getAuthToken()) {

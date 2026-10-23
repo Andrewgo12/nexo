@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { executionChecklist } from '../data/appSectionData';
+import { DEFAULT_APP_DATA } from '../services/appDatabase';
 
 function localDateString(date = new Date()) {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -44,13 +45,8 @@ export default function useAppState(persisted, { initialStudent, universities })
   const [tripError, setTripError] = useState('');
   const [tripActionLoading, setTripActionLoading] = useState('');
   const [tripRefreshKey, setTripRefreshKey] = useState(0);
-  const [notifications, setNotifications] = useState(persisted.notifications || [
-      { title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
-      { title: 'Check-in de llegada', channel: 'En la app', active: false },
-      { title: 'Cambio de ruta', channel: 'No configurado', active: false },
-      { title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false },
-    ]);
-  const [advancedMode, setAdvancedMode] = useState(persisted.advancedMode || { night: true, safeties: true, hotspots: true, recommendations: true });
+  const [notifications, setNotifications] = useState(persisted.notifications || DEFAULT_APP_DATA.notifications);
+  const [advancedMode, setAdvancedMode] = useState(persisted.advancedMode || DEFAULT_APP_DATA.advancedMode);
   const [adminDashboard, setAdminDashboard] = useState(null);
   const [adminDashboardLoading, setAdminDashboardLoading] = useState(false);
   const [adminDashboardError, setAdminDashboardError] = useState('');
@@ -98,6 +94,8 @@ export default function useAppState(persisted, { initialStudent, universities })
   const [chatMessages, setChatMessages] = useState([]);
   const [chatReadOnly, setChatReadOnly] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatLoadingOlder, setChatLoadingOlder] = useState(false);
+  const [chatHasOlder, setChatHasOlder] = useState(false);
   const [chatError, setChatError] = useState('');
   const [chatAction, setChatAction] = useState(false);
   const [chatDraft, setChatDraft] = useState('');
@@ -196,7 +194,8 @@ export default function useAppState(persisted, { initialStudent, universities })
     dashboardReputation, setDashboardReputation, dashboardLoading, setDashboardLoading,
     dashboardError, setDashboardError, selectedChatTripId, setSelectedChatTripId,
     chatMessages, setChatMessages, chatReadOnly, setChatReadOnly,
-    chatLoading, setChatLoading, chatError, setChatError,
+    chatLoading, setChatLoading, chatLoadingOlder, setChatLoadingOlder,
+    chatHasOlder, setChatHasOlder, chatError, setChatError,
     chatAction, setChatAction, chatDraft, setChatDraft,
     reviewForm, setReviewForm, reportForm, setReportForm,
     executionState, setExecutionState, routeResult, setRouteResult,

@@ -155,7 +155,7 @@ export const BUSINESS_MODULES = [
     id: 'privacidad-seguridad-backend',
     title: '11. Privacidad y seguridad del backend',
     summary: 'Sesiones, protección de datos, auditoría y derechos de privacidad.',
-    status: 'Parcial: Sanctum/CSRF, validación y límites de login; auditoría operativa y flujos de acceso, exportación y borrado de datos pendientes.',
+    status: 'Parcial: Sanctum/CSRF, validación y límites de login; exporta cuenta, actividad, ubicaciones propias, categorías/estados de denuncias, solicitudes de seguro y pagos, omitiendo contenido que podría identificar a terceros. Auditoría operativa y borrado solicitado siguen pendientes.',
     functions: [
       'cifrarDatosSensibles()', 'protegerJWT()', 'validarToken()', 'gestionarSesiones()',
       'limitarIntentosLogin()', 'auditoriaAcciones()', 'generarLogsSeguridad()',

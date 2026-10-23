@@ -13,6 +13,8 @@ export default function DashboardSection({
   selectedChatTripId,
   chatError,
   chatLoading,
+  chatHasOlder,
+  chatLoadingOlder,
   chatMessages,
   chatReadOnly,
   chatAction,
@@ -22,9 +24,10 @@ export default function DashboardSection({
   onNavigate,
   onSelectChatTrip,
   onChatDraftChange,
+  onLoadOlderMessages,
   onSubmitMessage,
 }) {
-  const { metrics, activity, history } = useMemo(
+  const { metrics, activity, history, upcoming } = useMemo(
     () => buildDashboardSummary(dashboardTrips, dashboardReputation, tripStatusLabels),
     [dashboardTrips, dashboardReputation, tripStatusLabels],
   );
@@ -37,7 +40,7 @@ export default function DashboardSection({
       <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
         <div style={{ fontSize: 12, letterSpacing: '0.14em', color: '#f472b6', fontWeight: 800 }}>MÓDULO 10</div>
         <h2 style={{ margin: '10px 0 8px', fontSize: 34 }}>Dashboard e historial de viajes</h2>
-        <p style={{ marginTop: 0, color: '#cbd5e1' }}>Resumen basado en tus ofertas, solicitudes y valoraciones registradas. Las ofertas no tienen una fecha de salida; por eso no se presentan como viajes próximos.</p>
+        <p style={{ marginTop: 0, color: '#cbd5e1' }}>Resumen basado en tus ofertas, solicitudes, fechas de salida y valoraciones registradas.</p>
         {dashboardError && <p role="alert" style={{ color: '#fca5a5' }}>{dashboardError}</p>}
         {dashboardLoading && <p role="status" style={{ color: '#cbd5e1' }}>Actualizando tu resumen…</p>}
         {authUser?.role !== 'student' && <p role="status" style={{ color: '#fbbf24' }}>El dashboard personal y el chat de viajes están disponibles para estudiantes.</p>}
@@ -45,6 +48,12 @@ export default function DashboardSection({
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginTop: 20 }}>
               {metrics.map((metric) => <Metric key={metric.label} {...metric} />)}
+            </div>
+            <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16, marginTop: 20 }}>
+              <h3 style={{ marginTop: 0 }}>Próximos viajes</h3>
+              {upcoming.length
+                ? <div style={{ display: 'grid', gap: 10 }}>{upcoming.slice(0, 5).map((trip) => <div key={trip.id} style={{ borderBottom: '1px solid rgba(148,163,184,.15)', paddingBottom: 8 }}><strong>{trip.origin} → {trip.destination}</strong><div style={{ color: '#cbd5e1', fontSize: 13 }}>{trip.role} · {new Date(trip.departureAt).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</div></div>)}</div>
+                : <p style={{ color: '#94a3b8' }}>No tienes viajes activos con fecha futura registrada.</p>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16, marginTop: 20 }}>
               <div style={{ background: 'rgba(15,23,42,.7)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 14, padding: 16 }}>
@@ -97,6 +106,16 @@ export default function DashboardSection({
                 {chatError && <p role="alert" style={{ color: '#fca5a5' }}>{chatError}</p>}
                 {chatLoading && !chatMessages.length && <p role="status" style={{ color: '#cbd5e1' }}>Cargando mensajes…</p>}
                 <div aria-live="polite" style={{ display: 'grid', gap: 8, maxHeight: 320, overflowY: 'auto', padding: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: 'rgba(2,6,23,.45)' }}>
+                  {chatHasOlder && (
+                    <button
+                      type="button"
+                      onClick={onLoadOlderMessages}
+                      disabled={chatLoadingOlder}
+                      style={{ ...field, justifySelf: 'center' }}
+                    >
+                      {chatLoadingOlder ? 'Cargando historial…' : 'Cargar mensajes anteriores'}
+                    </button>
+                  )}
                   {chatMessages.map((message) => (
                     <div key={message.id} style={{ justifySelf: message.is_mine ? 'end' : 'start', maxWidth: '85%', background: message.is_mine ? 'rgba(244,114,182,.16)' : 'rgba(148,163,184,.12)', padding: '8px 12px', borderRadius: 12 }}>
                       <strong style={{ fontSize: 12 }}>{message.is_mine ? 'Tú' : message.sender_name}</strong>

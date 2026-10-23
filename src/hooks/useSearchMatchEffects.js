@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { getAuthToken, getTravelMatches, getTravelOffers } from '../services/authApi';
+import { mergeMatchRecommendations } from '../services/travelMatching';
 
 export default function useSearchMatchEffects(state, helpers = {}) {
   const { active, authUser, isEmailVerified, isLoggedIn, matchCursor, setMatchCursor, setMatchError, setMatchLoaded, setMatchLoading, setMatchNextCursor, setMatchProfileAvailable, setMatchResults, setMatchTruncated, searchCursor, setSearchError, setSearchLoaded, setSearchLoading, setSearchNextCursor, setSearchResults, setSearchTruncated } = state;
@@ -67,7 +68,9 @@ export default function useSearchMatchEffects(state, helpers = {}) {
             throw new Error('El servidor devolvió una lista de coincidencias inválida.');
           }
           if (!cancelled) {
-            setMatchResults((current) => cursor ? [...current, ...response.data] : response.data);
+            setMatchResults((current) => cursor
+              ? mergeMatchRecommendations(current, response.data)
+              : mergeMatchRecommendations([], response.data));
             setMatchProfileAvailable(response.meta?.profile_available !== false);
             setMatchTruncated(Boolean(response.meta?.truncated));
             setMatchNextCursor(response.meta?.next_after_id ?? null);

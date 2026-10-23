@@ -10,6 +10,7 @@ describe('buildDashboardSummary', () => {
         id: 1,
         origin: 'Centro',
         destination: 'Campus',
+        departure_date: '2099-05-12',
         departure_time: '18:00',
         status: 'oferta-activa',
         requests: [{ id: 11, status: 'pending', requester: { name: 'Ana' } }],
@@ -18,12 +19,12 @@ describe('buildDashboardSummary', () => {
         {
           id: 21,
           status: 'accepted',
-          offer: { id: 2, origin: 'Norte', destination: 'Campus', departure_time: '19:00', status: 'en-curso' },
+          offer: { id: 2, origin: 'Norte', destination: 'Campus', departure_date: '2099-05-12', departure_time: '19:00', status: 'en-curso' },
         },
         {
           id: 22,
           status: 'pending',
-          offer: { id: 3, origin: 'Sur', destination: 'Campus', departure_time: '20:00', status: 'oferta-activa' },
+          offer: { id: 3, origin: 'Sur', destination: 'Campus', departure_date: '2099-05-12', departure_time: '20:00', status: 'oferta-activa' },
         },
       ],
     }, { summary: { rating_average: 4.5, rating_count: 2 } }, statusLabels);
@@ -41,5 +42,63 @@ describe('buildDashboardSummary', () => {
     ]);
     expect(summary.history).toHaveLength(3);
     expect(summary.history[1].status).toBe('accepted');
+    expect(summary.upcoming).toHaveLength(1);
+    expect(summary.upcoming[0]).toMatchObject({ id: 1, role: 'Responsable' });
+  });
+
+  it('lists future active accepted passenger trips in chronological order only', () => {
+    const summary = buildDashboardSummary({
+      offers: [
+        {
+          id: 1,
+          origin: 'Centro',
+          destination: 'Campus',
+          departure_date: '2099-05-13',
+          departure_time: '08:30:00',
+          status: 'oferta-activa',
+          requests: [],
+        },
+        {
+          id: 2,
+          origin: 'Sur',
+          destination: 'Campus',
+          departure_date: '2099-05-11',
+          departure_time: '20:00',
+          status: 'completada',
+          requests: [],
+        },
+      ],
+      requests: [
+        {
+          id: 21,
+          status: 'accepted',
+          offer: {
+            id: 3,
+            origin: 'Norte',
+            destination: 'Campus',
+            departure_date: '2099-05-12',
+            departure_time: '18:00',
+            status: 'oferta-activa',
+          },
+        },
+        {
+          id: 22,
+          status: 'pending',
+          offer: {
+            id: 4,
+            origin: 'Oeste',
+            destination: 'Campus',
+            departure_date: '2099-05-12',
+            departure_time: '17:00',
+            status: 'oferta-activa',
+          },
+        },
+      ],
+    }, null, statusLabels);
+
+    expect(summary.upcoming.map(({ id, role }) => [id, role])).toEqual([
+      [3, 'Pasajero'],
+      [1, 'Responsable'],
+    ]);
   });
 });

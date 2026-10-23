@@ -31,6 +31,7 @@ describe('useSessionEffects', () => {
       advancedMode: {},
       executionState: [],
       notifications: [],
+      privacy: 'Zona aproximada',
       setIsBooting: vi.fn(),
       setIsLoggedIn: vi.fn(),
       setToast,
@@ -39,5 +40,24 @@ describe('useSessionEffects', () => {
     expect(setToast).toHaveBeenCalledWith(
       expect.stringContaining('No se pudieron guardar tus preferencias'),
     );
+  });
+
+  it('persists the selected privacy preference with other local settings', () => {
+    writeAppData.mockImplementation(() => {});
+
+    renderHook(() => useSessionEffects({
+      active: 'auth',
+      advancedMode: {},
+      executionState: [],
+      notifications: [],
+      privacy: 'Privacidad máxima',
+      setIsBooting: vi.fn(),
+      setIsLoggedIn: vi.fn(),
+      setToast: vi.fn(),
+    }, { applyAuthenticatedUser: vi.fn() }));
+
+    expect(writeAppData).toHaveBeenCalledWith(expect.objectContaining({
+      privacy: 'Privacidad máxima',
+    }));
   });
 });

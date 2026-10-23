@@ -1,11 +1,12 @@
 const STORAGE_KEY = 'viajau-local-db-v1';
 
 export const DEFAULT_APP_DATA = {
+  privacy: 'Zona aproximada',
   notifications: [
-    { title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
-    { title: 'Check-in de llegada', channel: 'En la app', active: false },
-    { title: 'Cambio de ruta', channel: 'No configurado', active: false },
-    { title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false }
+    { id: 'departure-reminder', title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
+    { id: 'arrival-check-in', title: 'Check-in de llegada', channel: 'En la app', active: false },
+    { id: 'route-change', title: 'Cambio de ruta', channel: 'No configurado', active: false },
+    { id: 'trusted-contact', title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false }
   ],
   advancedMode: { night: true, safeties: true, hotspots: true, recommendations: true },
   safetyState: { panic: false, geofence: false, emergency: false, arrival: false },
@@ -30,15 +31,27 @@ function safeAppData(payload = {}) {
   const savedExecutionStateById = new Map(savedExecutionState
     .filter((task) => task && typeof task.id === 'string')
     .map((task) => [task.id, task.done]));
+  const savedNotifications = Array.isArray(data.notifications) ? data.notifications : [];
+  const savedNotificationsById = new Map(savedNotifications
+    .filter((notification) => notification && typeof notification.id === 'string')
+    .map((notification) => [notification.id, notification]));
 
   return {
     activeTab: typeof data.activeTab === 'string' ? data.activeTab : DEFAULT_APP_DATA.activeTab,
-    notifications: DEFAULT_APP_DATA.notifications.map((notification, index) => ({
-      ...notification,
-      active: typeof data.notifications?.[index]?.active === 'boolean'
-        ? data.notifications[index].active
-        : notification.active
-    })),
+    privacy: ['Zona aproximada', 'Ubicación compartida', 'Privacidad máxima'].includes(data.privacy)
+      ? data.privacy
+      : DEFAULT_APP_DATA.privacy,
+    notifications: DEFAULT_APP_DATA.notifications.map((notification, index) => {
+      const savedNotification = savedNotificationsById.get(notification.id)
+        || (typeof savedNotifications[index]?.id !== 'string' ? savedNotifications[index] : null);
+
+      return {
+        ...notification,
+        active: typeof savedNotification?.active === 'boolean'
+          ? savedNotification.active
+          : notification.active,
+      };
+    }),
     advancedMode: Object.fromEntries(
       Object.keys(DEFAULT_APP_DATA.advancedMode).map((key) => [
         key,

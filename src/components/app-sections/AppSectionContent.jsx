@@ -141,8 +141,13 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           matchProfileAvailable={state.matchProfileAvailable}
           matchResults={state.matchResults}
           matchTruncated={state.matchTruncated}
+          matchCanLoadMore={Boolean(state.matchNextCursor)}
           field={field}
-          onLoadMore={() => state.setMatchCursor(state.matchNextCursor)}
+          onLoadMore={() => {
+            if (!state.matchLoading && state.matchNextCursor) {
+              state.setMatchCursor(state.matchNextCursor);
+            }
+          }}
           onNavigate={state.setActive}
           onViewOffers={() => {
             state.setSearchState((current) => ({
@@ -328,6 +333,8 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           selectedChatTripId={state.selectedChatTripId}
           chatError={state.chatError}
           chatLoading={state.chatLoading}
+          chatHasOlder={state.chatHasOlder}
+          chatLoadingOlder={state.chatLoadingOlder}
           chatMessages={state.chatMessages}
           chatReadOnly={state.chatReadOnly}
           chatAction={state.chatAction}
@@ -335,8 +342,9 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           field={field}
           tripStatusLabels={tripStatusLabels}
           onNavigate={state.setActive}
-          onSelectChatTrip={state.setSelectedChatTripId}
+          onSelectChatTrip={actions.selectDashboardConversation}
           onChatDraftChange={state.setChatDraft}
+          onLoadOlderMessages={actions.loadOlderChatMessages}
           onSubmitMessage={actions.submitDashboardMessage}
         />
       )}

@@ -3,8 +3,20 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\RequireHttpsInProduction;
+use App\Models\InsuranceEnrollment;
+use App\Models\MembershipPayment;
+use App\Models\SafetyAlert;
+use App\Models\SafetyNotificationDelivery;
 use App\Models\StudentProfile;
+use App\Models\TravelOffer;
+use App\Models\TripCheckIn;
+use App\Models\TripLocation;
+use App\Models\TripMessage;
+use App\Models\TripRequest;
+use App\Models\TripReview;
+use App\Models\TripSafetyEvent;
 use App\Models\User;
+use App\Models\UserReport;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -208,6 +220,338 @@ class AuthTest extends TestCase
         $this->getJson('/api/auth/me')->assertUnauthorized();
         $this->getJson('/api/me')->assertUnauthorized();
         $this->getJson('/api/auth/me', ['Authorization' => 'Bearer invalid-token'])->assertUnauthorized();
+    }
+
+    public function test_account_export_requires_authentication(): void
+    {
+        $this->getJson('/api/account/export')->assertUnauthorized();
+    }
+
+    public function test_authenticated_pending_and_blocked_accounts_can_export_their_own_data(): void
+    {
+        $user = User::factory()->create(['status' => User::STATUS_PENDING]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/account/export')
+            ->assertOk()
+            ->assertJsonPath('data.account.status', User::STATUS_PENDING);
+
+        $user->update(['status' => User::STATUS_BLOCKED]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/account/export')
+            ->assertOk()
+            ->assertJsonPath('data.account.status', User::STATUS_BLOCKED);
+    }
+
+    public function test_active_account_without_a_student_profile_receives_empty_activity_sections(): void
+    {
+        $user = User::factory()->create([
+            'role' => User::ROLE_ADMIN,
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/account/export')
+            ->assertOk()
+            ->assertJsonPath('data.student_profile', null)
+            ->assertJsonPath('data.travel_offers', [])
+            ->assertJsonPath('data.trip_requests', [])
+            ->assertJsonPath('data.received_trip_requests', [])
+            ->assertJsonPath('data.reviews_written', [])
+            ->assertJsonPath('data.reviews_received', [])
+            ->assertJsonPath('data.messages_written', [])
+            ->assertJsonPath('data.safety_alerts', [])
+            ->assertJsonPath('data.trip_safety_events', [])
+            ->assertJsonPath('data.safety_notification_deliveries', [])
+            ->assertJsonPath('data.trip_check_ins', [])
+            ->assertJsonPath('data.trip_locations', [])
+            ->assertJsonPath('data.reports_written', [])
+            ->assertJsonPath('data.insurance_enrollments', [])
+            ->assertJsonPath('data.membership_payments', []);
+    }
+
+    public function test_account_export_returns_only_the_authenticated_users_account_and_profile_without_credentials(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Ana',
+            'email' => 'ana@uniajc.edu.co',
+            'university' => 'UNIAJC',
+            'career' => 'Ingeniería',
+            'emergency_contact' => 'Contacto propio',
+            'trusted_contact_phone' => '3000000000',
+            'status' => User::STATUS_ACTIVE,
+        ]);
+        $profile = StudentProfile::create([
+            'user_id' => $user->id,
+            'name' => 'Ana',
+            'email' => $user->email,
+            'university' => 'UNIAJC',
+            'career' => 'Ingeniería',
+            'emergency_contact' => 'Contacto propio',
+            'verified' => true,
+            'status' => 'activo',
+        ]);
+        $otherUser = User::factory()->create(['email' => 'other@uniajc.edu.co']);
+        StudentProfile::create([
+            'user_id' => $otherUser->id,
+            'name' => 'Otro perfil',
+            'email' => $otherUser->email,
+            'university' => 'UNIAJC',
+            'verified' => true,
+            'status' => 'activo',
+        ]);
+        $otherProfile = StudentProfile::where('user_id', $otherUser->id)->firstOrFail();
+        $ownOffer = TravelOffer::create([
+            'student_profile_id' => $profile->id,
+            'origin' => 'El Caney',
+            'destination' => 'Universidad',
+            'departure_date' => now()->addDay()->toDateString(),
+            'departure_time' => '08:30',
+            'status' => 'oferta-activa',
+        ]);
+        $otherOffer = TravelOffer::create([
+            'student_profile_id' => $otherProfile->id,
+            'origin' => 'Centro',
+            'destination' => 'Universidad',
+            'departure_date' => now()->addDays(2)->toDateString(),
+            'departure_time' => '09:30',
+            'status' => 'oferta-activa',
+        ]);
+        TripRequest::create([
+            'travel_offer_id' => $otherOffer->id,
+            'requester_profile_id' => $profile->id,
+            'status' => 'accepted',
+        ]);
+        TripRequest::create([
+            'travel_offer_id' => $ownOffer->id,
+            'requester_profile_id' => $otherProfile->id,
+            'status' => 'pending',
+        ]);
+        TripReview::create([
+            'travel_offer_id' => $otherOffer->id,
+            'reviewer_profile_id' => $profile->id,
+            'reviewee_profile_id' => $otherProfile->id,
+            'rating' => 4,
+            'comment' => 'Reseña escrita',
+        ]);
+        TripReview::create([
+            'travel_offer_id' => $ownOffer->id,
+            'reviewer_profile_id' => $otherProfile->id,
+            'reviewee_profile_id' => $profile->id,
+            'rating' => 5,
+            'comment' => 'Reseña recibida',
+        ]);
+        TripMessage::create([
+            'travel_offer_id' => $otherOffer->id,
+            'sender_profile_id' => $profile->id,
+            'body' => 'Mensaje escrito propio',
+        ]);
+        TripMessage::create([
+            'travel_offer_id' => $ownOffer->id,
+            'sender_profile_id' => $otherProfile->id,
+            'body' => 'Mensaje ajeno',
+        ]);
+        SafetyAlert::create([
+            'student_profile_id' => $profile->id,
+            'type' => 'sos',
+            'severity' => 'alta',
+            'message' => 'Alerta propia',
+            'active' => false,
+            'location' => 'Ubicación privada',
+            'latitude' => 3.451,
+            'longitude' => -76.532,
+            'resolved_at' => now(),
+        ]);
+        SafetyAlert::create([
+            'student_profile_id' => $otherProfile->id,
+            'type' => 'sos',
+            'severity' => 'alta',
+            'message' => 'Alerta de otra persona',
+            'active' => true,
+            'latitude' => 4.111,
+            'longitude' => -75.1,
+        ]);
+        TripSafetyEvent::create([
+            'travel_offer_id' => $ownOffer->id,
+            'user_id' => $user->id,
+            'type' => 'trip_started',
+            'occurred_at' => now(),
+        ]);
+        $ownSafetyEvent = TripSafetyEvent::where('user_id', $user->id)->firstOrFail();
+        SafetyNotificationDelivery::create([
+            'trip_safety_event_id' => $ownSafetyEvent->id,
+            'channel' => 'email',
+            'status' => 'sent',
+            'recipient_hash' => hash('sha256', 'trusted@example.edu'),
+            'provider_message_id' => 'provider-private-id',
+            'sent_at' => now(),
+        ]);
+        TripCheckIn::create([
+            'travel_offer_id' => $ownOffer->id,
+            'user_id' => $user->id,
+            'type' => 'arrival',
+            'checked_in_at' => now(),
+        ]);
+        TripCheckIn::create([
+            'travel_offer_id' => $ownOffer->id,
+            'user_id' => $otherUser->id,
+            'type' => 'arrival',
+            'checked_in_at' => now(),
+        ]);
+        TripLocation::create([
+            'travel_offer_id' => $ownOffer->id,
+            'user_id' => $user->id,
+            'latitude' => 3.451,
+            'longitude' => -76.532,
+            'accuracy_meters' => 12,
+            'captured_at' => now(),
+        ]);
+        TripLocation::create([
+            'travel_offer_id' => $ownOffer->id,
+            'user_id' => $otherUser->id,
+            'latitude' => 4.111,
+            'longitude' => -75.1,
+            'accuracy_meters' => 8,
+            'captured_at' => now(),
+        ]);
+        UserReport::create([
+            'travel_offer_id' => $otherOffer->id,
+            'reporter_profile_id' => $profile->id,
+            'reported_profile_id' => $otherProfile->id,
+            'category' => 'safety',
+            'description' => 'Reporte propio',
+            'status' => 'open',
+        ]);
+        UserReport::create([
+            'travel_offer_id' => $ownOffer->id,
+            'reporter_profile_id' => $otherProfile->id,
+            'reported_profile_id' => $profile->id,
+            'category' => 'safety',
+            'description' => 'Reporte de otra persona',
+            'status' => 'open',
+        ]);
+        InsuranceEnrollment::create([
+            'user_id' => $user->id,
+            'product_key' => 'student-basic',
+            'provider' => 'Proveedor demo',
+            'product_name' => 'Cobertura estudiantil',
+            'monthly_premium_cop' => 15000,
+            'coverage_summary' => 'Resumen de cobertura',
+            'policy_number' => 'POLICY-PRIVATE-1',
+            'policy_document_path' => 'private/policy.pdf',
+            'review_note' => 'Nota privada del revisor',
+            'status' => 'pending_review',
+        ]);
+        InsuranceEnrollment::create([
+            'user_id' => $otherUser->id,
+            'product_key' => 'other',
+            'provider' => 'Proveedor ajeno',
+            'product_name' => 'Producto ajeno',
+            'status' => 'quoted',
+        ]);
+        MembershipPayment::create([
+            'user_id' => $user->id,
+            'provider' => 'wompi',
+            'reference' => 'membership-own-reference',
+            'amount_in_cents' => 250000,
+            'currency' => 'COP',
+            'status' => 'pending',
+            'environment' => 'sandbox',
+            'gateway_transaction_id' => 'gateway-private-transaction',
+        ]);
+        MembershipPayment::create([
+            'user_id' => $otherUser->id,
+            'provider' => 'wompi',
+            'reference' => 'other-reference',
+            'amount_in_cents' => 250000,
+            'currency' => 'COP',
+            'status' => 'pending',
+            'environment' => 'sandbox',
+        ]);
+        TripSafetyEvent::create([
+            'travel_offer_id' => $ownOffer->id,
+            'user_id' => $otherUser->id,
+            'type' => 'trip_started',
+            'occurred_at' => now(),
+        ]);
+        $otherSafetyEvent = TripSafetyEvent::where('user_id', $otherUser->id)->firstOrFail();
+        SafetyNotificationDelivery::create([
+            'trip_safety_event_id' => $otherSafetyEvent->id,
+            'channel' => 'sms',
+            'status' => 'sent',
+            'recipient_hash' => hash('sha256', 'other@example.edu'),
+            'provider_message_id' => 'other-provider-private-id',
+            'sent_at' => now(),
+        ]);
+
+        $this->actingAs($user, 'sanctum')->getJson('/api/account/export')
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('Pragma', 'no-cache')
+            ->assertJsonPath('data.format_version', 1)
+            ->assertJsonPath('data.account.email', $user->email)
+            ->assertJsonPath('data.account.emergency_contact', 'Contacto propio')
+            ->assertJsonPath('data.student_profile.id', $profile->id)
+            ->assertJsonPath('data.student_profile.email', $user->email)
+            ->assertJsonCount(1, 'data.travel_offers')
+            ->assertJsonPath('data.travel_offers.0.origin', 'El Caney')
+            ->assertJsonCount(1, 'data.trip_requests')
+            ->assertJsonPath('data.trip_requests.0.status', 'accepted')
+            ->assertJsonMissingPath('data.trip_requests.0.requester_profile_id')
+            ->assertJsonCount(1, 'data.received_trip_requests')
+            ->assertJsonPath('data.received_trip_requests.0.status', 'pending')
+            ->assertJsonMissingPath('data.received_trip_requests.0.requester_profile_id')
+            ->assertJsonCount(1, 'data.reviews_written')
+            ->assertJsonPath('data.reviews_written.0.comment', 'Reseña escrita')
+            ->assertJsonMissingPath('data.reviews_written.0.reviewee_profile_id')
+            ->assertJsonCount(1, 'data.reviews_received')
+            ->assertJsonPath('data.reviews_received.0.rating', 5)
+            ->assertJsonMissingPath('data.reviews_received.0.comment')
+            ->assertJsonMissingPath('data.reviews_received.0.reviewer_profile_id')
+            ->assertJsonCount(1, 'data.messages_written')
+            ->assertJsonPath('data.messages_written.0.body', 'Mensaje escrito propio')
+            ->assertJsonCount(1, 'data.trip_safety_events')
+            ->assertJsonPath('data.trip_safety_events.0.type', 'trip_started')
+            ->assertJsonMissingPath('data.trip_safety_events.0.travel_offer_id')
+            ->assertJsonCount(1, 'data.safety_notification_deliveries')
+            ->assertJsonPath('data.safety_notification_deliveries.0.channel', 'email')
+            ->assertJsonPath('data.safety_notification_deliveries.0.status', 'sent')
+            ->assertJsonMissingPath('data.safety_notification_deliveries.0.recipient_hash')
+            ->assertJsonMissingPath('data.safety_notification_deliveries.0.provider_message_id')
+            ->assertJsonCount(1, 'data.trip_check_ins')
+            ->assertJsonPath('data.trip_check_ins.0.type', 'arrival')
+            ->assertJsonCount(1, 'data.trip_locations')
+            ->assertJsonPath('data.trip_locations.0.latitude', 3.451)
+            ->assertJsonPath('data.trip_locations.0.longitude', -76.532)
+            ->assertJsonMissingPath('data.trip_locations.0.travel_offer_id')
+            ->assertJsonCount(1, 'data.reports_written')
+            ->assertJsonPath('data.reports_written.0.category', 'safety')
+            ->assertJsonMissingPath('data.reports_written.0.description')
+            ->assertJsonMissingPath('data.reports_written.0.reported_profile_id')
+            ->assertJsonCount(1, 'data.insurance_enrollments')
+            ->assertJsonPath('data.insurance_enrollments.0.product_key', 'student-basic')
+            ->assertJsonMissingPath('data.insurance_enrollments.0.policy_number')
+            ->assertJsonMissingPath('data.insurance_enrollments.0.policy_document_path')
+            ->assertJsonMissingPath('data.insurance_enrollments.0.review_note')
+            ->assertJsonCount(1, 'data.membership_payments')
+            ->assertJsonPath('data.membership_payments.0.reference', 'membership-own-reference')
+            ->assertJsonPath('data.membership_payments.0.amount_in_cents', 250000)
+            ->assertJsonMissingPath('data.membership_payments.0.gateway_transaction_id')
+            ->assertJsonCount(1, 'data.safety_alerts')
+            ->assertJsonPath('data.safety_alerts.0.message', 'Alerta propia')
+            ->assertJsonPath('data.safety_alerts.0.latitude', 3.451)
+            ->assertJsonPath('data.safety_alerts.0.longitude', -76.532)
+            ->assertJsonPath('data.safety_alerts.0.location', 'Ubicación privada')
+            ->assertJsonMissingPath('data.account.password')
+            ->assertJsonMissingPath('data.account.remember_token')
+            ->assertJsonMissingPath('data.student_profile.user_id')
+            ->assertJsonMissing(['email' => $otherUser->email])
+            ->assertJsonMissing(['body' => 'Mensaje ajeno'])
+            ->assertJsonMissing(['message' => 'Alerta de otra persona'])
+            ->assertJsonMissing(['description' => 'Reporte de otra persona'])
+            ->assertJsonMissing(['provider' => 'Proveedor ajeno'])
+            ->assertJsonMissing(['reference' => 'other-reference'])
+            ->assertJsonMissing(['user_id' => $otherUser->id])
+            ->assertJsonMissing(['latitude' => 4.111])
+            ->assertJsonMissing(['longitude' => -75.1]);
     }
 
     public function test_login_rejects_invalid_credentials(): void

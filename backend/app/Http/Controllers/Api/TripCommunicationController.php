@@ -62,17 +62,32 @@ class TripCommunicationController extends Controller
 
     public function messages(Request $request, TravelOffer $trip)
     {
+        $filters = $request->validate([
+            'since_id' => ['sometimes', 'integer', 'min:0', 'prohibits:before_id'],
+            'before_id' => ['sometimes', 'integer', 'min:1', 'prohibits:since_id'],
+        ]);
         $profile = $this->activeStudentProfile($request);
         $this->assertParticipant($trip, $profile);
+        $isIncremental = array_key_exists('since_id', $filters);
+        $isHistoryPage = array_key_exists('before_id', $filters);
 
-        $messages = TripMessage::query()
+        $query = TripMessage::query()
             ->where('travel_offer_id', $trip->id)
             ->with('senderProfile:id,name')
-            ->latest('id')
-            ->limit(100)
-            ->get()
-            ->reverse()
-            ->values()
+            ->when($isIncremental, fn ($messages) => $messages->where('trip_messages.id', '>', $filters['since_id']))
+            ->when($isHistoryPage, fn ($messages) => $messages->where('trip_messages.id', '<', $filters['before_id']))
+            ->orderBy('trip_messages.id', $isIncremental ? 'asc' : 'desc')
+            ->limit($isIncremental ? 100 : 101);
+        $messages = $query->get();
+        $hasOlderMessages = ! $isIncremental && $messages->count() > 100;
+        if ($hasOlderMessages) {
+            $messages = $messages->take(100);
+        }
+        if (! $isIncremental) {
+            $messages = $messages->reverse()->values();
+        }
+
+        $messages = $messages
             ->map(fn (TripMessage $message): array => [
                 'id' => $message->id,
                 'sender_profile_id' => $message->sender_profile_id,
@@ -86,9 +101,11 @@ class TripCommunicationController extends Controller
             'data' => $messages,
             'meta' => [
                 'limit' => 100,
+                'has_older' => $hasOlderMessages,
                 'read_only' => ! in_array($trip->status, ['oferta-activa', 'en-curso'], true),
             ],
-        ]);
+        ])->header('Cache-Control', 'no-store, private')
+            ->header('Pragma', 'no-cache');
     }
 
     public function sendMessage(Request $request, TravelOffer $trip)
@@ -133,7 +150,8 @@ class TripCommunicationController extends Controller
                 'created_at' => $message->created_at?->toISOString(),
                 'is_mine' => true,
             ],
-        ], 201);
+        ], 201)->header('Cache-Control', 'no-store, private')
+            ->header('Pragma', 'no-cache');
     }
 
     private function activeStudentProfile(Request $request): StudentProfile

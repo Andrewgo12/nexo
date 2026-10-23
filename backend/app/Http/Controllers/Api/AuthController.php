@@ -3,8 +3,20 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\InsuranceEnrollment;
+use App\Models\MembershipPayment;
+use App\Models\SafetyAlert;
+use App\Models\SafetyNotificationDelivery;
 use App\Models\StudentProfile;
+use App\Models\TravelOffer;
+use App\Models\TripCheckIn;
+use App\Models\TripLocation;
+use App\Models\TripMessage;
+use App\Models\TripRequest;
+use App\Models\TripReview;
+use App\Models\TripSafetyEvent;
 use App\Models\User;
+use App\Models\UserReport;
 use App\Services\StudentProfileUpdateService;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -192,6 +204,250 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         return response()->json(['user' => $request->user()]);
+    }
+
+    public function exportAccountData(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $profile = $user->studentProfile;
+        $travelOffers = $profile
+            ? TravelOffer::query()
+                ->where('student_profile_id', $profile->id)
+                ->orderBy('id')
+                ->get([
+                    'origin',
+                    'destination',
+                    'mode',
+                    'departure_date',
+                    'departure_time',
+                    'seats',
+                    'cost',
+                    'status',
+                    'safety_route',
+                    'created_at',
+                    'updated_at',
+                ])
+            : collect();
+        $tripRequests = $profile
+            ? TripRequest::query()
+                ->join('travel_offers', 'travel_offers.id', '=', 'trip_requests.travel_offer_id')
+                ->where('trip_requests.requester_profile_id', $profile->id)
+                ->orderBy('trip_requests.id')
+                ->get([
+                    'trip_requests.status',
+                    'trip_requests.created_at',
+                    'trip_requests.updated_at',
+                    'travel_offers.origin',
+                    'travel_offers.destination',
+                    'travel_offers.mode',
+                    'travel_offers.departure_date',
+                    'travel_offers.departure_time',
+                ])
+            : collect();
+        $receivedTripRequests = $profile
+            ? TripRequest::query()
+                ->join('travel_offers', 'travel_offers.id', '=', 'trip_requests.travel_offer_id')
+                ->where('travel_offers.student_profile_id', $profile->id)
+                ->orderBy('trip_requests.id')
+                ->get([
+                    'trip_requests.status',
+                    'trip_requests.created_at',
+                    'trip_requests.updated_at',
+                    'travel_offers.origin',
+                    'travel_offers.destination',
+                    'travel_offers.mode',
+                    'travel_offers.departure_date',
+                    'travel_offers.departure_time',
+                ])
+            : collect();
+        $reviewsWritten = $profile
+            ? TripReview::query()
+                ->join('travel_offers', 'travel_offers.id', '=', 'trip_reviews.travel_offer_id')
+                ->where('trip_reviews.reviewer_profile_id', $profile->id)
+                ->orderBy('trip_reviews.id')
+                ->get([
+                    'trip_reviews.rating',
+                    'trip_reviews.comment',
+                    'trip_reviews.created_at',
+                    'travel_offers.origin',
+                    'travel_offers.destination',
+                    'travel_offers.departure_date',
+                ])
+            : collect();
+        $reviewsReceived = $profile
+            ? TripReview::query()
+                ->join('travel_offers', 'travel_offers.id', '=', 'trip_reviews.travel_offer_id')
+                ->where('trip_reviews.reviewee_profile_id', $profile->id)
+                ->orderBy('trip_reviews.id')
+                ->get([
+                    'trip_reviews.rating',
+                    'trip_reviews.created_at',
+                    'travel_offers.origin',
+                    'travel_offers.destination',
+                    'travel_offers.departure_date',
+                ])
+            : collect();
+        $messagesWritten = $profile
+            ? TripMessage::query()
+                ->join('travel_offers', 'travel_offers.id', '=', 'trip_messages.travel_offer_id')
+                ->where('trip_messages.sender_profile_id', $profile->id)
+                ->orderBy('trip_messages.id')
+                ->get([
+                    'trip_messages.body',
+                    'trip_messages.created_at',
+                    'travel_offers.origin',
+                    'travel_offers.destination',
+                    'travel_offers.departure_date',
+                ])
+            : collect();
+        $safetyAlerts = $profile
+            ? SafetyAlert::query()
+                ->where('student_profile_id', $profile->id)
+                ->orderBy('id')
+                ->get([
+                    'type',
+                    'severity',
+                    'message',
+                    'active',
+                    'location',
+                    'latitude',
+                    'longitude',
+                    'accuracy_meters',
+                    'resolved_at',
+                    'created_at',
+                    'updated_at',
+                ])
+            : collect();
+        $tripSafetyEvents = TripSafetyEvent::query()
+            ->where('user_id', $user->id)
+            ->orderBy('id')
+            ->get(['type', 'occurred_at']);
+        $safetyNotificationDeliveries = SafetyNotificationDelivery::query()
+            ->join('trip_safety_events', 'trip_safety_events.id', '=', 'safety_notification_deliveries.trip_safety_event_id')
+            ->where('trip_safety_events.user_id', $user->id)
+            ->orderBy('safety_notification_deliveries.id')
+            ->get([
+                'safety_notification_deliveries.channel',
+                'safety_notification_deliveries.status',
+                'safety_notification_deliveries.sent_at',
+                'trip_safety_events.type as event_type',
+                'trip_safety_events.occurred_at',
+            ]);
+        $tripCheckIns = TripCheckIn::query()
+            ->where('user_id', $user->id)
+            ->orderBy('id')
+            ->get(['type', 'checked_in_at']);
+        $tripLocations = TripLocation::query()
+            ->where('user_id', $user->id)
+            ->orderBy('captured_at')
+            ->get(['latitude', 'longitude', 'accuracy_meters', 'captured_at']);
+        $reportsWritten = $profile
+            ? UserReport::query()
+                ->join('travel_offers', 'travel_offers.id', '=', 'user_reports.travel_offer_id')
+                ->where('user_reports.reporter_profile_id', $profile->id)
+                ->orderBy('user_reports.id')
+                ->get([
+                    'user_reports.category',
+                    'user_reports.status',
+                    'user_reports.created_at',
+                    'user_reports.updated_at',
+                    'user_reports.resolved_at',
+                    'travel_offers.origin',
+                    'travel_offers.destination',
+                    'travel_offers.departure_date',
+                ])
+            : collect();
+        $insuranceEnrollments = InsuranceEnrollment::query()
+            ->where('user_id', $user->id)
+            ->orderBy('id')
+            ->get([
+                'product_key',
+                'provider',
+                'product_name',
+                'monthly_premium_cop',
+                'coverage_summary',
+                'coverage_starts_at',
+                'coverage_ends_at',
+                'status',
+                'created_at',
+                'updated_at',
+            ]);
+        $membershipPayments = MembershipPayment::query()
+            ->where('user_id', $user->id)
+            ->orderBy('id')
+            ->get([
+                'provider',
+                'reference',
+                'amount_in_cents',
+                'currency',
+                'status',
+                'environment',
+                'gateway_updated_at',
+                'created_at',
+                'updated_at',
+            ]);
+
+        return response()->json([
+            'data' => [
+                'format_version' => 1,
+                'exported_at' => now()->toISOString(),
+                'account' => $user->only([
+                    'id',
+                    'name',
+                    'email',
+                    'email_verified_at',
+                    'university',
+                    'career',
+                    'semester',
+                    'shift',
+                    'neighborhood',
+                    'emergency_contact',
+                    'trusted_contact_email',
+                    'trusted_contact_phone',
+                    'trusted_contact_consent',
+                    'trusted_contact_consent_at',
+                    'role',
+                    'status',
+                    'created_at',
+                    'updated_at',
+                ]),
+                'student_profile' => $profile?->only([
+                    'id',
+                    'name',
+                    'email',
+                    'university',
+                    'career',
+                    'semester',
+                    'shift',
+                    'neighborhood',
+                    'transport',
+                    'emergency_contact',
+                    'privacy',
+                    'verified',
+                    'trust_score',
+                    'status',
+                    'created_at',
+                    'updated_at',
+                ]),
+                'travel_offers' => $travelOffers,
+                'trip_requests' => $tripRequests,
+                'received_trip_requests' => $receivedTripRequests,
+                'reviews_written' => $reviewsWritten,
+                'reviews_received' => $reviewsReceived,
+                'messages_written' => $messagesWritten,
+                'safety_alerts' => $safetyAlerts,
+                'trip_safety_events' => $tripSafetyEvents,
+                'safety_notification_deliveries' => $safetyNotificationDeliveries,
+                'trip_check_ins' => $tripCheckIns,
+                'trip_locations' => $tripLocations,
+                'reports_written' => $reportsWritten,
+                'insurance_enrollments' => $insuranceEnrollments,
+                'membership_payments' => $membershipPayments,
+            ],
+        ], 200, [
+            'Cache-Control' => 'no-store, private',
+            'Pragma' => 'no-cache',
+        ]);
     }
 
     public function updateProfile(Request $request, StudentProfileUpdateService $profileUpdater): JsonResponse

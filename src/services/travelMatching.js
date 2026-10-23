@@ -68,3 +68,27 @@ export function buildMatchRecommendations(student, candidates = []) {
     recommendation: `Afinidad estimada ${calculateCompatibilityScore(student, candidate)}% por barrio, transporte y jornada.`
   }));
 }
+
+export function mergeMatchRecommendations(currentRecommendations, incomingRecommendations) {
+  const recommendationsById = new Map();
+  for (const recommendation of [...currentRecommendations, ...incomingRecommendations]) {
+    if (
+      !recommendation
+      || recommendation.id == null
+      || !Number.isFinite(Number(recommendation.score))
+    ) {
+      throw new TypeError('La recomendación contiene datos inválidos.');
+    }
+    recommendationsById.set(String(recommendation.id), recommendation);
+  }
+
+  return [...recommendationsById.values()].sort((first, second) => {
+    const scoreDifference = Number(second.score) - Number(first.score);
+    if (scoreDifference) return scoreDifference;
+
+    const firstId = Number(first.id);
+    const secondId = Number(second.id);
+    if (Number.isSafeInteger(firstId) && Number.isSafeInteger(secondId)) return firstId - secondId;
+    return String(first.id).localeCompare(String(second.id));
+  });
+}

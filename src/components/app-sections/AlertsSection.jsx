@@ -10,13 +10,13 @@ export default function AlertsSection({ notifications, onToggleNotification }) {
           Estas opciones solo guardan preferencias en este navegador. No programan recordatorios ni envían avisos; el envío externo requiere una integración y servicios configurados.
         </p>
         <div style={{ display: 'grid', gap: 12 }}>
-          {notifications.map((item, index) => (
-            <div key={item.title} style={{ background: item.active ? 'rgba(245,158,11,.08)' : 'rgba(148,163,184,.08)', border: `1px solid ${item.active ? 'rgba(245,158,11,.25)' : 'rgba(148,163,184,.25)'}`, borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          {notifications.map((item) => (
+            <div key={item.id} style={{ background: item.active ? 'rgba(245,158,11,.08)' : 'rgba(148,163,184,.08)', border: `1px solid ${item.active ? 'rgba(245,158,11,.25)' : 'rgba(148,163,184,.25)'}`, borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: 800 }}>{item.title}</div>
                 <div style={{ color: '#dbeafe', fontSize: 12, marginTop: 4 }}>{item.channel}</div>
               </div>
-              <button type="button" aria-pressed={item.active} onClick={() => onToggleNotification(index)} style={{ background: item.active ? 'rgba(245,158,11,.18)' : 'rgba(15,23,42,.9)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 10, color: '#fff', padding: '8px 12px', fontWeight: 700 }}>{item.active ? 'Desactivar preferencia' : 'Activar preferencia'}</button>
+              <button type="button" aria-pressed={item.active} onClick={() => onToggleNotification(item.id)} style={{ background: item.active ? 'rgba(245,158,11,.18)' : 'rgba(15,23,42,.9)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 10, color: '#fff', padding: '8px 12px', fontWeight: 700 }}>{item.active ? 'Desactivar preferencia' : 'Activar preferencia'}</button>
             </div>
           ))}
         </div>

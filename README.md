@@ -5,17 +5,17 @@
 ## 1. Estado actual del proyecto
 
 - **Fase de desarrollo:** MVP en desarrollo. La aplicación tiene cliente React y API Laravel funcionales, pero hay integraciones externas opcionales y áreas incompletas. No se declara lista para producción.
-- **Cobertura de pruebas:** Vitest reportó 12,15 % de cobertura de líneas en la última ejecución completada (9 archivos y 20 pruebas). `test:coverage` aplica pisos globales de 7 % en ramas/funciones y 9 % en líneas/sentencias. No hay reporte porcentual configurado para PHPUnit; la cobertura frontend no representa la cobertura del backend.
-- **Verificación observada en este checkout:**
+- **Cobertura de pruebas:** Vitest reportó 12,15 % de cobertura de líneas en la ejecución de referencia (9 archivos y 20 pruebas), anterior a los cambios de filtros/privacidad descritos más abajo. `test:coverage` aplica pisos globales de 7 % en ramas/funciones y 9 % en líneas/sentencias. No hay reporte porcentual configurado para PHPUnit; la cobertura frontend no representa la cobertura del backend.
+- **Verificación observada antes de los cambios locales actuales:**
   - `npm run build`: correcto.
-  - `npm run test:unit`: 9 archivos, 20 pruebas aprobadas en la última ejecución completada.
-  - `npm run test:coverage`: correcto; 9 archivos y 20 pruebas aprobadas, con 12,15 % de cobertura de líneas y umbrales globales satisfechos.
+  - `npm run test:unit`: 10 archivos, 21 pruebas aprobadas antes de los cambios actuales de exportación de datos.
+  - `npm run test:coverage`: correcto en la ejecución de referencia; 9 archivos y 20 pruebas aprobadas, con 12,15 % de cobertura de líneas y umbrales globales satisfechos.
   - `npm run test:routing`: correcto; prueba contratos del cliente con respuestas simuladas, no una API desplegada.
   - `npm run lint:react-bits`: correcto; ESLint finalizó sin errores ni advertencias.
   - `npm --prefix react-bits-main run build`: no completó en este equipo Windows de 8 GB; el proceso Vite alcanzó el límite de heap de Node (~2 GB) durante `transforming`. El subpaso de generación de registry completó 1.274 elementos; no se afirma que el build de producción haya pasado.
   - `node scripts/test-viajau-functions.js`: diagnóstico exploratorio; reporta 39 ejecuciones sin excepciones, pero no valida resultados y captura errores sin fallar el proceso, por lo que no cuenta como suite de pruebas.
-  - `npm run lint:product`: correcto; Oxlint termina sin diagnósticos con `--deny-warnings`.
-  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 133 pruebas y 749 aserciones. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
+  - `npm run lint:product`: correcto en la última ejecución disponible anterior a la exportación de datos; Oxlint termina sin diagnósticos con `--deny-warnings`.
+  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 133 pruebas y 749 aserciones antes de los tests nuevos de exportación. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
 - **Automatización:** `Product CI` cubre build, pruebas, cobertura frontend y lint del producto, además de PHPUnit en Ubuntu/PHP 8.4 con SQLite. `React Bits CI` valida el subproyecto embebido en su propio entorno.
 
 | # | Módulo de producto | Estado | Alcance confirmado y límites |
@@ -29,9 +29,9 @@
 | 7 | Administración y analytics | Parcial | Dashboard agregado, gestión de cuentas, incidentes, catálogos e importación limitada de `stops.txt`/`routes.txt`. No importa horarios/calendarios GTFS completos. |
 | 8 | Confiabilidad y reputación | Completado dentro del alcance actual | Valoraciones limitadas a participantes de viajes completados y reportes moderables. No equivale a investigación de identidad ni certificación independiente. |
 | 9 | Pago y seguro | Parcial | Membresía de prueba, solicitudes de cotización y revisión manual de pólizas. Wompi está restringido a sandbox; `payments_enabled` es `false`; no se cobran pagos ni se activa cobertura automáticamente. |
-| 10 | Dashboard, historial y comunicación | Parcial | Datos personales desde API y chat persistente entre responsables/pasajeros aceptados. No hay chat en tiempo real ni notificaciones push; la interfaz consulta periódicamente. |
-| 11 | Privacidad y seguridad backend | Parcial | Cookies Sanctum/CSRF, validación, roles, límites de solicitudes y controles de ubicación. La ubicación precisa puede compartirse con participantes autorizados del viaje y su purga requiere el scheduler. No hay flujos automatizados completos de acceso/exportación/borrado ni evidencia de certificación o pentest independiente. |
-| 12 | Notificaciones y recordatorios | Parcial | Alertas de seguridad y trabajos de entrega implementados; correo/SMS/WhatsApp dependen de credenciales, consentimiento, colas y scheduler. Las opciones de la interfaz solo guardan preferencias locales; no programan recordatorios ni envían push, que no está implementado. |
+| 10 | Dashboard, historial y comunicación | Parcial | Dashboard muestra métricas, actividad, historial con fechas y próximos viajes activos como responsable o pasajero aceptado; chat persistente entre participantes autorizados. Los mensajes se deduplican y ordenan, se conserva lo recién enviado frente a respuestas de sondeo atrasadas, se limpia el borrador al cambiar de viaje y se ignoran respuestas tardías de otra conversación. El sondeo inicial carga hasta 100 mensajes y luego consulta por ID incremental. No hay chat en tiempo real ni notificaciones push; la interfaz consulta cada 12 segundos mientras la pestaña está visible y actualiza al volver. |
+| 11 | Privacidad y seguridad backend | Parcial | Cookies Sanctum/CSRF, validación, roles, límites de solicitudes y controles de ubicación. La preferencia de privacidad del perfil se guarda mediante API y se conserva localmente con valores permitidos. La exportación autenticada incluye cuenta, perfil, actividad, categorías/estados de denuncias, seguros, pagos, check-ins, historial de entrega de avisos y puntos GPS asociados al usuario autenticado, además de coordenadas de alertas SOS propias; está disponible también para cuentas pendientes o bloqueadas. Se excluyen contenido de denuncias, datos identificables de terceros, destinatarios, documentos de póliza, notas de revisión e identificadores internos del proveedor. No procesa solicitudes de borrado ni efectúa cobros. La ubicación disponible depende del scheduler y de la retención. No hay evidencia de certificación o pentest independiente. |
+| 12 | Notificaciones y recordatorios | Parcial | Alertas de seguridad y trabajos de entrega implementados; correo/SMS/WhatsApp dependen de credenciales, consentimiento, colas y scheduler. Las preferencias de interfaz se persisten en `localStorage` y los fallos de escritura se notifican; no programan recordatorios ni envían push. |
 | 13 | Funcionalidades avanzadas | Pendiente | Varias funciones —calendario universitario, predicción de patrones, hotspots y recomendaciones avanzadas— permanecen como inventario o ideas, no como servicios verificados. |
 | 14 | Infraestructura y backend | Parcial | API Laravel, migraciones, jobs, scheduler y workflows CI presentes; se añadió Compose opcional para ruteo OSRM local. No hay evidencia de infraestructura de producción, backups operativos, SLO o monitoreo externo desplegado. |
 | 15 | Checklist de cumplimiento | Pendiente | El checklist de interfaz es contenido de producto, no prueba de cumplimiento legal, auditoría externa ni certificación. |
@@ -391,6 +391,7 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 | `GET` | `/api/user` | Devuelve usuario autenticado activo. | Implementado; Sanctum + `account.active`. |
 | `POST` | `/api/logout`, `/api/auth/logout` | Cierra sesión o revoca token actual. | Implementado; Sanctum. |
 | `GET` | `/api/me`, `/api/auth/me` | Devuelve cuenta actual. | Implementado; Sanctum. |
+| `GET` | `/api/account/export` | Exporta cuenta, perfil, actividad, denuncias, seguros, pagos, check-ins y puntos GPS propios en JSON; 6/min. | Implementado; requiere cuenta activa y Sanctum; respuesta `no-store`. Omite identificadores de terceros, documentos de póliza, notas de revisión e identificadores internos de pago. Los montos no confirman cobros; la exportación no procesa solicitudes de borrado. |
 | `POST` | `/api/auth/email/verification-notification` | Envía/reintenta correo de verificación; 6/min. | Implementado; devuelve `503` si el transporte SMTP falla para que el cliente pueda reintentar. |
 | `PUT` | `/api/profile`, `/api/auth/profile` | Actualiza perfil de la cuenta. | Implementado; Sanctum + cuenta activa. |
 | `POST` | `/api/profile/photo` | Sube foto de perfil mediante `AuthController::updateProfile`. | Implementada; acepta JPG/JPEG/PNG/WebP hasta 2 MB y la almacena en el disco `public`. |
@@ -404,8 +405,8 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 | `POST` | `/api/insurance/enrollments` | Solicita cotización; 5/min. | Implementado; no activa cobertura. |
 | `POST` | `/api/insurance/enrollments/{enrollment}/policy` | Envía documento para revisión; 5/min. | Implementado; revisión administrativa manual. |
 | `GET` | `/api/communication/trips` | Lista viajes donde el usuario puede comunicarse. | Implementado para participantes autorizados. |
-| `GET` | `/api/trips/{trip}/messages` | Lee mensajes del viaje. | Implementado; autorización por participación. |
-| `POST` | `/api/trips/{trip}/messages` | Envía mensaje; 30/min. | Implementado; no realtime, longitud limitada en backend. |
+| `GET` | `/api/trips/{trip}/messages` | Lee los últimos 100 mensajes; `since_id` pagina mensajes nuevos y `before_id` carga los 100 anteriores. Los cursores son excluyentes. | Implementado; `meta.has_older` indica si queda historial, con autorización por participación y respuestas `no-store`. |
+| `POST` | `/api/trips/{trip}/messages` | Envía mensaje; 30/min. | Implementado; no realtime, longitud limitada en backend y respuesta `no-store`. |
 | `GET` | `/api/reputation/me` | Resumen de reputación propia. | Implementado para cuenta verificada. |
 | `GET` | `/api/reputation/profiles/{profile}` | Consulta perfil agregado de reputación. | Implementado; visibilidad limitada por reglas del dominio. |
 | `POST` | `/api/trips/{trip}/reviews` | Califica participante; 10/min. | Implementado tras viaje completado y con participación validada. |
@@ -416,7 +417,7 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 | `POST` | `/api/trips/{trip}/requests` | Solicita cupo; 10/min. | Implementado; estado y cupos coordinados por backend. |
 | `PATCH` | `/api/trips/{trip}` | Transición/cancelación de oferta según reglas del controlador. | Implementado con restricciones de estado/participación. |
 | `PATCH` | `/api/trip-requests/{tripRequest}` | Acepta, rechaza o actualiza solicitud. | Implementado; límite 20/min. |
-| `GET` | `/api/matches` | Calcula coincidencias de viaje. | Implementado; backend aplica filtros y explica factores. |
+| `GET` | `/api/matches` | Calcula coincidencias verificadas; `after_id` pagina ofertas evaluadas. | Implementado; el cliente fusiona páginas sin duplicados y reordena globalmente por puntaje. Pondera zona (50), jornada (35) y transporte (15); el puntaje no mide seguridad. |
 | `POST` | `/api/alerts` | Crea alerta SOS; 3/min. | Implementado; GPS solo si se solicita/consiente. |
 | `POST` | `/api/trips/{trip}/location` | Actualiza ubicación consentida; 30/min. | Implementado solo en viaje en curso y participante autorizado. |
 | `DELETE` | `/api/trips/{trip}/location` | Retira ubicación compartida. | Implementado. |

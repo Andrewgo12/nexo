@@ -29,7 +29,9 @@ class TripCommunicationTest extends TestCase
             'body' => 'Nos vemos en la entrada principal.',
         ])->assertCreated()
             ->assertJsonPath('data.sender_name', 'Conductor')
-            ->assertJsonPath('data.is_mine', true);
+            ->assertJsonPath('data.is_mine', true)
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('Pragma', 'no-cache');
         $this->assertDatabaseHas('trip_messages', [
             'travel_offer_id' => $trip->id,
             'sender_profile_id' => $ownerProfile->id,
@@ -38,6 +40,8 @@ class TripCommunicationTest extends TestCase
 
         $this->flushHeaders()->actingAs($passenger, 'sanctum')->getJson("/api/trips/{$trip->id}/messages")
             ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('Pragma', 'no-cache')
             ->assertJsonPath('data.0.body', 'Nos vemos en la entrada principal.')
             ->assertJsonPath('data.0.sender_name', 'Conductor')
             ->assertJsonPath('data.0.is_mine', false)
@@ -46,6 +50,13 @@ class TripCommunicationTest extends TestCase
         $this->flushHeaders()->actingAs($passenger, 'sanctum')->postJson("/api/trips/{$trip->id}/messages", [
             'body' => 'Confirmado, allí estaré.',
         ])->assertCreated();
+        $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages?since_id={$ownerResponse->json('data.id')}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.body', 'Confirmado, allí estaré.');
+        $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages?since_id={$trip->messages()->max('id')}")
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
         $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson('/api/communication/trips')
             ->assertOk()
             ->assertJsonPath('data.0.id', $trip->id)
@@ -86,6 +97,7 @@ class TripCommunicationTest extends TestCase
 
         $this->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages")
             ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
             ->assertJsonPath('data.0.body', 'Historial conservado.')
             ->assertJsonPath('meta.read_only', true);
         $this->flushHeaders()->actingAs($owner, 'sanctum')->postJson("/api/trips/{$trip->id}/messages", [
@@ -99,6 +111,45 @@ class TripCommunicationTest extends TestCase
         $this->flushHeaders()->actingAs($owner, 'sanctum')->postJson("/api/trips/{$openTrip->id}/messages", [
             'body' => str_repeat('a', 2001),
         ])->assertUnprocessable();
+        $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson("/api/trips/{$openTrip->id}/messages?since_id=-1")
+            ->assertUnprocessable();
+    }
+
+    public function test_message_history_is_paged_backwards_and_cursor_parameters_are_mutually_exclusive(): void
+    {
+        [$owner, $ownerProfile] = $this->createStudent();
+        $trip = $this->createTrip($ownerProfile);
+        foreach (range(1, 205) as $number) {
+            TripMessage::create([
+                'travel_offer_id' => $trip->id,
+                'sender_profile_id' => $ownerProfile->id,
+                'body' => "Mensaje {$number}",
+            ]);
+        }
+
+        $initialResponse = $this->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages")
+            ->assertOk()
+            ->assertJsonCount(100, 'data')
+            ->assertJsonPath('data.0.body', 'Mensaje 106')
+            ->assertJsonPath('data.99.body', 'Mensaje 205')
+            ->assertJsonPath('meta.has_older', true);
+        $firstId = $initialResponse->json('data.0.id');
+
+        $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages?before_id={$firstId}")
+            ->assertOk()
+            ->assertJsonCount(100, 'data')
+            ->assertJsonPath('data.0.body', 'Mensaje 6')
+            ->assertJsonPath('data.99.body', 'Mensaje 105')
+            ->assertJsonPath('meta.has_older', true);
+
+        $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages?before_id=6")
+            ->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('data.0.body', 'Mensaje 1')
+            ->assertJsonPath('meta.has_older', false);
+
+        $this->flushHeaders()->actingAs($owner, 'sanctum')->getJson("/api/trips/{$trip->id}/messages?since_id=1&before_id=2")
+            ->assertUnprocessable();
     }
 
     private function createStudent(string $name = 'Estudiante'): array

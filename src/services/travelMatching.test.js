@@ -4,6 +4,7 @@ import {
   calculateCompatibilityScore,
   calculateTravelAffinityScore,
   filterTravelMatches,
+  mergeMatchRecommendations,
 } from './travelMatching';
 
 describe('travel matching', () => {
@@ -111,5 +112,29 @@ describe('travel matching', () => {
       mode: 'MIO + caminata',
       recommendation: 'Afinidad estimada 99% por barrio, transporte y jornada.',
     }]);
+  });
+
+  it('deduplicates and globally ranks recommendations across cursor pages', () => {
+    const firstPage = [
+      { id: 5, score: 50, traveler: 'First page' },
+      { id: 8, score: 70, traveler: 'Updated on later page' },
+    ];
+    const nextPage = [
+      { id: 8, score: 90, traveler: 'Updated on later page' },
+      { id: 3, score: 70, traveler: 'Tie, lower offer id' },
+    ];
+
+    expect(mergeMatchRecommendations(firstPage, nextPage)).toEqual([
+      { id: 8, score: 90, traveler: 'Updated on later page' },
+      { id: 3, score: 70, traveler: 'Tie, lower offer id' },
+      { id: 5, score: 50, traveler: 'First page' },
+    ]);
+  });
+
+  it('rejects recommendations that cannot be ranked or deduplicated', () => {
+    expect(() => mergeMatchRecommendations([], [{ id: 1, score: 'invalid' }]))
+      .toThrow('La recomendación contiene datos inválidos.');
+    expect(() => mergeMatchRecommendations([], [{ score: 80 }]))
+      .toThrow('La recomendación contiene datos inválidos.');
   });
 });
