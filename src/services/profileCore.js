@@ -8,36 +8,32 @@ export const UNIVERSITY_DOMAINS = {
 export function validateInstitutionalEmail(email, domain) {
   if (!email || !domain) return false;
   const normalizedEmail = String(email).trim().toLowerCase();
-  const normalizedDomain = String(domain).trim().toLowerCase();
-  return normalizedEmail.endsWith(normalizedDomain) && normalizedEmail.includes('@');
-}
+  const normalizedDomain = String(domain).trim().toLowerCase().replace(/^@/, '');
+  const separatorIndex = normalizedEmail.indexOf('@');
+  if (
+    separatorIndex <= 0
+    || separatorIndex !== normalizedEmail.lastIndexOf('@')
+    || !normalizedDomain
+    || /\s/.test(normalizedEmail)
+  ) return false;
 
-export function createStudentProfile(data = {}) {
-  const now = new Date().toISOString();
-  return {
-    id: `stu-${Math.random().toString(36).slice(2, 9)}`,
-    name: data.name || 'Estudiante ViajaU',
-    email: data.email || 'estudiante@universidad.edu.co',
-    university: data.university || 'UNIAJC',
-    career: data.career || 'Ingeniería de Sistemas',
-    semester: data.semester || '8vo',
-    shift: data.shift || 'Nocturna',
-    neighborhood: data.neighborhood || 'El Caney',
-    transport: data.transport || 'MIO + caminata',
-    emergencyContact: data.emergency || 'Contacto de confianza',
-    privacy: data.privacy || 'Zona aproximada',
-    verified: true,
-    trustScore: 4.8,
-    createdAt: now,
-    updatedAt: now
-  };
+  return normalizedEmail.slice(separatorIndex + 1) === normalizedDomain;
 }
 
 export function calculateDistanceBetweenPoints(origin, destination) {
-  const lat1 = Number(origin?.lat ?? 3.45);
-  const lng1 = Number(origin?.lng ?? -76.5);
-  const lat2 = Number(destination?.lat ?? 3.52);
-  const lng2 = Number(destination?.lng ?? -76.53);
+  const coordinates = [origin, destination].map((point) => ({
+    rawLat: point?.lat,
+    rawLng: point?.lng,
+    lat: Number(point?.lat),
+    lng: Number(point?.lng),
+  }));
+  if (coordinates.some(({ rawLat, rawLng, lat, lng }) => (
+    rawLat == null || rawLng == null || String(rawLat).trim() === '' || String(rawLng).trim() === ''
+    || !Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180
+  ))) {
+    throw new Error('Se requieren coordenadas geográficas válidas para calcular la distancia.');
+  }
+  const [{ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 }] = coordinates;
   const toRad = (value) => (value * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);

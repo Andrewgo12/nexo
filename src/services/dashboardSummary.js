@@ -1,3 +1,24 @@
+function parseDepartureTimestamp(date, time) {
+  if (typeof date !== 'string' || typeof time !== 'string') return Number.NaN;
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(time);
+  if (!dateMatch || !timeMatch) return Number.NaN;
+
+  const [, year, month, day] = dateMatch.map(Number);
+  const [, hour, minute, second = '0'] = timeMatch;
+  const departure = new Date(year, month - 1, day, Number(hour), Number(minute), Number(second));
+  if (
+    departure.getFullYear() !== year
+    || departure.getMonth() !== month - 1
+    || departure.getDate() !== day
+    || departure.getHours() !== Number(hour)
+    || departure.getMinutes() !== Number(minute)
+    || departure.getSeconds() !== Number(second)
+  ) return Number.NaN;
+
+  return departure.getTime();
+}
+
 export function buildUpcomingTrips(dashboardTrips, now = Date.now()) {
   const ownedOffers = dashboardTrips.offers;
   const outgoingRequests = dashboardTrips.requests;
@@ -11,9 +32,7 @@ export function buildUpcomingTrips(dashboardTrips, now = Date.now()) {
   ]
     .map((trip) => ({
       ...trip,
-      departureAt: trip.departure_date && trip.departure_time
-        ? new Date(`${trip.departure_date}T${String(trip.departure_time).slice(0, 5)}:00`).getTime()
-        : Number.NaN,
+      departureAt: parseDepartureTimestamp(trip.departure_date, trip.departure_time),
     }))
     .filter((trip) => Number.isFinite(trip.departureAt) && trip.departureAt > now)
     .sort((first, second) => first.departureAt - second.departureAt)

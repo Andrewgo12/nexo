@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDashboardSummary } from '../services/dashboardSummary';
+import { buildDashboardSummary, buildUpcomingTrips } from '../services/dashboardSummary';
 
 const statusLabels = { accepted: 'Aceptada', rejected: 'Rechazada' };
 
@@ -44,6 +44,40 @@ describe('buildDashboardSummary', () => {
     expect(summary.history[1].status).toBe('accepted');
     expect(summary.upcoming).toHaveLength(1);
     expect(summary.upcoming[0]).toMatchObject({ id: 1, role: 'Responsable' });
+  });
+
+  describe('buildUpcomingTrips', () => {
+    it.each([
+      ['2026-02-30', '10:00'],
+      ['2026-13-01', '10:00'],
+      ['2026-10-23', '24:00'],
+      ['2026-10-23', '10:60'],
+      ['2026/10/23', '10:00'],
+      ['2026-10-23', '10:00:60'],
+    ])('excludes invalid departure date or time %s %s', (departure_date, departure_time) => {
+      expect(buildUpcomingTrips({
+        offers: [{
+          id: 1,
+          status: 'oferta-activa',
+          departure_date,
+          departure_time,
+        }],
+        requests: [],
+      }, 0)).toEqual([]);
+    });
+
+    it('accepts valid times with optional seconds and preserves local departure time', () => {
+      const departureAt = new Date(2099, 4, 12, 18, 30, 45).getTime();
+      expect(buildUpcomingTrips({
+        offers: [{
+          id: 1,
+          status: 'oferta-activa',
+          departure_date: '2099-05-12',
+          departure_time: '18:30:45',
+        }],
+        requests: [],
+      }, 0)).toMatchObject([{ id: 1, departureAt }]);
+    });
   });
 
   it('lists future active accepted passenger trips in chronological order only', () => {

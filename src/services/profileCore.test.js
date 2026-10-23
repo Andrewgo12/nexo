@@ -1,5 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { buildRouteSummary } from './profileCore';
+import {
+  buildRouteSummary,
+  calculateDistanceBetweenPoints,
+  validateInstitutionalEmail,
+} from './profileCore';
+
+describe('validateInstitutionalEmail', () => {
+  it.each([
+    ['Student@uniajc.edu.co', '@uniajc.edu.co', true],
+    [' student@UNIAJC.EDU.CO ', 'uniajc.edu.co', true],
+    ['student@mail.uniajc.edu.co', '@uniajc.edu.co', false],
+    ['student@uniajc.edu.co.attacker.test', '@uniajc.edu.co', false],
+    ['student@attackeruniajc.edu.co', '@uniajc.edu.co', false],
+    ['student@@uniajc.edu.co', '@uniajc.edu.co', false],
+    ['student @uniajc.edu.co', '@uniajc.edu.co', false],
+    ['@uniajc.edu.co', '@uniajc.edu.co', false],
+    ['student@uniajc.edu.co', '', false],
+    ['', '@uniajc.edu.co', false],
+  ])('validates %s against the exact institutional domain', (email, domain, expected) => {
+    expect(validateInstitutionalEmail(email, domain)).toBe(expected);
+  });
+});
+
+describe('calculateDistanceBetweenPoints', () => {
+  it('calculates distance from the provided coordinates', () => {
+    expect(calculateDistanceBetweenPoints(
+      { lat: 3.45, lng: -76.5 },
+      { lat: 3.52, lng: -76.53 },
+    )).toBeCloseTo(8.3, 0);
+  });
+
+  it.each([
+    [undefined, { lat: 3, lng: -76 }],
+    [null, { lat: 3, lng: -76 }],
+    [{ lat: null, lng: -76 }, { lat: 3, lng: -76 }],
+    [{ lat: 91, lng: -76 }, { lat: 3, lng: -76 }],
+    [{ lat: 3, lng: -181 }, { lat: 3, lng: -76 }],
+    [{ lat: Number.NaN, lng: -76 }, { lat: 3, lng: -76 }],
+  ])('rejects missing or out-of-range coordinates', (origin, destination) => {
+    expect(() => calculateDistanceBetweenPoints(origin, destination))
+      .toThrow('Se requieren coordenadas geográficas válidas');
+  });
+});
 
 describe('buildRouteSummary', () => {
   it('does not invent distance, duration, or a safety score before a route is calculated', () => {

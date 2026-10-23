@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildMatchRecommendations,
-  calculateCompatibilityScore,
   calculateTravelAffinityScore,
   filterTravelMatches,
   mergeMatchRecommendations,
@@ -16,6 +14,60 @@ describe('travel matching', () => {
     expect(calculateTravelAffinityScore(
       { neighborhood: 'Pance', transport: 'Carro', shift: 'Diurna' },
       { zone: 'El Caney UNIAJC', time: '19:45', transport: 'MIO' },
+    )).toBe(0);
+  });
+
+  it('uses the same 50/35/15 weights as the API recommendation score', () => {
+    expect(calculateTravelAffinityScore(
+      { neighborhood: 'El Caney', transport: 'MIO + caminata', shift: 'Nocturna' },
+      { zone: 'El Caney UNIAJC', time: '19:45', transport: 'MIO + caminata' },
+    )).toBe(100);
+    expect(calculateTravelAffinityScore(
+      { neighborhood: 'El Caney', transport: 'MIO', shift: 'Diurna' },
+      { zone: 'El Caney UNIAJC', time: '19:45', transport: 'MIO' },
+    )).toBe(65);
+  });
+
+  it.each([
+    ['Pance', 'El Pancecito', false],
+    ['Pance', 'El Pance Norte', true],
+    ['El Caney', 'UNIAJC - El Caney', true],
+    ['São José', 'Sao Jose Campus', true],
+    ['A+B', 'Campus A+B Sur', true],
+  ])('scores zone %s against route %s with token boundaries', (neighborhood, route, expected) => {
+    const score = calculateTravelAffinityScore(
+      { neighborhood, transport: '', shift: '' },
+      { zone: route, time: '', transport: '' },
+    );
+
+    expect(score).toBe(expected ? 50 : 0);
+  });
+
+  it.each([
+    undefined,
+    null,
+    '',
+    '19',
+    '19:xx',
+    '19:60',
+    '24:00',
+    '7:45',
+    '19:45:60',
+  ])('does not award shift affinity for invalid departure time %s', (time) => {
+    expect(calculateTravelAffinityScore(
+      { neighborhood: 'Pance', transport: 'Carro', shift: 'Nocturna' },
+      { zone: 'El Caney', transport: 'MIO', time },
+    )).toBe(0);
+  });
+
+  it('uses a valid 24-hour time for shift affinity', () => {
+    expect(calculateTravelAffinityScore(
+      { neighborhood: 'Pance', transport: 'Carro', shift: 'Nocturna' },
+      { zone: 'El Caney', transport: 'MIO', time: '23:59' },
+    )).toBe(35);
+    expect(calculateTravelAffinityScore(
+      { neighborhood: 'Pance', transport: 'Carro', shift: 'Nocturna' },
+      { zone: 'El Caney', transport: 'MIO', time: '23:59:59' },
     )).toBe(0);
   });
 
@@ -87,31 +139,12 @@ describe('travel matching', () => {
       .toEqual(['dated', 'invalid']);
   });
 
-  it('keeps compatibility scoring bounded and explains recommendation factors', () => {
-    const student = {
-      neighborhood: 'El Caney',
-      shift: 'Nocturna',
-      transport: 'MIO + caminata',
-      trustScore: 4.8,
-    };
-    const offer = {
-      name: 'Ana',
-      zone: 'El Caney',
-      time: '19:45',
-      transport: 'MIO + caminata',
-      seats: 2,
-      cost: '2500 COP',
-    };
+  it('keeps affinity independent from trust scores', () => {
+    const offer = { zone: 'El Caney', time: '19:45', transport: 'MIO + caminata' };
+    const student = { neighborhood: 'El Caney', transport: 'MIO + caminata', shift: 'Nocturna' };
 
-    expect(calculateCompatibilityScore(student, offer)).toBe(99);
-    expect(buildMatchRecommendations(student, [offer])).toEqual([{
-      traveler: 'Ana',
-      score: 99,
-      zone: 'El Caney',
-      time: '19:45',
-      mode: 'MIO + caminata',
-      recommendation: 'Afinidad estimada 99% por barrio, transporte y jornada.',
-    }]);
+    expect(calculateTravelAffinityScore({ ...student, trustScore: 1 }, offer))
+      .toBe(calculateTravelAffinityScore({ ...student, trustScore: 5 }, offer));
   });
 
   it('deduplicates and globally ranks recommendations across cursor pages', () => {

@@ -20,12 +20,15 @@ export default function BusinessModulesDashboard() {
           <div style={{ fontSize: '0.72rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#86efac', fontWeight: 800 }}>
             Arquitectura del negocio
           </div>
-          <h2 style={{ margin: '8px 0 0', color: 'white', fontSize: '2rem' }}>Cobertura completa de ViajaU</h2>
+          <h2 style={{ margin: '8px 0 0', color: 'white', fontSize: '2rem' }}>Mapa de módulos de ViajaU</h2>
         </div>
         <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(52,211,153,0.35)', borderRadius: '999px', padding: '8px 12px', color: '#a7f3d0', fontWeight: 700 }}>
-          {BUSINESS_MODULES.reduce((sum, module) => sum + module.functions.length, 0)} funciones cubiertas
+          {BUSINESS_MODULES.length} módulos descritos
         </div>
       </div>
+      <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.6 }}>
+        Este catálogo describe capacidades previstas y su estado declarado; los nombres de funciones no son una medición de implementación ni de cobertura de pruebas.
+      </p>
 
       {BUSINESS_MODULES.map((module, index) => {
         const Icon = MODULE_ICONS[index] ?? CheckCircle2;
@@ -54,7 +57,13 @@ export default function BusinessModulesDashboard() {
             </div>
 
             <p style={{ margin: '0 0 16px', color: '#cbd5e1', lineHeight: 1.6 }}>{module.summary}</p>
+            <p style={{ margin: '0 0 16px', color: '#fde68a', lineHeight: 1.6 }}>
+              <strong>Estado del módulo:</strong> {module.status}
+            </p>
 
+            <div style={{ marginBottom: 8, color: '#94a3b8', fontSize: '0.76rem', fontWeight: 700 }}>
+              Capacidades descritas, no inventario de funciones verificadas
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {module.functions.map((func) => (
                 <span

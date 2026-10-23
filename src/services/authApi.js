@@ -161,6 +161,10 @@ export function getCurrentAccount(token = getAuthToken()) {
   return request('/auth/me', { token });
 }
 
+export function getServiceReadiness(signal) {
+  return request('/ready', { signal });
+}
+
 export function getAccountDataExport(token = getAuthToken(), signal) {
   return request('/account/export', { token, signal });
 }

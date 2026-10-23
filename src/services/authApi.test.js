@@ -13,6 +13,7 @@ describe('account data export API', () => {
       status: 200,
       text: async () => JSON.stringify(payload),
     });
+
     vi.stubGlobal('fetch', fetchMock);
 
     const { getAccountDataExport } = await import('./authApi.js');
@@ -55,6 +56,44 @@ describe('account data export API', () => {
     await expect(getAccountDataExport()).rejects.toMatchObject({
       message: 'Sesión expirada.',
       status: 401,
+    });
+  });
+
+  describe('backend readiness API', () => {
+    it('requests the public readiness endpoint with caller cancellation', async () => {
+      const payload = { status: 'ready', checks: { database: 'ok' } };
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(payload),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { getServiceReadiness } = await import('./authApi.js');
+      const controller = new AbortController();
+      await expect(getServiceReadiness(controller.signal)).resolves.toEqual(payload);
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/ready', expect.objectContaining({
+        credentials: 'include',
+        signal: expect.any(AbortSignal),
+      }));
+    });
+
+    it('preserves unavailable readiness responses for the UI', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => JSON.stringify({
+          status: 'not_ready',
+          checks: { database: 'unavailable' },
+        }),
+      }));
+      const { getServiceReadiness } = await import('./authApi.js');
+
+      await expect(getServiceReadiness()).rejects.toMatchObject({
+        message: 'La solicitud falló con el estado 503.',
+        status: 503,
+      });
     });
   });
 });

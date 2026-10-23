@@ -1,21 +1,20 @@
 # ViajaU
 
-> **Estado documentado:** revisión del checkout `main` en el commit `949e1c2` (22 de octubre de 2026), con cambios locales en curso. Las versiones prefijadas con `^` en los manifiestos son rangos permitidos; las versiones bloqueadas corresponden a los lockfiles inspeccionados. El estado funcional no equivale a autorización para operar un servicio de transporte o de emergencia en producción.
+> **Estado documentado:** revisión del checkout en el commit `2408f19` (23 de octubre de 2026), con cambios locales en curso. Las versiones prefijadas con `^` en los manifiestos son rangos permitidos; las versiones bloqueadas corresponden a los lockfiles inspeccionados. El estado funcional no equivale a autorización para operar un servicio de transporte o de emergencia en producción.
 
 ## 1. Estado actual del proyecto
 
 - **Fase de desarrollo:** MVP en desarrollo. La aplicación tiene cliente React y API Laravel funcionales, pero hay integraciones externas opcionales y áreas incompletas. No se declara lista para producción.
-- **Cobertura de pruebas:** Vitest reportó 12,15 % de cobertura de líneas en la ejecución de referencia (9 archivos y 20 pruebas), anterior a los cambios de filtros/privacidad descritos más abajo. `test:coverage` aplica pisos globales de 7 % en ramas/funciones y 9 % en líneas/sentencias. No hay reporte porcentual configurado para PHPUnit; la cobertura frontend no representa la cobertura del backend.
-- **Verificación observada antes de los cambios locales actuales:**
-  - `npm run build`: correcto.
-  - `npm run test:unit`: 10 archivos, 21 pruebas aprobadas antes de los cambios actuales de exportación de datos.
-  - `npm run test:coverage`: correcto en la ejecución de referencia; 9 archivos y 20 pruebas aprobadas, con 12,15 % de cobertura de líneas y umbrales globales satisfechos.
+- **Verificación observada en este checkout:**
+  - `npm run test:unit`: 30 archivos, 142 pruebas aprobadas.
+  - `npm run test:coverage`: 30 archivos, 142 pruebas aprobadas; 28,40 % líneas, 27,65 % sentencias, 26,58 % ramas y 20,78 % funciones. Se cumplieron los pisos globales configurados (9 % líneas/sentencias y 7 % ramas/funciones); esta cobertura frontend no representa la cobertura del backend.
   - `npm run test:routing`: correcto; prueba contratos del cliente con respuestas simuladas, no una API desplegada.
-  - `npm run lint:react-bits`: correcto; ESLint finalizó sin errores ni advertencias.
-  - `npm --prefix react-bits-main run build`: no completó en este equipo Windows de 8 GB; el proceso Vite alcanzó el límite de heap de Node (~2 GB) durante `transforming`. El subpaso de generación de registry completó 1.274 elementos; no se afirma que el build de producción haya pasado.
-  - `node scripts/test-viajau-functions.js`: diagnóstico exploratorio; reporta 39 ejecuciones sin excepciones, pero no valida resultados y captura errores sin fallar el proceso, por lo que no cuenta como suite de pruebas.
-  - `npm run lint:product`: correcto en la última ejecución disponible anterior a la exportación de datos; Oxlint termina sin diagnósticos con `--deny-warnings`.
-  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 133 pruebas y 749 aserciones antes de los tests nuevos de exportación. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
+  - `npm run lint:product`: correcto; Oxlint terminó sin diagnósticos con `--deny-warnings`.
+  - `npm run build`: correcto; Vite completó la compilación de producción.
+  - Backend: PHPUnit pasó 140 pruebas y 895 aserciones con `pdo_sqlite` y `sqlite3` habilitados para ese proceso. No hay reporte porcentual configurado para PHPUnit.
+  - `node scripts/test-viajau-functions.js`: diagnóstico exploratorio de 9 casos sin excepciones; no valida resultados y captura errores sin fallar el proceso, por lo que no cuenta como suite de pruebas.
+  - `npm run lint:react-bits`: ESLint finalizó sin errores ni advertencias en la ejecución de referencia.
+  - `npm --prefix react-bits-main run build`: no completó en la ejecución de referencia; Vite alcanzó el límite de heap de Node (~2 GB) durante `transforming`. No se afirma que ese subproyecto haya generado un build de producción.
 - **Automatización:** `Product CI` cubre build, pruebas, cobertura frontend y lint del producto, además de PHPUnit en Ubuntu/PHP 8.4 con SQLite. `React Bits CI` valida el subproyecto embebido en su propio entorno.
 
 | # | Módulo de producto | Estado | Alcance confirmado y límites |
@@ -153,7 +152,7 @@ La raíz contiene 19 dependencias runtime y 9 de desarrollo. `react-bits-main/` 
 - Controladores: `AuthController`, `ViajauController`, `TripSafetyController`, `SafetyAlertController`, `TravelMatchController`, `AdminManagementController`, `ReputationController`, `InsuranceController`, `MembershipController`, `WompiMembershipController` y `TripCommunicationController`.
 - Servicios: `TravelOfferSearchService`, `DashboardAnalyticsService`, `SafetyNotificationService`, `TransitFeedImportService` y `TrustedContactProfileService`.
 - Modelos representan usuarios/perfiles, ofertas/solicitudes/matches, ubicación/check-ins/eventos/alertas, contactos/entregas, reputación/reportes, catálogo/feed de tránsito, membresía/seguros y mensajes.
-- Frontend: `AppFresh.jsx` reexporta `AppRoot.jsx`; `useAppState`, `useAppActions`, `useAppViewModel` y hooks de efectos/acciones dividen el orquestador. `viajauCore.js` reexporta los módulos `profileCore`, `travelMatching`, `tripOperations`, `trustSafety` y `routeInsights` para mantener compatibilidad.
+- Frontend: `AppFresh.jsx` reexporta `AppRoot.jsx`; `useAppState`, `useAppActions`, `useAppViewModel` y hooks de efectos/acciones dividen el orquestador. `viajauCore.js` reexporta solo los helpers de perfil, matching y viajes usados por la aplicación. Se retiraron los simuladores desconectados de alertas, seguridad, confianza, ubicación y riesgo, además de perfiles de demostración, muestras ficticias de viajes y puntuaciones artificiales de matching.
 
 ### Persistencia relacional observada
 
@@ -351,7 +350,7 @@ Laravel consume además variables estándar del driver seleccionado (`DB_CHARSET
 | `npm run test:routing` | Pruebas de contrato de routing/cliente API con Node y mocks. |
 | `npm run lint` / `npm run lint:product` | Oxlint sobre `src/` con `--deny-warnings`. |
 | `npm run lint:react-bits` | Ejecuta ESLint en el subproyecto `react-bits-main/`. |
-| `node scripts/test-viajau-functions.js` | Diagnóstico exploratorio sin aserciones; captura errores y no falla el proceso, por lo que no sustituye pruebas ni se ejecuta en CI. |
+| `node scripts/test-viajau-functions.js` | Diagnóstico exploratorio de 9 casos sin aserciones; captura errores y no falla el proceso, por lo que no sustituye pruebas ni se ejecuta en CI. |
 
 No hay script de formato configurado en la raíz. `npm run lint:react-bits` ejecuta el lint del subproyecto aparte; no se debe confundir con lint del producto.
 
@@ -382,7 +381,7 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 | Método | Ruta / componente | Descripción | Estado de implementación |
 |---|---|---|---|
 | `GET` | `/api/health` | Liveness del proceso; no consulta dependencias. | Implementado; responde aunque la base de datos no esté disponible. |
-| `GET` | `/api/ready` | Readiness que ejecuta una consulta simple a la base de datos. | Implementado; devuelve `503` y registra el fallo sin exponer detalles de conexión. |
+| `GET` | `/api/ready` | Readiness que ejecuta una consulta simple a la base de datos. | Implementado; devuelve `503` y registra el fallo sin exponer detalles de conexión. La sección de infraestructura consulta este endpoint al abrirse, permite reintentar y muestra el estado devuelto. |
 | `POST` | `/api/register`, `/api/auth/register` | Registro institucional; límite 5/min. | Implementado; un fallo SMTP queda explícito en `verification_email_sent` y se puede reintentar por el endpoint de verificación. |
 | `POST` | `/api/login`, `/api/auth/login` | Inicio de sesión; límite general 10/min y control adicional por credenciales/IP. | Implementado; sesión browser o token API según contexto. |
 | `POST` | `/api/auth/forgot-password` | Solicita recuperación de contraseña; 5/min. | Implementado; requiere mailer. |
@@ -482,7 +481,7 @@ Las rutas alias antiguas de auth (`/api/register`, `/api/login`, `/api/logout`, 
 18. **Política de runtime Node atendida.** `.nvmrc` fija la línea 22, ambos manifiestos declaran `engines.node >=22.12.0` (mínimo requerido por Vite 8) y los lockfiles se sincronizaron. CI usa Node 22; las pruebas locales también deben seguir esa línea para reproducibilidad.
 19. **Manifiesto frontend backend duplicado.** `backend/package.json` no tiene lockfile propio y Composer conserva scripts que llaman npm; documentar si es residual o integrarlo correctamente para evitar instalaciones/builds desde el directorio equivocado.
 20. **Estructura de prueba reducida en frontend.** Hay ocho archivos Vitest y dieciséis pruebas en la última ejecución observada frente a múltiples servicios, hooks, estados y componentes; ampliar casos para errores, accesibilidad, autorización visual y estados de carrera.
-21. **Script auxiliar sin aserciones.** `scripts/test-viajau-functions.js` imprime resultados de 39 funciones, pero no compara valores esperados y captura errores sin propagar un código de salida fallido. No debe tratarse como prueba ni añadirse a CI hasta convertir sus casos en aserciones automatizadas.
+21. **Script auxiliar sin aserciones.** `scripts/test-viajau-functions.js` imprime resultados de 9 casos, pero no compara valores esperados y captura errores sin propagar un código de salida fallido. No debe tratarse como prueba ni añadirse a CI hasta convertir sus casos en aserciones automatizadas.
 22. **Compatibilidad SQL no demostrada fuera de SQLite.** El código configura varios motores, pero CI prueba SQLite. Confirmar índices, locks, constraints, transacciones y migraciones con el motor de producción elegido.
 23. **Límites/uso de servicios públicos.** Nominatim, OSRM y ArcGIS son dependencias de terceros sin SLA del proyecto; se necesitan política de rate-limit/cache, fallback explícito, atribución y monitoreo.
 24. **Documentación backend parcialmente heredada.** `backend/README.md` conserva contenido del esqueleto Laravel además de documentación ViajaU; consolidar instalación y comandos propios para reducir ambigüedad.

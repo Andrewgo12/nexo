@@ -82,10 +82,7 @@ Timestamp: 2026-10-20T04:50:09.349Z
 ✔ getUserSummary: {...}
 ✔ challengeRequiredActions: [...]
 ✔ getRouteModeKey: "walk"
-✔ calculateTravelReadiness: {...}
-✔ buildDashboardMetrics: {...}
 ✔ createTrustLedger: {...}
-✔ buildSafetyMatrix: {...}
 ✔ getCurrentStudentLocation: {...}
 ✔ searchZoneByText: [...]
 ✔ suggestMeetingPoint: {...}
@@ -134,10 +131,7 @@ Failed: 0
 - `getUserSummary(student)`
 - `challengeRequiredActions()`
 - `getRouteModeKey(mode)`
-- `calculateTravelReadiness(student, route)`
-- `buildDashboardMetrics(student, route, tripCards, alertFeed)`
 - `createTrustLedger(user, eventName, scoreDelta)`
-- `buildSafetyMatrix(student)`
 - `getCurrentStudentLocation(student)`
 - `searchZoneByText(query, zones)`
 - `suggestMeetingPoint(origin, destination, zones)`

@@ -15,6 +15,7 @@ export default function InterviewRecorderModal({ isOpen, onClose }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState('');
   const copiedTimeout = useRef(null);
 
   useEffect(() => () => {
@@ -62,7 +63,7 @@ export default function InterviewRecorderModal({ isOpen, onClose }) {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  const handleCopySummary = () => {
+  const handleCopySummary = async () => {
     const summaryText = `
 ENTREVISTA DE CAMPO VIAJAU - ANEXO A
 Estudiante: ${studentName || 'Anónimo'} (${university})
@@ -70,12 +71,12 @@ Modo de transporte habitual: ${transportMode}
 Fecha: ${new Date().toLocaleDateString('es-CO')}
 
 RESPUESTAS DESTACADAS:
-Q1 Permiso grabación: ${answers[0] || 'Sí'}
+Q1 Permiso grabación: ${answers[0] || 'Sin respuesta'}
 Q4 Última mala experiencia: ${answers[3] || 'Sin respuesta'}
-Q5 Nivel de seguridad (1-5): ${answers[4] || '2/5'}
+Q5 Nivel de seguridad (1-5): ${answers[4] || 'Sin respuesta'}
 Q6 Uso de cupos/WhatsApp: ${answers[5] || 'Sin respuesta'}
-Q10 Usaría la app ViajaU: ${answers[9] || 'Sí'}
-Q12 Pagaría micro-seguro AXA ($2.000-$5.000): ${answers[11] || 'Sí'}
+Q10 Usaría la app ViajaU: ${answers[9] || 'Sin respuesta'}
+Q12 Pagaría micro-seguro AXA ($2.000-$5.000): ${answers[11] || 'Sin respuesta'}
 
 ANÁLISIS DE LOS 5 PORQUÉS (CAUSA RAÍZ):
 1. ${whys.w1 || 'N/A'}
@@ -85,13 +86,23 @@ ANÁLISIS DE LOS 5 PORQUÉS (CAUSA RAÍZ):
 Causa Raíz: ${whys.rootCause || 'N/A'}
     `.trim();
 
-    navigator.clipboard.writeText(summaryText);
-    setCopied(true);
-    if (copiedTimeout.current !== null) window.clearTimeout(copiedTimeout.current);
-    copiedTimeout.current = window.setTimeout(() => {
-      copiedTimeout.current = null;
-      setCopied(false);
-    }, 2500);
+    setCopied(false);
+    setCopyError('');
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('El portapapeles no está disponible en este navegador.');
+      }
+      await navigator.clipboard.writeText(summaryText);
+      setCopied(true);
+      if (copiedTimeout.current !== null) window.clearTimeout(copiedTimeout.current);
+      copiedTimeout.current = window.setTimeout(() => {
+        copiedTimeout.current = null;
+        setCopied(false);
+      }, 2500);
+    } catch (error) {
+      console.error('No fue posible copiar el resumen de la entrevista.', error);
+      setCopyError(error.message || 'No fue posible copiar el resumen de la entrevista.');
+    }
   };
 
   const q = INTERVIEW_QUESTIONS[currentQuestionIndex];
@@ -117,6 +128,7 @@ Causa Raíz: ${whys.rootCause || 'N/A'}
 
         {/* Content */}
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {copyError && <p role="alert" style={{ margin: 0, color: 'var(--rose-primary)' }}>{copyError}</p>}
           {/* Respondent Metadata */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
             <div>
