@@ -1,0 +1,13 @@
+services:
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:26.10-assertions-debian
+    command:
+      - osrm-routed
+      - --algorithm
+      - mld
+      - /data/${OSRM_DATASET_NAME:-colombia-latest}.osrm
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - ./ops/osrm/data:/data:ro
+    restart: unless-stopped

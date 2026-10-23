@@ -1,10 +1,15 @@
-const OSRM_PROVIDERS = {
-  car: { baseUrl: 'https://router.project-osrm.org', profile: 'driving', source: 'OSRM / OpenStreetMap' },
-  taxi: { baseUrl: 'https://router.project-osrm.org', profile: 'driving', source: 'OSRM / OpenStreetMap' },
-  walk: { baseUrl: 'https://routing.openstreetmap.de/routed-foot', profile: 'driving', source: 'OSM foot routing' },
-  bike: { baseUrl: 'https://routing.openstreetmap.de/routed-bike', profile: 'driving', source: 'OSM bicycle routing' },
+const env = import.meta.env ?? {};
+const configuredBaseUrl = (name, fallback) => {
+  const value = env[name]?.trim();
+  return (value || fallback).replace(/\/+$/, '');
 };
-const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
+const OSRM_PROVIDERS = {
+  car: { baseUrl: configuredBaseUrl('VITE_OSRM_DRIVING_URL', 'https://router.project-osrm.org'), profile: 'driving', source: 'OSRM / OpenStreetMap' },
+  taxi: { baseUrl: configuredBaseUrl('VITE_OSRM_DRIVING_URL', 'https://router.project-osrm.org'), profile: 'driving', source: 'OSRM / OpenStreetMap' },
+  walk: { baseUrl: configuredBaseUrl('VITE_OSRM_FOOT_URL', 'https://routing.openstreetmap.de/routed-foot'), profile: 'driving', source: 'OSM foot routing' },
+  bike: { baseUrl: configuredBaseUrl('VITE_OSRM_BIKE_URL', 'https://routing.openstreetmap.de/routed-bike'), profile: 'driving', source: 'OSM bicycle routing' },
+};
+const NOMINATIM_BASE_URL = configuredBaseUrl('VITE_NOMINATIM_URL', 'https://nominatim.openstreetmap.org');
 const REQUEST_TIMEOUT_MS = 8000;
 const NOMINATIM_MIN_INTERVAL_MS = 1100;
 let nextNominatimRequestAt = 0;

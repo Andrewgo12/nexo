@@ -1,6 +1,9 @@
 import { getOsrmRoute } from './routingApi.js';
 
-const MIO_FEATURE_SERVICE = 'https://services9.arcgis.com/8rJ42n9yWry0I4K4/arcgis/rest/services/GTFS/FeatureServer';
+const MIO_FEATURE_SERVICE = (
+  import.meta.env?.VITE_MIO_GTFS_FEATURE_SERVICE?.trim() ||
+  'https://services9.arcgis.com/8rJ42n9yWry0I4K4/arcgis/rest/services/GTFS/FeatureServer'
+).replace(/\/+$/, '');
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_STOPS_PER_SIDE = 3;
 const MAX_SHAPES_PER_SIDE = 40;

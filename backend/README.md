@@ -57,6 +57,24 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 
+## ViajaU backend setup
+
+This directory contains the ViajaU Laravel API. The product overview and root frontend setup are in [`../README.md`](../README.md). The backend requires PHP `^8.3` and Composer 2.
+
+On Windows PowerShell, install and start the API with:
+
+```powershell
+composer install
+Copy-Item .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan serve
+```
+
+The root Vite server proxies `/api` and `/sanctum` to `http://127.0.0.1:8000`. PHPUnit configures SQLite in memory and needs both `pdo_sqlite` and `sqlite3` enabled in the active PHP configuration. Check it with `php --ini`, enable the extensions in that `php.ini`, verify with `php -m`, then run `php artisan test` from this directory. Product CI installs the same extensions; a passing SQLite suite does not establish compatibility with other database engines.
+
+Before production, configure HTTPS and exact CORS/Sanctum/session origins, persistent queue workers, and the Laravel scheduler every minute. Add monitored backups and restore tests, external health/queue/scheduler alerts, and a rollback procedure. This repository does not provide a production infrastructure definition or evidence that these services are deployed.
+
 ## API de autenticación ViajaU
 
 La autenticación usa dos flujos Sanctum:
@@ -81,7 +99,7 @@ Las consultas de búsqueda de viajes y analítica están separadas en `TravelOff
 
 El panel `GET /api/dashboard` devuelve agregados de viajes, solicitudes, alertas, perfiles y calificaciones verificables por universidad, barrio y jornada. Las cuentas `university` solo reciben resultados de su propia institución; `admin` ve los agregados globales. La respuesta reciente omite coordenadas y contactos. La exportación disponible en la interfaz incluye únicamente los agregados del dashboard. La tasa de aceptación se define como solicitudes aceptadas divididas por todas las solicitudes; el promedio de confianza se deriva exclusivamente de valoraciones de viajes completados y es `null` si aún no existen.
 
-El panel administrativo incluye `GET /api/admin/users`, `PATCH /api/admin/users/{id}`, `GET /api/admin/incidents` y administración de catálogos con `/api/admin/catalog`. Las cuentas institucionales quedan limitadas a sus estudiantes, catálogos e incidentes; nunca pueden modificar roles. Admin puede importar snapshots con `POST /api/admin/transit-feed/import`, usando `feed_version`, `stops` (`stops.txt`) y `routes` (`routes.txt`) como multipart/form-data. Se validan IDs, encabezados, coordenadas, nombres y duplicados antes de guardar en una transacción. El feed solo almacena paradas y rutas: no importa trips, horarios o calendarios y no sustituye el proveedor público utilizado por el planificador. Endpoint del último snapshot: `GET /api/admin/transit-feed/latest`.
+El panel administrativo incluye `GET /api/admin/users`, `PATCH /api/admin/users/{id}`, `GET /api/admin/incidents` y administración de catálogos con `/api/admin/catalog`. Las cuentas institucionales quedan limitadas a sus estudiantes, catálogos e incidentes; nunca pueden modificar roles. Admin puede importar snapshots con `POST /api/admin/transit-feed/import`, usando `feed_version`, `stops` (`stops.txt`) y `routes` (`routes.txt`) como multipart/form-data. Se validan versión no vacía, encabezados únicos y no vacíos, IDs, coordenadas, nombres y duplicados antes de guardar en una transacción. El feed solo almacena paradas y rutas: no importa trips, horarios o calendarios y no sustituye el proveedor público utilizado por el planificador. Endpoint del último snapshot: `GET /api/admin/transit-feed/latest`.
 
 Las cuentas `university` sin institución asignada no pueden acceder a funciones administrativas; las verificaciones de propiedad también fallan de forma segura si el estudiante no tiene perfil institucional. La creación de viajes y solicitudes tiene límite de 10 operaciones por minuto por cliente autenticado; las transiciones de solicitudes, 20 por minuto. Cotizaciones, checkouts pendientes y revisiones de pólizas serializan las transiciones con bloqueos de fila; si una actualización de póliza falla, se elimina el archivo privado que no quedó asociado a un registro.
 
@@ -119,10 +137,10 @@ El titular puede registrar email/teléfono E.164 de su contacto en `PUT /api/aut
 
 Para permitir entrega real configura `MAIL_MAILER=smtp` y `MAIL_*`; Twilio usa `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` y `TWILIO_WHATSAPP_FROM`. No guardes estos secretos en el repositorio. Ejecuta un worker persistente con `php artisan queue:work --queue=safety,default --tries=3 --timeout=30 --max-time=3600`; mantén `retry_after` por encima del timeout del worker. Programa `php artisan schedule:run` cada minuto para check-ins vencidos y para monitorear las colas `safety`/`default` (umbral 100 trabajos). Una cola sobre el umbral y una tarea programada fallida generan logs `critical`; el éxito del scheduler de check-ins deja un heartbeat `info` por ejecución. Configura el proveedor de logs/alertas para avisar por backlog crítico, errores de entrega y ausencia de heartbeat durante más de dos minutos. Revisa y reprocesa fallos con `php artisan queue:failed` y `php artisan queue:retry <id>` después de verificar la causa. Sin credenciales o destinos configurados, los envíos se registran como `skipped`; el SOS sigue disponible en el panel interno. La suite `SafetyNotificationsTest` simula respuestas exitosas y fallidas de Twilio; completa además una prueba de humo en el entorno sandbox antes del despliegue.
 
-Al activar la geocerca al publicar una oferta, el frontend geocodifica origen/destino y obtiene una ruta de OSRM o de los datos públicos del MIO. El titular confirma los resultados antes de guardar el trazado; el backend activa un corredor de 500 m, un radio de llegada de 300 m y un plazo de check-in con 15 minutos de gracia. Cada participante debe compartir GPS manualmente y debe reportar precisión de 250 m o mejor para evaluar eventos. Solo se guarda la posición más reciente; se elimina tras completar/cancelar y la geometría de seguridad exacta se borra al cerrar el viaje. `GET /api/trips/{id}/safety` devuelve eventos y el estado de sus canales sin exponer los destinos de contacto.
+La geocerca automática está desactivada en ofertas nuevas. Aunque el frontend pueda mostrar rutas de OSRM o del MIO, la API rechaza rutas enviadas por el navegador y no existe aún un verificador/rutador de rutas del lado del servidor. La lógica de corredor de 500 m y radio de llegada de 300 m solo se ejecuta cuando `safety_route_verified` está marcado por un proceso confiable del servidor; las rutas históricas no verificadas no generan esos eventos. Cada participante comparte GPS explícitamente mientras el viaje está en curso y la API solo devuelve coordenadas recientes; se conserva la última posición por participante, se elimina al completar/cancelar y la tarea `viajau:prune-trip-locations` borra registros más antiguos que `SAFETY_LOCATION_RETENTION_HOURS` (24 horas por defecto). La operación requiere el scheduler activo. `GET /api/trips/{id}/safety` está limitado a participantes del viaje.
 
 La aplicación no tiene integración automática con autoridades ni líneas públicas de emergencia y no sustituye un servicio de respuesta. Ante peligro inmediato, se debe contactar directamente a los servicios locales.
 
 Las pruebas feature del módulo están en `backend/tests/Feature/SafetyAlertTest.php`, `backend/tests/Feature/TripSafetyTrackingTest.php` y `backend/tests/Feature/SafetyNotificationsTest.php`.
 
-En producción el backend rechaza solicitudes HTTP y exige HTTPS. Configura TLS en el servidor y, si hay un proxy/load balancer delante, define como proxies confiables únicamente sus direcciones para que Laravel pueda reconocer el protocolo reenviado. Después de instalar dependencias ejecuta `php artisan key:generate`, `php artisan migrate` y `php artisan storage:link`. Configura `MAIL_*`, `APP_URL` y `FRONTEND_URL` para que los enlaces de verificación y recuperación funcionen en tu entorno.
+En producción el backend rechaza solicitudes HTTP y exige HTTPS. Configura TLS en el servidor y, si hay un proxy/load balancer delante, define como proxies confiables únicamente sus direcciones para que Laravel pueda reconocer el protocolo reenviado. Después de instalar dependencias ejecuta `php artisan key:generate`, `php artisan migrate` y `php artisan storage:link`. Configura `MAIL_*`, `APP_URL` y `FRONTEND_URL` para que los enlaces de verificación y recuperación funcionen en tu entorno. Esta guía no acredita un despliegue activo; antes de publicar se necesitan copias de seguridad probadas, monitorización externa, workers persistentes, scheduler cada minuto y un procedimiento de rollback.

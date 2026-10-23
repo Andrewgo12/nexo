@@ -87,6 +87,14 @@ class TransitFeedImportService
             }
             $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $headers[0]);
             $headers = array_map(fn ($header): string => trim((string) $header), $headers);
+            if (
+                in_array('', $headers, true)
+                || count(array_unique($headers)) !== count($headers)
+            ) {
+                throw ValidationException::withMessages([
+                    'feed' => ['El encabezado CSV contiene columnas vacías o duplicadas.'],
+                ]);
+            }
             $missingColumns = array_values(array_diff($requiredColumns, $headers));
             if ($missingColumns) {
                 throw ValidationException::withMessages([

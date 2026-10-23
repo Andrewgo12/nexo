@@ -223,7 +223,7 @@ class AdminManagementController extends Controller
     public function importTransitFeed(Request $request, TransitFeedImportService $importer)
     {
         $data = $request->validate([
-            'feed_version' => ['required', 'string', 'max:120'],
+            'feed_version' => ['required', 'string', 'max:120', 'regex:/\S/'],
             'stops' => ['required', 'file', 'mimes:txt,csv', 'max:20480'],
             'routes' => ['required', 'file', 'mimes:txt,csv', 'max:20480'],
         ]);

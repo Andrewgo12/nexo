@@ -212,6 +212,70 @@ class AdminManagementTest extends TestCase
         $this->assertDatabaseCount('transit_routes', 0);
     }
 
+    public function test_gtfs_import_rejects_duplicate_csv_headers_without_creating_an_import(): void
+    {
+        $admin = $this->createManager(User::ROLE_ADMIN);
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/transit-feed/import', [
+            'feed_version' => 'Metro Cali 2026-10',
+            'stops' => UploadedFile::fake()->createWithContent(
+                'stops.txt',
+                "stop_id,stop_name,stop_name,stop_lat,stop_lon\nS1,Universidad,Duplicado,3.344,-76.529\n",
+            ),
+            'routes' => UploadedFile::fake()->createWithContent(
+                'routes.txt',
+                "route_id,route_short_name,route_long_name\nR1,T31,Universidad - Centro\n",
+            ),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('feed');
+
+        $this->assertDatabaseCount('transit_feed_imports', 0);
+        $this->assertDatabaseCount('transit_stops', 0);
+        $this->assertDatabaseCount('transit_routes', 0);
+    }
+
+    public function test_gtfs_import_rejects_empty_csv_headers(): void
+    {
+        $admin = $this->createManager(User::ROLE_ADMIN);
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/transit-feed/import', [
+            'feed_version' => 'Metro Cali 2026-10',
+            'stops' => UploadedFile::fake()->createWithContent(
+                'stops.txt',
+                "stop_id,stop_name,,stop_lat,stop_lon\nS1,Universidad,ignored,3.344,-76.529\n",
+            ),
+            'routes' => UploadedFile::fake()->createWithContent(
+                'routes.txt',
+                "route_id,route_short_name,route_long_name\nR1,T31,Universidad - Centro\n",
+            ),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('feed');
+
+        $this->assertDatabaseCount('transit_feed_imports', 0);
+        $this->assertDatabaseCount('transit_stops', 0);
+        $this->assertDatabaseCount('transit_routes', 0);
+    }
+
+    public function test_gtfs_import_rejects_blank_feed_version(): void
+    {
+        $admin = $this->createManager(User::ROLE_ADMIN);
+
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/transit-feed/import', [
+            'feed_version' => '   ',
+            'stops' => UploadedFile::fake()->createWithContent(
+                'stops.txt',
+                "stop_id,stop_name,stop_lat,stop_lon\nS1,Universidad,3.344,-76.529\n",
+            ),
+            'routes' => UploadedFile::fake()->createWithContent(
+                'routes.txt',
+                "route_id,route_short_name,route_long_name\nR1,T31,Universidad - Centro\n",
+            ),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('feed_version');
+
+        $this->assertDatabaseCount('transit_feed_imports', 0);
+    }
+
     public function test_university_role_cannot_import_global_gtfs_data(): void
     {
         $manager = $this->createManager(User::ROLE_UNIVERSITY, 'UNIAJC');

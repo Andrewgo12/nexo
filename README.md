@@ -15,7 +15,7 @@
   - `npm --prefix react-bits-main run build`: no completó en este equipo Windows de 8 GB; el proceso Vite alcanzó el límite de heap de Node (~2 GB) durante `transforming`. El subpaso de generación de registry completó 1.274 elementos; no se afirma que el build de producción haya pasado.
   - `node scripts/test-viajau-functions.js`: diagnóstico exploratorio; reporta 39 ejecuciones sin excepciones, pero no valida resultados y captura errores sin fallar el proceso, por lo que no cuenta como suite de pruebas.
   - `npm run lint:product`: correcto; Oxlint termina sin diagnósticos con `--deny-warnings`.
-  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó 126 errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 128 pruebas y 725 aserciones. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
+  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 131 pruebas y 741 aserciones. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
 - **Automatización:** `Product CI` cubre build, pruebas, cobertura frontend y lint del producto, además de PHPUnit en Ubuntu/PHP 8.4 con SQLite. `React Bits CI` valida el subproyecto embebido en su propio entorno.
 
 | # | Módulo de producto | Estado | Alcance confirmado y límites |
@@ -176,17 +176,18 @@ Las migraciones incluyen FKs con acciones explícitas, email único, perfil úni
 
 ### Configuración versionada revisada
 
-`package.json` y `package-lock.json`, `backend/composer.json` y `backend/composer.lock`, `react-bits-main/package.json` y su lockfile, `vite.config.js`, `vitest.config.js`, `tsconfig.json`, `postcss.config.mjs`, `.oxlintrc.json`, `components.json`, `.github/workflows/*`, `backend/phpunit.xml`, `.gitignore` raíz y `backend/.gitignore`. La única plantilla de entorno de ViajaU identificada es `backend/.env.example`; no existe plantilla `.env.example` de Vite en la raíz. `backend/.gitignore` ignora sus `.env`; el `.gitignore` raíz auditado no incluye una regla explícita para `.env` de la raíz.
+`package.json` y `package-lock.json`, `backend/composer.json` y `backend/composer.lock`, `react-bits-main/package.json` y su lockfile, `vite.config.js`, `vitest.config.js`, `tsconfig.json`, `postcss.config.mjs`, `.oxlintrc.json`, `components.json`, `.github/workflows/*`, `backend/phpunit.xml`, `.gitignore` raíz y `backend/.gitignore`. `backend/.env.example` configura Laravel y `.env.example` en la raíz documenta proveedores frontend opcionales; ambos son plantillas sin secretos.
 
 ## 5. Requisitos previos e instalación
 
 ### Requisitos
 
-1. Node.js 22 como runtime de CI y `.nvmrc`; ambos manifiestos del producto declaran Node `>=22`. npm compatible con lockfile v3.
+1. Node.js 22.12 o superior como runtime de CI y `.nvmrc`; ambos manifiestos del producto declaran Node `>=22.12.0`. npm compatible con lockfile v3.
 2. PHP `>=8.3` y Composer 2.
 3. Extensiones PHP requeridas por el driver escogido; para pruebas locales, `pdo_sqlite` y `sqlite3`. En el entorno auditado los DLL existen, pero estaban deshabilitados.
 4. Git y acceso de red a los proveedores externos si se prueban mapas, geocodificación, correo, SMS/WhatsApp o Wompi.
-5. Para operación de avisos: SMTP, credenciales Twilio si se habilitan, worker de cola persistente y scheduler configurado. No son necesarios para compilar el frontend.
+5. Docker Desktop con motor Linux activo, un extracto OSM que cubra Cali y espacio/RAM suficientes, solo si se quiere autoalojar OSRM. El tamaño y tiempo de procesamiento dependen del extracto y el equipo.
+6. Para operación de avisos: SMTP, credenciales Twilio si se habilitan, worker de cola persistente y scheduler configurado. No son necesarios para compilar el frontend.
 
 ### Instalación local desde cero
 
@@ -197,7 +198,7 @@ npm ci
 npm run dev
 ```
 
-El servidor de desarrollo escucha el puerto Vite por defecto y proxya `/api` y `/sanctum` a `http://127.0.0.1:8000`. Para iniciar Laravel, en otra terminal:
+El servidor de desarrollo escucha el puerto Vite por defecto y proxya `/api` y `/sanctum` a `http://127.0.0.1:8000`. Opcionalmente copia `.env.example` a `.env` en la raíz para configurar proveedores frontend. Para iniciar Laravel, en otra terminal:
 
 ```sh
 cd backend
@@ -210,11 +211,46 @@ php artisan serve
 
 En PowerShell de Windows, usa `Copy-Item .env.example .env` en lugar de `cp`. Si se usa SQLite, configura `DB_DATABASE` al archivo local de base de datos y créalo antes de migrar. Para pruebas, verifica `php --ini`, habilita `extension=pdo_sqlite` y `extension=sqlite3` en el `php.ini` activo (y confirma que `extension_dir` apunta al directorio `ext` de PHP); luego verifica con `php -m` y ejecuta `php artisan test` desde `backend`. Si se usa otro motor, configura su driver/host/credenciales y verifica las migraciones contra ese motor antes de producción.
 
+### Proveedores de mapas autoalojados (opcional)
+
+Las URLs pueden configurarse en el `.env` de la raíz; al cambiarlas, reinicia Vite para que cargue los nuevos valores. Si quedan vacías, se conservan los proveedores públicos actuales. `VITE_OSRM_DRIVING_URL` sirve carro/taxi/moto; `VITE_OSRM_FOOT_URL` y `VITE_OSRM_BIKE_URL` admiten instancias OSRM independientes con perfiles apropiados; `VITE_NOMINATIM_URL` debe apuntar a una instancia Nominatim compatible. `VITE_MIO_GTFS_FEATURE_SERVICE` solo acepta una URL compatible con ArcGIS Feature Service; no convierte por sí sola los datos GTFS en horarios ni instala un servidor de tránsito.
+
+Para preparar OSRM en Windows con Docker Desktop:
+
+1. Descarga manualmente desde Geofabrik un extracto `.osm.pbf` que cubra Cali y colócalo en `ops/osrm/data/`. Los archivos fuente y los grafos resultantes se ignoran en Git.
+2. Desde PowerShell, prepara el grafo de conducción (el procesamiento puede tomar bastante tiempo y espacio):
+
+   ```powershell
+   .\scripts\prepare-osrm.ps1
+   ```
+
+   El script requiere exactamente un archivo `.osm.pbf`, usa el perfil de carro y prepara MLD; no descarga datos ni inicia contenedores persistentes.
+3. Copia `.env.example` a `.env` en la raíz y ajusta `OSRM_DATASET_NAME` al nombre del archivo PBF sin `.osm.pbf`, además de `VITE_OSRM_DRIVING_URL=http://127.0.0.1:5000`.
+4. Inicia el servicio local y verifica que responda:
+
+   ```powershell
+   docker compose --env-file .env -f compose.osrm.yml up -d
+   Invoke-RestMethod "http://127.0.0.1:5000/route/v1/driving/-76.53,3.45;-76.52,3.46?overview=false"
+   ```
+
+   Para detenerlo: `docker compose --env-file .env -f compose.osrm.yml down`.
+
+Este despliegue proporciona ruteo de conducción, no geocodificación ni mapas raster, y su capacidad depende del hardware y de actualizar el extracto OSM. Los datos OSM de Geofabrik se distribuyen bajo ODbL y requieren atribución. Nominatim, perfiles peatonales/bicicleta y el servicio ArcGIS MIO no quedan instalados por este Compose. No se debe llamar “ilimitado”: autoalojar elimina la cuota del proveedor público, pero no los límites de capacidad, mantenimiento, cobertura y licencia.
+
 La verificación de correo requiere configurar el mailer. Los avisos asíncronos requieren configurar cola, credenciales y worker; para la función programada, instala `php artisan schedule:run` en el scheduler del sistema. No uses credenciales de sandbox en producción ni habilites pagos reales: la configuración de producto los mantiene desactivados.
 
 ### Variables de entorno
 
-Las variables de backend se declaran en `backend/.env.example`. La tabla describe nombres y función; no publica valores de ejemplo ni secretos. Las variables dependientes del proveedor son opcionales para desarrollo básico y obligatorias solo para la integración correspondiente.
+Las variables de frontend se declaran en `.env.example`; las de backend, en `backend/.env.example`. Las tablas describen nombres y función; no publican secretos. Las variables de proveedores externos son opcionales para desarrollo básico.
+
+| Variable frontend | Propósito |
+|---|---|
+| `VITE_OSRM_DRIVING_URL` | URL base OSRM para carro/taxi/moto; vacía usa el demo público. |
+| `VITE_OSRM_FOOT_URL` | URL base de instancia con perfil peatonal; vacía usa el proveedor público de caminata. |
+| `VITE_OSRM_BIKE_URL` | URL base de instancia con perfil bicicleta; vacía usa el proveedor público de bicicleta. |
+| `VITE_NOMINATIM_URL` | URL base de geocodificación compatible con Nominatim; vacía usa el servicio público. |
+| `VITE_MIO_GTFS_FEATURE_SERVICE` | URL base de ArcGIS Feature Service compatible; vacía usa el servicio público de Metro Cali. |
+| `OSRM_DATASET_NAME` | Nombre base del extracto y grafo OSRM que monta `compose.osrm.yml`; debe coincidir con el `.osm.pbf`. |
 
 | Variable | Propósito / requisito |
 |---|---|
@@ -412,8 +448,8 @@ Las rutas alias antiguas de auth (`/api/register`, `/api/login`, `/api/logout`, 
 
 | Servicio | Uso | Límite |
 |---|---|---|
-| OSRM público / OpenStreetMap Routing | Rutas para carro/taxi, caminata y bicicleta. | Disponibilidad, uso y cuotas dependen del proveedor. Moto reutiliza ruta vial genérica; no hay perfil moto dedicado. |
-| Nominatim | Búsqueda de direcciones. | Servicio externo; aplican política y límites del proveedor. |
+| OSRM público / OpenStreetMap Routing | Rutas para carro/taxi, caminata y bicicleta. | Los endpoints se pueden reemplazar por servicios autoalojados. El demo público no tiene SLA; moto reutiliza ruta vial genérica. |
+| Nominatim | Búsqueda de direcciones. | Endpoint configurable; Nominatim público tiene política de uso y límites, no es una API ilimitada. |
 | ArcGIS Feature Service de Metro Cali | Consulta de paradas y geometrías de rutas. | No proporciona calendario activo confirmado en esta integración. |
 | Wompi checkout widget | UI de pago sandbox. | No procesa pagos de producción ni activa membresía. |
 | Geolocation API del navegador | Ubicación solicitada por acción explícita. | Requiere permiso/contexto seguro; las coordenadas se transmiten al solicitar funciones dependientes. |
@@ -436,9 +472,9 @@ Las rutas alias antiguas de auth (`/api/register`, `/api/login`, `/api/logout`, 
 14. **Monolito de API frontend restante.** `authApi.js` concentra llamadas de varios dominios; dividirlo por dominio preservando el contrato público y centralizar manejo de sesión, errores, abortos y timeout.
 15. **Configuración de TypeScript no verificada.** `strict: false`, `allowJs: true`; TypeScript no está declarado directamente en el package raíz y no existe gate de typecheck, aunque hay `tsconfig.json` y un archivo `.tsx`. Añadir dependencia/CI de forma explícita y migrar con chequeo estricto progresivo.
 17. **Dependencias UI redundantes.** Conviven Chakra, MUI, Bootstrap/React Bootstrap, Radix y Tailwind. Revisar uso real, peso de bundle, consistencia visual y superficie de mantenimiento antes de añadir más librerías.
-18. **Política de runtime Node atendida.** `.nvmrc` fija la línea 22, ambos manifiestos declaran `engines.node >=22` y los lockfiles se sincronizaron. CI usa Node 22; las pruebas locales también deben seguir esa línea para reproducibilidad.
+18. **Política de runtime Node atendida.** `.nvmrc` fija la línea 22, ambos manifiestos declaran `engines.node >=22.12.0` (mínimo requerido por Vite 8) y los lockfiles se sincronizaron. CI usa Node 22; las pruebas locales también deben seguir esa línea para reproducibilidad.
 19. **Manifiesto frontend backend duplicado.** `backend/package.json` no tiene lockfile propio y Composer conserva scripts que llaman npm; documentar si es residual o integrarlo correctamente para evitar instalaciones/builds desde el directorio equivocado.
-20. **Estructura de prueba reducida en frontend.** Hay siete archivos Vitest y once pruebas en la última ejecución observada frente a múltiples servicios, hooks, estados y componentes; ampliar casos para errores, accesibilidad, autorización visual y estados de carrera.
+20. **Estructura de prueba reducida en frontend.** Hay ocho archivos Vitest y dieciséis pruebas en la última ejecución observada frente a múltiples servicios, hooks, estados y componentes; ampliar casos para errores, accesibilidad, autorización visual y estados de carrera.
 21. **Script auxiliar sin aserciones.** `scripts/test-viajau-functions.js` imprime resultados de 39 funciones, pero no compara valores esperados y captura errores sin propagar un código de salida fallido. No debe tratarse como prueba ni añadirse a CI hasta convertir sus casos en aserciones automatizadas.
 22. **Compatibilidad SQL no demostrada fuera de SQLite.** El código configura varios motores, pero CI prueba SQLite. Confirmar índices, locks, constraints, transacciones y migraciones con el motor de producción elegido.
 23. **Límites/uso de servicios públicos.** Nominatim, OSRM y ArcGIS son dependencias de terceros sin SLA del proyecto; se necesitan política de rate-limit/cache, fallback explícito, atribución y monitoreo.

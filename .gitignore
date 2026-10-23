@@ -18,6 +18,8 @@ coverage/
 /.env.*
 !/.env.example
 !/.env.*.example
+/ops/osrm/data/*.osm.pbf
+/ops/osrm/data/*.osrm*
 
 # Editor directories and files
 .vscode/*
