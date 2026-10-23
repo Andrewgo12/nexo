@@ -13,13 +13,11 @@ function persistPreferences(updates, setToast) {
 
 export default function useUiActions(state) {
   const {
-    advancedMode,
     executionState,
     notifications,
     authUser,
     isEmailVerified,
     isLoggedIn,
-    setAdvancedMode,
     setExecutionState,
     setModal,
     setNotifications,
@@ -69,7 +67,6 @@ export default function useUiActions(state) {
 
     if (!persistPreferences({
       notifications: nextNotifications,
-      advancedMode,
       executionState,
     }, setToast)) return false;
     setNotifications(nextNotifications);
@@ -81,20 +78,6 @@ export default function useUiActions(state) {
     return true;
   };
 
-  const toggleAdvancedFeature = (key) => {
-    if (!Object.hasOwn(advancedMode, key)) {
-      throw new RangeError('La opción avanzada no existe.');
-    }
-    const nextAdvancedMode = { ...advancedMode, [key]: !advancedMode[key] };
-    if (!persistPreferences({
-      notifications,
-      advancedMode: nextAdvancedMode,
-      executionState,
-    }, setToast)) return;
-    setAdvancedMode(nextAdvancedMode);
-    setToast('Configuración de recomendación avanzada actualizada.');
-  };
-
   const toggleExecutionTask = (id) => {
     if (!executionState.some((item) => item.id === id)) {
       throw new RangeError('La tarea del checklist no existe.');
@@ -104,7 +87,6 @@ export default function useUiActions(state) {
     ));
     if (!persistPreferences({
       notifications,
-      advancedMode,
       executionState: nextExecutionState,
     }, setToast)) return;
     setExecutionState(nextExecutionState);
@@ -115,7 +97,6 @@ export default function useUiActions(state) {
     openModal,
     closeModal,
     toggleNotification,
-    toggleAdvancedFeature,
     toggleExecutionTask,
   };
 }

@@ -109,21 +109,14 @@ export default function RoutesSection({
             Tu ubicación solo se obtiene con permiso y no se guarda en la app. Al calcular, las coordenadas se envían al proveedor correspondiente. Se ofrecen rutas viales para carro/taxi, rutas peatonales/ciclistas de OpenStreetMap y rutas genéricas de carro para moto. MIO usa paradas y trazados del servicio público de Metro Cali; no hay un calendario activo verificable, así que no se muestran horarios ni frecuencias.
           </div>
           <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 14 }}>
-            <strong>Checklist del módulo 2</strong>
-            <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-              {[
-                { label: '2.1 Obtener ubicación actual con permiso del usuario', done: Boolean(deviceLocation) },
-                { label: '2.2 Buscar y seleccionar coordenadas de origen y destino', done: Boolean(routeLocations.origin && routeLocations.destination) },
-                { label: '2.3 Calcular una ruta real con un proveedor compatible', done: Boolean(routeResult) },
-                { label: '2.4 Mostrar la ruta calculada sobre el mapa', done: Boolean(routeResult) },
-                { label: '2.5 Calcular una ruta real a pie', done: Boolean(routeResult?.mode === 'walk') },
-                { label: '2.6 Calcular una ruta real en bicicleta', done: Boolean(routeResult?.mode === 'bike') },
-                { label: '2.7 Integrar el trazado y las paradas oficiales del MIO', done: Boolean(routeResult?.mode === 'mio') },
-              ].map((item) => <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1', fontSize: 13 }}>{item.done ? '☑' : '☐'} {item.label}</div>)}
-            </div>
-            <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>
-              {Number(Boolean(deviceLocation)) + Number(Boolean(routeLocations.origin && routeLocations.destination)) + Number(Boolean(routeResult)) * 2 + Number(routeResult?.mode === 'walk') + Number(routeResult?.mode === 'bike') + Number(routeResult?.mode === 'mio')}/7 completados
-            </small>
+            <strong>Capacidades y límites de las rutas</strong>
+            <ul style={{ display: 'grid', gap: 8, margin: '10px 0 0', paddingLeft: 20, color: '#cbd5e1', fontSize: 13 }}>
+              <li>La ubicación del dispositivo requiere permiso del navegador; se usa para esta sesión y no se guarda en la aplicación.</li>
+              <li>La búsqueda de lugares usa Nominatim; el trazado vial depende de proveedores externos OSRM/OpenStreetMap.</li>
+              <li>Carro, taxi, caminata y bicicleta usan perfiles disponibles del proveedor; moto usa una ruta genérica de carro. No se evalúa la seguridad del recorrido.</li>
+              <li>El MIO muestra paradas y trazados públicos, pero no dispone aquí de horarios o frecuencias verificables.</li>
+              <li>{routeResult ? `La vista actual muestra una ruta de modo ${routeResult.mode} recibida de ${routeResult.source}.` : 'No hay una ruta calculada en esta vista.'}</li>
+            </ul>
           </div>
         </div>
       </div>

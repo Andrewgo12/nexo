@@ -35,17 +35,6 @@ export const universities = [
   { id: 'icesi', name: 'Icesi', domain: '@icesi.edu.co' }
 ];
 
-export const adminChecklist = [
-  { id: '7.1', label: 'Consultar métricas reales con alcance por rol', done: true },
-  { id: '7.2', label: 'Consultar agregados por universidad, barrio y jornada', done: true },
-  { id: '7.3', label: 'Exportar métricas agregadas sin datos personales', done: true },
-  { id: '7.4', label: 'Limitar el panel institucional a su propia universidad', done: true },
-  { id: '7.5', label: 'Gestionar cuentas estudiantiles y verificación de perfiles', done: true },
-  { id: '7.6', label: 'Consultar y filtrar incidentes de seguridad', done: true },
-  { id: '7.7', label: 'Administrar sedes, facultades, programas y periodos', done: true },
-  { id: '7.8', label: 'Importar y validar paradas y rutas de un feed GTFS', done: true },
-];
-
 export const adminUniversities = ['UNIAJC', 'Univalle', 'Javeriana Cali', 'Icesi'];
 
 export const catalogTypes = [

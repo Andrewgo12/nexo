@@ -193,8 +193,21 @@ export function getTravelMatches(token = getAuthToken(), signal, afterId = null)
   return request(`/matches${query}`, { token, signal });
 }
 
-export function getMyTrips(token = getAuthToken(), signal) {
-  return request('/trips/mine', { token, signal });
+export function getMyTrips(token = getAuthToken(), signal, cursors = {}) {
+  const params = new URLSearchParams();
+  if (cursors.offersBeforeId !== undefined) {
+    if (!Number.isSafeInteger(cursors.offersBeforeId) || cursors.offersBeforeId <= 0) {
+      throw new RangeError('offersBeforeId debe ser un entero seguro mayor que cero.');
+    }
+    params.set('offers_before_id', String(cursors.offersBeforeId));
+  }
+  if (cursors.requestsBeforeId !== undefined) {
+    if (!Number.isSafeInteger(cursors.requestsBeforeId) || cursors.requestsBeforeId <= 0) {
+      throw new RangeError('requestsBeforeId debe ser un entero seguro mayor que cero.');
+    }
+    params.set('requests_before_id', String(cursors.requestsBeforeId));
+  }
+  return request(`/trips/mine${params.size ? `?${params}` : ''}`, { token, signal });
 }
 
 export function getCommunicationTrips(token = getAuthToken(), signal) {

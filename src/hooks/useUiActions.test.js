@@ -10,13 +10,11 @@ afterEach(() => {
 
 function createState() {
   return {
-    advancedMode: DEFAULT_APP_DATA.advancedMode,
     authUser: { id: 7, role: 'student' },
     executionState: DEFAULT_APP_DATA.executionState,
     isEmailVerified: true,
     isLoggedIn: true,
     notifications: DEFAULT_APP_DATA.notifications,
-    setAdvancedMode: vi.fn(),
     setExecutionState: vi.fn(),
     setModal: vi.fn(),
     setNotifications: vi.fn(),
@@ -126,20 +124,10 @@ describe('notification preferences', () => {
     expect(state.setToast).not.toHaveBeenCalled();
   });
 
-  it('persists advanced settings and checklist changes without claiming alert delivery', () => {
+  it('persists manual checklist changes without claiming product coverage', () => {
     const state = createState();
-    useUiActions(state).toggleAdvancedFeature('night');
-
-    expect(readAppData().advancedMode.night).toBe(false);
-    expect(state.setAdvancedMode).toHaveBeenCalledWith({
-      ...DEFAULT_APP_DATA.advancedMode,
-      night: false,
-    });
-
-    state.advancedMode = { ...DEFAULT_APP_DATA.advancedMode, night: false };
     useUiActions(state).toggleExecutionTask('domain-validation');
 
-    expect(readAppData().advancedMode.night).toBe(false);
     expect(readAppData().executionState[0].done).toBe(false);
     expect(state.setExecutionState).toHaveBeenCalledWith([
       { ...DEFAULT_APP_DATA.executionState[0], done: false },

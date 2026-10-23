@@ -281,6 +281,61 @@ class TripManagementTest extends TestCase
             ->assertJsonCount(0, 'data.requests');
     }
 
+    public function test_my_trip_offers_and_requests_have_independent_stable_history_cursors(): void
+    {
+        $student = User::factory()->create();
+        $profile = $this->createProfile($student);
+        $otherOwner = User::factory()->create();
+        $otherOwnerProfile = $this->createProfile($otherOwner);
+        for ($index = 0; $index < 101; $index++) {
+            $this->createOffer($profile);
+            $offer = $this->createOffer($otherOwnerProfile);
+            TripRequest::create([
+                'travel_offer_id' => $offer->id,
+                'requester_profile_id' => $profile->id,
+                'status' => 'pending',
+            ]);
+        }
+
+        $firstPage = $this->actingAs($student, 'sanctum')->getJson('/api/trips/mine')
+            ->assertOk()
+            ->assertJsonCount(100, 'data.offers')
+            ->assertJsonCount(100, 'data.requests')
+            ->assertJsonPath('meta.offers_has_older', true)
+            ->assertJsonPath('meta.requests_has_older', true);
+        $offersCursor = $firstPage->json('meta.offers_before_id');
+        $requestsCursor = $firstPage->json('meta.requests_before_id');
+
+        $offersPage = $this->getJson("/api/trips/mine?offers_before_id={$offersCursor}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.offers')
+            ->assertJsonPath('meta.offers_has_older', false)
+            ->assertJsonPath('meta.offers_before_id', null)
+            ->assertJsonPath('meta.requests_has_older', true);
+        $this->assertLessThan($offersCursor, $offersPage->json('data.offers.0.id'));
+
+        $requestsPage = $this->getJson("/api/trips/mine?requests_before_id={$requestsCursor}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.requests')
+            ->assertJsonPath('meta.requests_has_older', false)
+            ->assertJsonPath('meta.requests_before_id', null)
+            ->assertJsonPath('meta.offers_has_older', true);
+        $this->assertLessThan($requestsCursor, $requestsPage->json('data.requests.0.id'));
+    }
+
+    public function test_my_trip_history_rejects_invalid_cursors(): void
+    {
+        $student = User::factory()->create();
+        $this->createProfile($student);
+
+        $this->actingAs($student, 'sanctum')->getJson('/api/trips/mine?offers_before_id=0')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('offers_before_id');
+        $this->getJson('/api/trips/mine?requests_before_id=invalid')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('requests_before_id');
+    }
+
     private function createProfile(User $user, array $attributes = []): StudentProfile
     {
         return StudentProfile::create(array_merge([

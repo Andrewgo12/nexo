@@ -41,12 +41,18 @@ export default function useAppState(persisted, { initialStudent, universities })
   const [matchCursor, setMatchCursor] = useState(null);
   const [matchNextCursor, setMatchNextCursor] = useState(null);
   const [myTripData, setMyTripData] = useState({ offers: [], requests: [] });
+  const [myTripsPagination, setMyTripsPagination] = useState({
+    offersHasOlder: false,
+    offersBeforeId: null,
+    requestsHasOlder: false,
+    requestsBeforeId: null,
+  });
+  const [myTripsLoadingMore, setMyTripsLoadingMore] = useState({ offers: false, requests: false });
   const [tripLoading, setTripLoading] = useState(false);
   const [tripError, setTripError] = useState('');
   const [tripActionLoading, setTripActionLoading] = useState('');
   const [tripRefreshKey, setTripRefreshKey] = useState(0);
   const [notifications, setNotifications] = useState(persisted.notifications || DEFAULT_APP_DATA.notifications);
-  const [advancedMode, setAdvancedMode] = useState(persisted.advancedMode || DEFAULT_APP_DATA.advancedMode);
   const [adminDashboard, setAdminDashboard] = useState(null);
   const [adminDashboardLoading, setAdminDashboardLoading] = useState(false);
   const [adminDashboardError, setAdminDashboardError] = useState('');
@@ -111,6 +117,9 @@ export default function useAppState(persisted, { initialStudent, universities })
   const [deviceLocation, setDeviceLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [tripCards, setTripCards] = useState([]);
+  const [tripCardsNextCursor, setTripCardsNextCursor] = useState(null);
+  const [tripCardsHasMore, setTripCardsHasMore] = useState(false);
+  const [tripCardsLoadingMore, setTripCardsLoadingMore] = useState(false);
   const [tripOfferMinimumDate] = useState(localDateString);
   const [tripOfferForm, setTripOfferForm] = useState({
       origin: 'UNIAJC Sede Sur',
@@ -168,9 +177,10 @@ export default function useAppState(persisted, { initialStudent, universities })
     matchLoaded, setMatchLoaded, matchProfileAvailable, setMatchProfileAvailable,
     matchTruncated, setMatchTruncated, matchCursor, setMatchCursor,
     matchNextCursor, setMatchNextCursor, myTripData, setMyTripData,
+    myTripsPagination, setMyTripsPagination, myTripsLoadingMore, setMyTripsLoadingMore,
     tripLoading, setTripLoading, tripError, setTripError,
     tripActionLoading, setTripActionLoading, tripRefreshKey, setTripRefreshKey,
-    notifications, setNotifications, advancedMode, setAdvancedMode,
+    notifications, setNotifications,
     adminDashboard, setAdminDashboard, adminDashboardLoading, setAdminDashboardLoading,
     adminDashboardError, setAdminDashboardError, adminUsers, setAdminUsers,
     adminUserMeta, setAdminUserMeta, adminIncidents, setAdminIncidents,
@@ -203,6 +213,8 @@ export default function useAppState(persisted, { initialStudent, universities })
     routeSearchLoading, setRouteSearchLoading, routeLoading, setRouteLoading,
     routeError, setRouteError, deviceLocation, setDeviceLocation,
     locationLoading, setLocationLoading, tripCards, setTripCards,
+    tripCardsNextCursor, setTripCardsNextCursor, tripCardsHasMore, setTripCardsHasMore,
+    tripCardsLoadingMore, setTripCardsLoadingMore,
     tripOfferMinimumDate, tripOfferForm, setTripOfferForm, alertFeed, setAlertFeed,
     safetyActionLoading, setSafetyActionLoading, safetyError, setSafetyError,
     safetyLocationError, setSafetyLocationError, includeSafetyLocation, setIncludeSafetyLocation,

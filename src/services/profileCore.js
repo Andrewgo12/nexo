@@ -49,15 +49,21 @@ export function calculateDistanceBetweenPoints(origin, destination) {
   return Number((6371 * c).toFixed(2));
 }
 
-export function buildRouteSummary({ origin, destination, mode = 'MIO + caminata', routeResult }) {
-  const baseDistance = routeResult?.distanceKm ?? 8.4;
-  const durationMin = routeResult?.durationMin ?? (mode.includes('Moto') ? 18 : mode.includes('Carro') ? 24 : mode.includes('Bicicleta') ? 30 : 35);
-  const safetyScore = durationMin <= 20 ? '94/100' : baseDistance > 10 ? '88/100' : '91/100';
+export function buildRouteSummary({ origin, destination, routeResult }) {
+  const routeLabel = `${origin || 'UNIAJC'} → ${destination || 'El Caney'}`;
+  if (!routeResult) {
+    return {
+      duration: 'Pendiente',
+      distance: 'Pendiente',
+      safety: 'No evaluado',
+      routeLabel,
+    };
+  }
 
   return {
-    duration: `${durationMin} min`,
-    distance: `${baseDistance.toFixed(1)} km`,
-    safety: safetyScore,
-    routeLabel: `${origin || 'UNIAJC'} → ${destination || 'El Caney'}`
+    duration: Number.isFinite(routeResult.durationMin) ? `${routeResult.durationMin} min` : 'Horario no disponible',
+    distance: Number.isFinite(routeResult.distanceKm) ? `${routeResult.distanceKm.toFixed(1)} km` : 'Distancia no disponible',
+    safety: routeResult.safetyScore || 'No evaluado',
+    routeLabel,
   };
 }

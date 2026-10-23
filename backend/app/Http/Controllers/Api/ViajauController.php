@@ -120,6 +120,10 @@ class ViajauController extends Controller
 
     public function myTrips(Request $request)
     {
+        $filters = $request->validate([
+            'offers_before_id' => ['sometimes', 'integer', 'min:1'],
+            'requests_before_id' => ['sometimes', 'integer', 'min:1'],
+        ]);
         $profile = $request->user()->studentProfile;
         abort_unless(
             $profile && $profile->verified && $profile->status === 'activo',
@@ -129,52 +133,78 @@ class ViajauController extends Controller
 
         $offers = TravelOffer::query()
             ->where('student_profile_id', $profile->id)
+            ->when(
+                isset($filters['offers_before_id']),
+                fn ($query) => $query->where('id', '<', $filters['offers_before_id']),
+            )
             ->with(['requests.requesterProfile:id,name,university'])
-            ->latest()
-            ->limit(100)
-            ->get()
-            ->map(fn (TravelOffer $offer): array => [
-                'id' => $offer->id,
-                'origin' => $offer->origin,
-                'destination' => $offer->destination,
-                'departure_date' => $offer->departure_date?->toDateString(),
-                'mode' => $offer->mode,
-                'departure_time' => $offer->departure_time,
-                'seats' => $offer->seats,
-                'cost' => $offer->cost,
-                'status' => $offer->status,
-                'requests' => $offer->requests->map(fn (TripRequest $tripRequest): array => [
-                    'id' => $tripRequest->id,
-                    'status' => $tripRequest->status,
-                    'requester' => [
-                        'name' => $tripRequest->requesterProfile->name,
-                        'university' => $tripRequest->requesterProfile->university,
-                    ],
-                ])->values(),
-            ]);
+            ->orderByDesc('id')
+            ->limit(101)
+            ->get();
+        $offersHaveOlder = $offers->count() > 100;
+        if ($offersHaveOlder) {
+            $offers = $offers->take(100);
+        }
+        $offersBeforeId = $offersHaveOlder ? $offers->last()?->id : null;
+        $offers = $offers->map(fn (TravelOffer $offer): array => [
+            'id' => $offer->id,
+            'origin' => $offer->origin,
+            'destination' => $offer->destination,
+            'departure_date' => $offer->departure_date?->toDateString(),
+            'mode' => $offer->mode,
+            'departure_time' => $offer->departure_time,
+            'seats' => $offer->seats,
+            'cost' => $offer->cost,
+            'status' => $offer->status,
+            'requests' => $offer->requests->map(fn (TripRequest $tripRequest): array => [
+                'id' => $tripRequest->id,
+                'status' => $tripRequest->status,
+                'requester' => [
+                    'name' => $tripRequest->requesterProfile->name,
+                    'university' => $tripRequest->requesterProfile->university,
+                ],
+            ])->values(),
+        ]);
 
         $requests = TripRequest::query()
             ->where('requester_profile_id', $profile->id)
+            ->when(
+                isset($filters['requests_before_id']),
+                fn ($query) => $query->where('id', '<', $filters['requests_before_id']),
+            )
             ->with(['travelOffer.studentProfile:id,name,university'])
-            ->latest()
-            ->limit(100)
-            ->get()
-            ->map(fn (TripRequest $tripRequest): array => [
-                'id' => $tripRequest->id,
-                'status' => $tripRequest->status,
-                'offer' => [
-                    'id' => $tripRequest->travelOffer->id,
-                    'origin' => $tripRequest->travelOffer->origin,
-                    'destination' => $tripRequest->travelOffer->destination,
-                    'departure_date' => $tripRequest->travelOffer->departure_date?->toDateString(),
-                    'departure_time' => $tripRequest->travelOffer->departure_time,
-                    'seats' => $tripRequest->travelOffer->seats,
-                    'status' => $tripRequest->travelOffer->status,
-                    'owner' => $tripRequest->travelOffer->studentProfile->name,
-                ],
-            ]);
+            ->orderByDesc('id')
+            ->limit(101)
+            ->get();
+        $requestsHaveOlder = $requests->count() > 100;
+        if ($requestsHaveOlder) {
+            $requests = $requests->take(100);
+        }
+        $requestsBeforeId = $requestsHaveOlder ? $requests->last()?->id : null;
+        $requests = $requests->map(fn (TripRequest $tripRequest): array => [
+            'id' => $tripRequest->id,
+            'status' => $tripRequest->status,
+            'offer' => [
+                'id' => $tripRequest->travelOffer->id,
+                'origin' => $tripRequest->travelOffer->origin,
+                'destination' => $tripRequest->travelOffer->destination,
+                'departure_date' => $tripRequest->travelOffer->departure_date?->toDateString(),
+                'departure_time' => $tripRequest->travelOffer->departure_time,
+                'seats' => $tripRequest->travelOffer->seats,
+                'status' => $tripRequest->travelOffer->status,
+                'owner' => $tripRequest->travelOffer->studentProfile->name,
+            ],
+        ]);
 
-        return response()->json(['data' => ['offers' => $offers, 'requests' => $requests]]);
+        return response()->json([
+            'data' => ['offers' => $offers->values(), 'requests' => $requests->values()],
+            'meta' => [
+                'offers_has_older' => $offersHaveOlder,
+                'offers_before_id' => $offersBeforeId,
+                'requests_has_older' => $requestsHaveOlder,
+                'requests_before_id' => $requestsBeforeId,
+            ],
+        ]);
     }
 
     public function createTripRequest(Request $request, TravelOffer $trip)

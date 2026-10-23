@@ -63,4 +63,12 @@ describe('appDatabase', () => {
     writeAppData({ privacy: 'Share exact home address' });
     expect(readAppData().privacy).toBe(DEFAULT_APP_DATA.privacy);
   });
+
+  it('ignores obsolete advanced-feature toggles saved by an earlier version', () => {
+    localStorage.setItem('viajau-local-db-v1', JSON.stringify({
+      advancedMode: { night: true, safeties: true, hotspots: true, recommendations: true },
+    }));
+
+    expect(readAppData()).not.toHaveProperty('advancedMode');
+  });
 });

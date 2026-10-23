@@ -67,16 +67,15 @@ export default function AdminManagementSection(props) {
       </div>
 
       <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-        <h3 style={{ marginTop: 0 }}>Checklist del módulo 7</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-          {props.adminChecklist.map((item) => (
-            <div key={item.id} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>
-              {item.done ? '☑' : '☐'} {item.id} {item.label}
-            </div>
-          ))}
-        </div>
+        <h3 style={{ marginTop: 0 }}>Alcance y límites administrativos</h3>
+        <ul style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, paddingLeft: 20, color: '#cbd5e1', fontSize: 13 }}>
+          <li>Las métricas se cargan desde el servidor y respetan el alcance global del rol administrador o el institucional asignado.</li>
+          <li>La exportación contiene agregados del panel cargado; no es un informe de auditoría ni un volcado de datos personales.</li>
+          <li>La gestión de perfiles, incidentes y catálogos está sujeta al rol y al alcance institucional de la sesión.</li>
+          <li>La importación GTFS valida y guarda paradas y rutas; no importa viajes, horarios ni calendarios.</li>
+        </ul>
         <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 0 }}>
-          Las valoraciones de reputación siguen fuera de este módulo. La importación GTFS valida y guarda paradas/rutas; no importa viajes, horarios ni calendarios.
+          Las valoraciones de reputación siguen fuera de este módulo. Las métricas describen los datos disponibles y no certifican la operación o la cobertura de producción.
         </p>
       </div>
 

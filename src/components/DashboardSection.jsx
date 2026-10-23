@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { buildDashboardSummary } from '../services/dashboardSummary';
-import { dashboardChecklist } from '../data/appSectionData';
 import Metric from './Metric';
 
 export default function DashboardSection({
@@ -153,17 +152,13 @@ export default function DashboardSection({
       )}
 
       <div style={{ background: 'rgba(15,23,42,.82)', border: '1px solid rgba(148,163,184,.2)', borderRadius: 18, padding: 24 }}>
-        <h3 style={{ marginTop: 0 }}>Checklist del módulo 10</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 10 }}>
-          {dashboardChecklist.map((item) => (
-            <div key={item.label} style={{ color: item.done ? '#86efac' : '#fbbf24' }}>
-              {item.done ? '☑' : '☐'} {item.label}
-            </div>
-          ))}
-        </div>
-        <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 0, marginTop: 12 }}>
-          Las notificaciones externas se trabajan en el módulo 12. El chat actualiza el historial periódicamente; no es mensajería en tiempo real.
-        </p>
+        <h3 style={{ marginTop: 0 }}>Alcance de dashboard y comunicación</h3>
+        <ul style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 10, paddingLeft: 20, color: '#cbd5e1', fontSize: 13 }}>
+          <li>Resumen, actividad e historial se calculan desde ofertas, solicitudes y reputación devueltas por la API.</li>
+          <li>El chat se limita a responsable y pasajeros aceptados, con carga inicial e historial paginado.</li>
+          <li>Los mensajes nuevos se consultan periódicamente; no es mensajería en tiempo real.</li>
+          <li>Push y mensajes fuera de la aplicación no están conectados.</li>
+        </ul>
       </div>
     </section>
   );

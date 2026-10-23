@@ -27,12 +27,6 @@ export const matchFunctions = [
   'compararTransportePreferido()', 'explicarPuntajeCoincidencia()', 'ordenarRecomendaciones()',
 ];
 
-export const advancedFunctions = [
-  'activarModoNocturno()', 'sugerirRutasMasSeguras()', 'priorizarTrayectosNocturnos()', 'recomendarMejorHorario()', 'detectarPatronesDeViaje()',
-  'sugerirUnionesFrecuentes()', 'sugerirPuntosSeguros()', 'mostrarZonaDeRiesgo()', 'mostrarPuntosSeguros()', 'mostrarRutasFrecuentes()',
-  'mostrarHotspotsDeViaje()', 'subirDatosEstudiantes()', 'sincronizarHorarios()', 'integrarCalendario()', 'validarJornadaAcademica()',
-];
-
 export const backendFunctions = [
   'createStudent()', 'updateStudentProfile()', 'validateInstitutionalEmail()', 'findTravelMatches()', 'createTravelOffer()', 'joinTravel()',
   'approveTravelParticipant()', 'startTrip()', 'trackLiveLocation()', 'sendEmergencyAlert()', 'completeTrip()', 'rateUser()', 'reportUser()',
@@ -70,14 +64,4 @@ export const executionChecklist = [
   { id: 'analytics-ops', label: 'Monitorear métricas, logs y salud del sistema', done: false },
   { id: 'backend-sync', label: 'Sincronizar GTFS y caché de rutas en backend real', done: false },
   { id: 'prod-hardening', label: 'Cuarentena de producción, auditoría y escalamiento', done: false },
-];
-
-export const dashboardChecklist = [
-  { label: 'Resumen de ofertas, viajes, solicitudes y reputación con datos reales', done: true },
-  { label: 'Historial de ofertas y participaciones registradas', done: true },
-  { label: 'Chat persistente entre responsable y pasajeros aceptados', done: true },
-  { label: 'Cerrar el chat para nuevos mensajes al terminar el viaje', done: true },
-  { label: 'Fecha del viaje para calcular próximos trayectos', done: true },
-  { label: 'Notificaciones push y comunicación externa', done: false },
-  { label: 'Compartir ubicación/ruta desde el chat', done: false },
 ];

@@ -28,7 +28,6 @@ describe('useSessionEffects', () => {
 
     renderHook(() => useSessionEffects({
       active: 'auth',
-      advancedMode: {},
       executionState: [],
       notifications: [],
       privacy: 'Zona aproximada',
@@ -47,7 +46,6 @@ describe('useSessionEffects', () => {
 
     renderHook(() => useSessionEffects({
       active: 'auth',
-      advancedMode: {},
       executionState: [],
       notifications: [],
       privacy: 'Privacidad máxima',

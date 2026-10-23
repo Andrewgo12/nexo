@@ -20,14 +20,14 @@ export default function AuthenticatedShell({ state, actions, viewModel }) {
           <div style={{ width: '100%', maxWidth: 980, borderRadius: 28, background: 'linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,11,16,.96))', border: '1px solid rgba(148,163,184,.2)', boxShadow: '0 28px 80px rgba(15,23,42,.5)', display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', overflow: 'hidden' }}>
             <div style={{ padding: 40, background: 'linear-gradient(135deg, rgba(16,185,129,.12), rgba(59,130,246,.08), transparent)' }}>
               <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#86efac', fontWeight: 800, marginBottom: 12 }}>VIAJAU</div>
-              <h1 style={{ margin: 0, fontSize: 44, lineHeight: 1.08 }}>Tu movilidad segura universitaria</h1>
+              <h1 style={{ margin: 0, fontSize: 44, lineHeight: 1.08 }}>Movilidad compartida universitaria</h1>
               <p style={{ margin: '18px 0 28px', color: '#dbeafe', fontSize: 16, lineHeight: 1.7 }}>
-                Validación institucional, emparejamiento por zona y horario, rutas seguras y notificaciones de seguridad para estudiantes de Cali y alrededores.
+                Validación por correo institucional, rutas consultadas mediante proveedores externos y registro de alertas SOS. No hay monitoreo 24/7 ni contacto automático con servicios de emergencia.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12 }}>
-                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 24, fontWeight: 800, color: '#86efac' }}>96%</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Coincidencia segura</div></div>
-                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 24, fontWeight: 800, color: '#7dd3fc' }}>24/7</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Monitoreo</div></div>
-                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 24, fontWeight: 800, color: '#fbbf24' }}>4.8</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Rating promedio</div></div>
+                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#86efac' }}>Correo institucional</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Verifica el dominio universitario, no la identidad personal.</div></div>
+                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#7dd3fc' }}>Rutas externas</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>La disponibilidad depende de proveedores externos.</div></div>
+                <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#fbbf24' }}>Alertas SOS</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Se registran en la app; no sustituyen servicios de emergencia.</div></div>
               </div>
             </div>
 
@@ -189,25 +189,27 @@ export default function AuthenticatedShell({ state, actions, viewModel }) {
                 <span style={{ background: 'rgba(52,211,153,0.14)', color: '#a7f3d0', border: '1px solid rgba(52,211,153,0.35)', borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>MVP activo</span>
                 <span style={{ background: 'rgba(96,165,250,0.12)', color: '#bfdbfe', border: '1px solid rgba(96,165,250,0.28)', borderRadius: 999, padding: '7px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Seguridad + matching</span>
               </div>
-              <h2 style={{ margin: 0, fontSize: 38, lineHeight: 1.1, maxWidth: 700 }}>ViajaU: movilidad segura para estudiantes universitarios</h2>
+              <h2 style={{ margin: 0, fontSize: 38, lineHeight: 1.1, maxWidth: 700 }}>ViajaU: movilidad compartida para estudiantes universitarios</h2>
               <p style={{ marginTop: 12, color: '#dbeafe', fontSize: 15, maxWidth: 660, lineHeight: 1.7 }}>
-                Plataforma de viajes compartidos por zona y jornada, con validación universitaria, rutas y alertas SOS registradas para el equipo de seguridad.
+                Plataforma con validación por correo institucional, consulta de rutas mediante proveedores externos y registro de alertas SOS. No ofrece monitoreo 24/7 ni contacto automático con servicios de emergencia.
               </p>
             </div>
             <div style={{ background: 'rgba(15,23,42,0.62)', border: '1px solid rgba(148,163,184,.22)', borderRadius: 18, padding: 18 }}>
               <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', marginBottom: 12 }}>Estado del sistema</div>
               <div style={{ display: 'grid', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <span style={{ color: '#dbeafe' }}>Perfil verificado</span>
-                  <span style={{ color: '#34d399', fontWeight: 800 }}>{viewModel.dashboardMetrics.validation}</span>
+                  <span style={{ color: '#dbeafe' }}>Correo institucional</span>
+                  <span style={{ color: '#34d399', fontWeight: 800 }}>
+                    {state.isEmailVerified && viewModel.validEmail ? 'Verificado' : 'Pendiente'}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <span style={{ color: '#dbeafe' }}>Compatibilidad</span>
-                  <span style={{ color: '#7dd3fc', fontWeight: 800 }}>{viewModel.dashboardMetrics.compatibility}</span>
+                  <span style={{ color: '#dbeafe' }}>Ruta actual</span>
+                  <span style={{ color: '#7dd3fc', fontWeight: 800 }}>{state.routeResult ? 'Calculada' : 'Sin calcular'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <span style={{ color: '#dbeafe' }}>Riesgo</span>
-                  <span style={{ color: '#fca5a5', fontWeight: 800 }}>{viewModel.safetyMatrix.risk}</span>
+                  <span style={{ color: '#dbeafe' }}>Seguridad de ruta</span>
+                  <span style={{ color: '#fca5a5', fontWeight: 800 }}>No evaluada</span>
                 </div>
               </div>
             </div>

@@ -8,7 +8,6 @@ export const DEFAULT_APP_DATA = {
     { id: 'route-change', title: 'Cambio de ruta', channel: 'No configurado', active: false },
     { id: 'trusted-contact', title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false }
   ],
-  advancedMode: { night: true, safeties: true, hotspots: true, recommendations: true },
   safetyState: { panic: false, geofence: false, emergency: false, arrival: false },
   executionState: [
     { id: 'domain-validation', label: 'Validar dominio universitario y perfil del estudiante', done: true },
@@ -52,14 +51,6 @@ function safeAppData(payload = {}) {
           : notification.active,
       };
     }),
-    advancedMode: Object.fromEntries(
-      Object.keys(DEFAULT_APP_DATA.advancedMode).map((key) => [
-        key,
-        typeof data.advancedMode?.[key] === 'boolean'
-          ? data.advancedMode[key]
-          : DEFAULT_APP_DATA.advancedMode[key]
-      ])
-    ),
     executionState: DEFAULT_APP_DATA.executionState.map((task) => ({
       ...task,
       done: typeof savedExecutionStateById.get(task.id) === 'boolean'

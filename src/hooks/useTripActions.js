@@ -1,9 +1,12 @@
-import { createTripCheckIn, publishTravelOffer, shareTripLocation, stopSharingTripLocation } from '../services/authApi';
+import { useRef } from 'react';
+import { createTripCheckIn, getAuthToken, getMyTrips, getTravelOffers, publishTravelOffer, shareTripLocation, stopSharingTripLocation } from '../services/authApi';
 import { getCurrentDeviceLocation } from '../services/locationApi';
 import { calculateTripCost } from '../services/viajauCore';
 
 export default function useTripActions(state) {
   const { active, routeResult, selectedSafetyTripId, setSafetyActionLoading, setSafetyError, setSafetyRefreshKey, setSharingTripLocation, setToast, setTripActionLoading, setTripError, setTripRefreshKey, tripLocationUpdateRef, tripOfferForm } = state;
+  const loadingMoreOffersRef = useRef(false);
+  const loadingMyTripsPagesRef = useRef(new Set());
 
   const runTripAction = async (loadingKey, operation, successMessage) => {
       setTripActionLoading(loadingKey);
@@ -36,6 +39,100 @@ export default function useTripActions(state) {
         setTripActionLoading('');
       }
     }
+
+  const loadMoreTripCards = async () => {
+    const cursor = state.tripCardsNextCursor;
+    if (!state.tripCardsHasMore || !Number.isSafeInteger(cursor) || cursor <= 0
+      || state.tripCardsLoadingMore || loadingMoreOffersRef.current) return;
+
+    loadingMoreOffersRef.current = true;
+    state.setTripCardsLoadingMore(true);
+    setTripError('');
+    try {
+      const response = await getTravelOffers({ after_id: cursor });
+      if (!Array.isArray(response.data)) {
+        throw new Error('El servidor devolvió una página de ofertas inválida.');
+      }
+      const nextCursor = response.meta?.next_after_id;
+      if (response.meta?.truncated && (!Number.isSafeInteger(nextCursor) || nextCursor <= cursor)) {
+        throw new Error('El servidor devolvió un cursor inválido para la siguiente página de ofertas.');
+      }
+      const existingIds = new Set(state.tripCards.map((offer) => String(offer.id)));
+      const nextOffers = response.data.filter((offer) => !existingIds.has(String(offer.id)));
+      if (response.meta?.truncated && nextOffers.length === 0) {
+        throw new Error('El servidor indicó más ofertas, pero la página no contiene resultados nuevos.');
+      }
+      state.setTripCards((current) => {
+        const offersById = new Map(current.map((offer) => [String(offer.id), offer]));
+        for (const offer of nextOffers) offersById.set(String(offer.id), offer);
+        return [...offersById.values()];
+      });
+      const hasMore = Boolean(response.meta?.truncated);
+      state.setTripCardsNextCursor(hasMore ? nextCursor : null);
+      state.setTripCardsHasMore(hasMore);
+    } catch (error) {
+      setTripError(error.message || 'No fue posible cargar más ofertas.');
+    } finally {
+      loadingMoreOffersRef.current = false;
+      state.setTripCardsLoadingMore(false);
+    }
+  };
+
+  const loadMoreMyTrips = async (kind) => {
+    if (!['offers', 'requests'].includes(kind)) {
+      throw new RangeError('El tipo de historial de viajes no es válido.');
+    }
+    const hasOlderKey = kind === 'offers' ? 'offersHasOlder' : 'requestsHasOlder';
+    const beforeIdKey = kind === 'offers' ? 'offersBeforeId' : 'requestsBeforeId';
+    const pagination = state.myTripsPagination;
+    const cursor = pagination[beforeIdKey];
+    if (!pagination[hasOlderKey]
+      || !Number.isSafeInteger(cursor)
+      || cursor <= 0
+      || state.myTripsLoadingMore[kind]
+      || loadingMyTripsPagesRef.current.has(kind)) return;
+
+    loadingMyTripsPagesRef.current.add(kind);
+    state.setMyTripsLoadingMore((current) => ({ ...current, [kind]: true }));
+    setTripError('');
+    try {
+      const cursors = kind === 'offers'
+        ? { offersBeforeId: cursor }
+        : { requestsBeforeId: cursor };
+      const response = await getMyTrips(getAuthToken(), undefined, cursors);
+      if (!Array.isArray(response.data?.[kind])) {
+        throw new Error('El servidor devolvió una página de historial inválida.');
+      }
+      const hasOlder = Boolean(response.meta?.[hasOlderKey.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)]);
+      const nextBeforeId = response.meta?.[beforeIdKey.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)];
+      if (hasOlder && (!Number.isSafeInteger(nextBeforeId) || nextBeforeId <= 0 || nextBeforeId >= cursor)) {
+        throw new Error('El servidor devolvió un cursor inválido para el historial de viajes.');
+      }
+      const existingIds = new Set(state.myTripData[kind].map((item) => String(item.id)));
+      const nextPage = response.data[kind].filter((item) => !existingIds.has(String(item.id)));
+      if (hasOlder && nextPage.length === 0) {
+        throw new Error('El servidor indicó más historial, pero la página no contiene resultados nuevos.');
+      }
+      state.setMyTripData((current) => {
+        const entriesById = new Map(current[kind].map((item) => [String(item.id), item]));
+        for (const item of nextPage) entriesById.set(String(item.id), item);
+        return {
+          ...current,
+          [kind]: [...entriesById.values()].sort((first, second) => Number(second.id) - Number(first.id)),
+        };
+      });
+      state.setMyTripsPagination((current) => ({
+        ...current,
+        [hasOlderKey]: hasOlder,
+        [beforeIdKey]: hasOlder ? nextBeforeId : null,
+      }));
+    } catch (error) {
+      setTripError(error.message || 'No fue posible cargar más historial de viajes.');
+    } finally {
+      loadingMyTripsPagesRef.current.delete(kind);
+      state.setMyTripsLoadingMore((current) => ({ ...current, [kind]: false }));
+    }
+  };
 
   const stopTripLocationSharing = async (tripId = selectedSafetyTripId) => {
       if (!tripId) return;
@@ -99,13 +196,19 @@ export default function useTripActions(state) {
     }
 
   const calculateTravelCost = () => {
-      const { premium } = calculateTripCost(routeResult?.distanceKm ?? 8.4);
-      setToast(`Costo estimado actualizado: ${premium} por trayecto.`);
+      if (!Number.isFinite(routeResult?.distanceKm) || routeResult.distanceKm <= 0) {
+        setToast('Calcula una ruta válida antes de estimar el aporte.');
+        return;
+      }
+      const { formatted } = calculateTripCost(routeResult.distanceKm);
+      setToast(`Aporte estimado: ${formatted} por trayecto.`);
     }
 
   return {
     runTripAction,
     submitTripOffer,
+    loadMoreTripCards,
+    loadMoreMyTrips,
     stopTripLocationSharing,
     startTripLocationSharing,
     recordTripCheckIn,

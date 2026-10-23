@@ -28,6 +28,16 @@ export default function TripManagementSection(props) {
             </div>
           ))}
         </div>
+        {props.tripCardsHasMore && (
+          <button
+            type="button"
+            onClick={props.onLoadMoreTripCards}
+            disabled={props.tripCardsLoadingMore || props.tripLoading}
+            style={{ ...props.field, marginTop: 12, cursor: 'pointer' }}
+          >
+            {props.tripCardsLoadingMore ? 'Cargando ofertas…' : 'Cargar más ofertas'}
+          </button>
+        )}
 
         <h3 style={{ marginTop: 24 }}>Mis ofertas y solicitudes entrantes</h3>
         {!props.tripLoading && !props.tripError && props.myTripData.offers.length === 0 && <div style={{ color: '#cbd5e1' }}>Aún no has publicado ofertas.</div>}
@@ -61,6 +71,16 @@ export default function TripManagementSection(props) {
             </div>
           ))}
         </div>
+        {props.myTripsPagination?.offersHasOlder && (
+          <button
+            type="button"
+            onClick={() => props.onLoadMoreMyTrips('offers')}
+            disabled={props.myTripsLoadingMore?.offers || props.tripLoading}
+            style={{ ...props.field, marginTop: 12, cursor: 'pointer' }}
+          >
+            {props.myTripsLoadingMore?.offers ? 'Cargando tus ofertas…' : 'Cargar ofertas anteriores'}
+          </button>
+        )}
 
         <h3 style={{ marginTop: 24 }}>Mis solicitudes</h3>
         {!props.tripLoading && !props.tripError && props.myTripData.requests.length === 0 && <div style={{ color: '#cbd5e1' }}>No has solicitado cupos.</div>}
@@ -77,6 +97,16 @@ export default function TripManagementSection(props) {
             </div>
           ))}
         </div>
+        {props.myTripsPagination?.requestsHasOlder && (
+          <button
+            type="button"
+            onClick={() => props.onLoadMoreMyTrips('requests')}
+            disabled={props.myTripsLoadingMore?.requests || props.tripLoading}
+            style={{ ...props.field, marginTop: 12, cursor: 'pointer' }}
+          >
+            {props.myTripsLoadingMore?.requests ? 'Cargando tus solicitudes…' : 'Cargar solicitudes anteriores'}
+          </button>
+        )}
         {['admin', 'security'].includes(props.authUser?.role) && (
           <div style={{ marginTop: 18, color: '#cbd5e1' }}>
             La vista de alertas de emergencia está disponible para cuentas de seguridad y administración activas.
@@ -200,20 +230,27 @@ export default function TripManagementSection(props) {
             {props.tripActionLoading === 'create' ? 'Publicando…' : 'Publicar oferta'}
           </button>
         </form>
-        <button onClick={props.calculateTravelCost} style={{ marginTop: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '10px 12px', fontWeight: 800 }}>Calcular costo estimado de ruta</button>
+        <button
+          type="button"
+          onClick={props.calculateTravelCost}
+          disabled={!Number.isFinite(props.routeResult?.distanceKm) || props.routeResult.distanceKm <= 0}
+          style={{ marginTop: 12, border: '1px solid rgba(148,163,184,.2)', borderRadius: 12, background: '#0f172a', color: '#fff', padding: '10px 12px', fontWeight: 800 }}
+        >
+          Estimar aporte según ruta
+        </button>
+        <small style={{ display: 'block', marginTop: 6, color: '#94a3b8' }}>
+          {props.routeResult?.distanceKm
+            ? 'Estimación orientativa basada en la distancia calculada y una tarifa interna no validada; no procesa pagos ni incluye seguro.'
+            : 'Calcula una ruta en el módulo de mapas para habilitar esta estimación.'}
+        </small>
         <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 20, paddingTop: 16 }}>
-          <strong>Checklist del módulo 5</strong>
-          <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13, color: '#86efac' }}>
-            {[
-              '5.1 Publicar ofertas desde un perfil verificado',
-              '5.2 Consultar ofertas activas y sus cupos reales',
-              '5.3 Solicitar cupo y consultar su estado',
-              '5.4 Aceptar o rechazar solicitudes como responsable',
-              '5.5 Evitar sobreventa al confirmar cupos',
-              '5.6 Cancelar ofertas, solicitudes y participaciones previas al inicio',
-              '5.7 Iniciar y completar viajes con transiciones válidas',
-            ].map((item) => <div key={item}>☑ {item}</div>)}
-          </div>
+          <strong>Reglas y límites del flujo</strong>
+          <ul style={{ display: 'grid', gap: 8, margin: '10px 0 0', paddingLeft: 20, fontSize: 13, color: '#cbd5e1' }}>
+            <li>El backend reserva y libera cupos dentro de transacciones; aceptar una solicitud exige cupos disponibles.</li>
+            <li>Solo quien publicó la oferta acepta solicitudes, inicia o completa el viaje; quien solicita puede retirar su solicitud antes de iniciar.</li>
+            <li>Al iniciar, las solicitudes pendientes se cancelan; al cancelar o completar, se retiran las ubicaciones compartidas.</li>
+            <li>La geocerca automática permanece desactivada hasta verificar la ruta de forma independiente en el servidor.</li>
+          </ul>
         </div>
       </div>
     </section>

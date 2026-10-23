@@ -68,19 +68,13 @@ export default function SearchSection({
         <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800 }}>FILTROS</div>
         <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>{searchFunctions.map((item) => <span key={item} style={{ fontSize: 10, padding: '6px 8px', borderRadius: 999, background: 'rgba(125,211,252,.12)', color: '#dbeafe' }}>{item}</span>)}</div>
         <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 20, paddingTop: 16 }}>
-          <strong>Checklist del módulo 3</strong>
-          <div style={{ display: 'grid', gap: 8, marginTop: 10, color: '#cbd5e1', fontSize: 13 }}>
-            {[
-              { label: '3.1 Consultar ofertas activas de la API con sesión verificada', done: searchLoaded && !searchError },
-              { label: '3.2 Filtrar por zona, hora, fecha y transporte', done: true },
-              { label: '3.3 Filtrar por carrera y universidad del perfil', done: true },
-              { label: '3.4 Ordenar por afinidad estimada, hora y fecha', done: true },
-              { label: '3.5 Mostrar carga, error y resultados vacíos', done: true },
-              { label: '3.6 Limitar resultados a ofertas activas de usuarios verificados', done: true },
-              { label: '3.7 Probar filtros, orden y protección de datos', done: true },
-            ].map((item) => <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>{item.done ? '☑' : '☐'} {item.label}</div>)}
-          </div>
-          <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>{6 + Number(searchLoaded && !searchError)}/7 completados. Género no se filtra y la distancia exacta requiere coordenadas consentidas que el modelo no almacena.</small>
+          <strong>Alcance de búsqueda</strong>
+          <ul style={{ display: 'grid', gap: 8, margin: '10px 0 0', paddingLeft: 20, color: '#cbd5e1', fontSize: 13 }}>
+            <li>El servidor filtra ofertas activas y futuras de perfiles verificados; las páginas usan un cursor estable.</li>
+            <li>Zona, hora, fechas, transporte, carrera y universidad son filtros del servidor. Afinidad y orden se calculan solo entre resultados cargados.</li>
+            <li>No se filtra por género ni por distancia exacta; no se solicitan coordenadas para esta búsqueda.</li>
+            <li>{searchLoaded && !searchError ? 'La última consulta terminó correctamente.' : 'El resultado depende de la próxima consulta autenticada.'}</li>
+          </ul>
         </div>
       </div>
     </section>

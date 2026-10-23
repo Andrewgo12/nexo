@@ -15,7 +15,6 @@ import SearchSection from './SearchSection';
 import TripManagementSection from './TripManagementSection';
 import TrustSection from './TrustSection';
 import {
-  adminChecklist,
   adminUniversities,
   catalogTypes,
   field,
@@ -173,8 +172,11 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           authUser={state.authUser}
           calculateTravelCost={actions.calculateTravelCost}
           field={field}
+          routeResult={state.routeResult}
 
           myTripData={state.myTripData}
+          myTripsPagination={state.myTripsPagination}
+          myTripsLoadingMore={state.myTripsLoadingMore}
           recordTripCheckIn={actions.recordTripCheckIn}
           requestTravelSeat={requestTravelSeat}
           runTripAction={actions.runTripAction}
@@ -192,6 +194,8 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           submitTripOffer={actions.submitTripOffer}
           tripActionLoading={state.tripActionLoading}
           tripCards={state.tripCards}
+          tripCardsHasMore={state.tripCardsHasMore}
+          tripCardsLoadingMore={state.tripCardsLoadingMore}
           tripError={state.tripError}
           tripLoading={state.tripLoading}
           tripLocationUpdateRef={state.tripLocationUpdateRef}
@@ -200,6 +204,8 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           tripStatusLabels={tripStatusLabels}
           updateTravelOfferStatus={updateTravelOfferStatus}
           updateTravelRequest={updateTravelRequest}
+          onLoadMoreTripCards={actions.loadMoreTripCards}
+          onLoadMoreMyTrips={actions.loadMoreMyTrips}
         />
       )}
 
@@ -231,7 +237,6 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
         <AdminManagementSection
           adminCatalog={state.adminCatalog}
           adminCatalogForm={state.adminCatalogForm}
-          adminChecklist={adminChecklist}
           adminDashboardError={state.adminDashboardError}
           adminDashboardLoading={state.adminDashboardLoading}
           adminFeedVersion={state.adminFeedVersion}
@@ -354,7 +359,7 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
         <AlertsSection notifications={state.notifications} onToggleNotification={actions.toggleNotification} />
       )}
       {state.active === 'advanced' && (
-        <AdvancedSection advancedMode={state.advancedMode} onToggleFeature={actions.toggleAdvancedFeature} />
+        <AdvancedSection />
       )}
       {state.active === 'backend' && <BackendSection />}
       {state.active === 'checklist' && (

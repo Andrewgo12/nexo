@@ -57,16 +57,13 @@ export default function SafetySection({
             El GPS requiere activación voluntaria. Las alertas por correo/SMS/WhatsApp solo se envían con consentimiento del contacto y SMTP/Twilio configurados; no se notifican automáticamente autoridades ni servicios de emergencia.
           </div>
           <div style={{ borderTop: '1px solid rgba(148,163,184,.2)', marginTop: 8, paddingTop: 14 }}>
-            <strong>Checklist del módulo 6</strong>
-            <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13 }}>
-              <div style={{ color: '#86efac' }}>☑ 6.1 Registrar una alerta SOS persistente</div>
-              <div style={{ color: '#86efac' }}>☑ 6.2 Consultar y atender alertas con rol autorizado</div>
-              <div style={{ color: '#86efac' }}>☑ 6.3 Adjuntar ubicación GPS actual si el estudiante lo autoriza</div>
-              <div style={{ color: '#86efac' }}>☑ 6.4 Ubicación compartida y check-in durante el viaje activo</div>
-              <div style={{ color: '#86efac' }}>☑ 6.5 Geocerca de ruta/destino y alertas por check-in vencido (si el viaje lo configura)</div>
-              <div style={{ color: '#86efac' }}>☑ 6.6 Notificaciones opt-in a contactos por correo/SMS/WhatsApp (requiere configuración externa)</div>
-              <div style={{ color: '#cbd5e1' }}>☐ 6.7 Integración con autoridades/servicios de emergencia</div>
-            </div>
+            <strong>Capacidades y dependencias</strong>
+            <ul style={{ display: 'grid', gap: 8, margin: '10px 0 0', paddingLeft: 20, fontSize: 13, color: '#cbd5e1' }}>
+              <li>El SOS se registra en el backend; personal autorizado puede consultar y atender alertas.</li>
+              <li>GPS y check-ins requieren acción del participante en un viaje activo; la ubicación no es seguimiento continuo por defecto.</li>
+              <li>Geocercas solo funcionan para rutas verificadas por servidor; las rutas nuevas no cumplen actualmente esa condición.</li>
+              <li>Correo/SMS/WhatsApp dependen de consentimiento, credenciales, cola y scheduler. No hay integración automática con autoridades.</li>
+            </ul>
           </div>
         </div>
       </div>

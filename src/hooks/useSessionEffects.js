@@ -5,7 +5,6 @@ import { writeAppData } from '../services/appDatabase';
 export default function useSessionEffects(state, helpers = {}) {
   const {
     active,
-    advancedMode,
     executionState,
     notifications,
     privacy,
@@ -41,7 +40,6 @@ export default function useSessionEffects(state, helpers = {}) {
       try {
         writeAppData({
           notifications: notifications,
-          advancedMode: advancedMode,
           executionState: executionState,
           activeTab: active,
           privacy,
@@ -50,5 +48,5 @@ export default function useSessionEffects(state, helpers = {}) {
         console.error('No se pudieron guardar las preferencias de ViajaU.', error);
         setToast('No se pudieron guardar tus preferencias en este navegador. Revisa el espacio disponible o la configuración de almacenamiento.');
       }
-    }, [notifications, advancedMode, executionState, active, privacy, setToast]);
+    }, [notifications, executionState, active, privacy, setToast]);
 }
