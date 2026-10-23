@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.resetModules();
 });
 
@@ -39,6 +40,21 @@ describe('trip message polling API', () => {
     await getTripMessages(42);
 
     expect(fetchMock.mock.calls[0][0]).toBe('/api/trips/42/messages');
+  });
+
+  it('uses an absolute API URL when configured for a separate backend origin', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test/api/');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: [], meta: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { getTripMessages } = await import('./authApi.js');
+
+    await getTripMessages(42);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.test/api/trips/42/messages');
   });
 
   it('requests older messages with the before id cursor', async () => {

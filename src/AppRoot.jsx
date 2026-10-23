@@ -10,6 +10,7 @@ import useSafetyEffects from './hooks/useSafetyEffects';
 import useSearchMatchEffects from './hooks/useSearchMatchEffects';
 import useSessionEffects from './hooks/useSessionEffects';
 import useTripEffects from './hooks/useTripEffects';
+import useTripReminders from './hooks/useTripReminders';
 import { readAppData } from './services/appDatabase';
 
 export default function AppRoot() {
@@ -24,6 +25,7 @@ export default function AppRoot() {
   useSearchMatchEffects(state, { searchFilters: viewModel.searchFilters });
   useSafetyEffects(state, { safetyTripOptions: viewModel.safetyTripOptions });
   useTripEffects(state);
+  useTripReminders(state);
 
   return <AuthenticatedShell state={state} actions={actions} viewModel={viewModel} />;
 }

@@ -3,7 +3,7 @@ const STORAGE_KEY = 'viajau-local-db-v1';
 export const DEFAULT_APP_DATA = {
   privacy: 'Zona aproximada',
   notifications: [
-    { id: 'departure-reminder', title: 'Recordatorio de salida (demo)', channel: 'En la app', active: false },
+    { id: 'departure-reminder', title: 'Recordatorio local de salida', channel: 'Notificación del navegador', active: false },
     { id: 'arrival-check-in', title: 'Check-in de llegada', channel: 'En la app', active: false },
     { id: 'route-change', title: 'Cambio de ruta', channel: 'No configurado', active: false },
     { id: 'trusted-contact', title: 'Contacto de confianza (no conectado)', channel: 'No configurado', active: false }
