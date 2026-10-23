@@ -83,6 +83,38 @@ class TripSearchTest extends TestCase
             ->assertJsonPath('data.0.id', $matchingOffer->id);
     }
 
+    public function test_search_filters_by_inclusive_departure_date_range(): void
+    {
+        $viewer = User::factory()->create();
+        $driver = User::factory()->create();
+        $profile = $this->createProfile($driver);
+        $matchingOffer = $this->createOffer($profile, [
+            'departure_date' => today()->addDays(3)->toDateString(),
+        ]);
+        $this->createOffer($profile, ['departure_date' => today()->addDay()->toDateString()]);
+        $this->createOffer($profile, ['departure_date' => today()->addDays(5)->toDateString()]);
+        $token = $viewer->createToken('web')->plainTextToken;
+
+        $this->withToken($token)->getJson('/api/trips?date_from='.today()->addDays(2)->toDateString()
+            .'&date_to='.today()->addDays(4)->toDateString())
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $matchingOffer->id)
+            ->assertJsonPath('data.0.departure_date', today()->addDays(3)->toDateString());
+        $this->withToken($token)->getJson('/api/trips?date_to='.today()->addDays(3)->toDateString())
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+    }
+
+    public function test_search_rejects_invalid_date_ranges_and_rating_thresholds(): void
+    {
+        $user = User::factory()->create();
+        $token = $user->createToken('web')->plainTextToken;
+
+        $this->withToken($token)->getJson('/api/trips?date_from=2026-10-23&date_to=2026-10-22')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('date_to');
+    }
+
     public function test_search_paginates_all_matching_results_with_a_stable_cursor(): void
     {
         $viewer = User::factory()->create();

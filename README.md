@@ -5,24 +5,24 @@
 ## 1. Estado actual del proyecto
 
 - **Fase de desarrollo:** MVP en desarrollo. La aplicación tiene cliente React y API Laravel funcionales, pero hay integraciones externas opcionales y áreas incompletas. No se declara lista para producción.
-- **Cobertura de pruebas:** Vitest reportó 9,30 % de cobertura de líneas en la última ejecución completada (8 archivos y 16 pruebas). `test:coverage` aplica pisos globales de 7 % en ramas/funciones y 9 % en líneas/sentencias. No hay reporte porcentual configurado para PHPUnit; la cobertura frontend no representa la cobertura del backend.
+- **Cobertura de pruebas:** Vitest reportó 12,15 % de cobertura de líneas en la última ejecución completada (9 archivos y 20 pruebas). `test:coverage` aplica pisos globales de 7 % en ramas/funciones y 9 % en líneas/sentencias. No hay reporte porcentual configurado para PHPUnit; la cobertura frontend no representa la cobertura del backend.
 - **Verificación observada en este checkout:**
   - `npm run build`: correcto.
-  - `npm run test:unit`: 8 archivos, 16 pruebas aprobadas en la última ejecución completada.
-  - `npm run test:coverage`: correcto; 8 archivos y 16 pruebas aprobadas, con 9,30 % de cobertura de líneas y umbrales globales satisfechos.
+  - `npm run test:unit`: 9 archivos, 20 pruebas aprobadas en la última ejecución completada.
+  - `npm run test:coverage`: correcto; 9 archivos y 20 pruebas aprobadas, con 12,15 % de cobertura de líneas y umbrales globales satisfechos.
   - `npm run test:routing`: correcto; prueba contratos del cliente con respuestas simuladas, no una API desplegada.
   - `npm run lint:react-bits`: correcto; ESLint finalizó sin errores ni advertencias.
   - `npm --prefix react-bits-main run build`: no completó en este equipo Windows de 8 GB; el proceso Vite alcanzó el límite de heap de Node (~2 GB) durante `transforming`. El subpaso de generación de registry completó 1.274 elementos; no se afirma que el build de producción haya pasado.
   - `node scripts/test-viajau-functions.js`: diagnóstico exploratorio; reporta 39 ejecuciones sin excepciones, pero no valida resultados y captura errores sin fallar el proceso, por lo que no cuenta como suite de pruebas.
   - `npm run lint:product`: correcto; Oxlint termina sin diagnósticos con `--deny-warnings`.
-  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 131 pruebas y 741 aserciones. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
+  - Backend: con SQLite deshabilitado, `php artisan test --compact` reportó errores por falta del driver. Al cargar los DLL disponibles explícitamente, PHPUnit pasó 133 pruebas y 749 aserciones. Para `php artisan test`, habilita `pdo_sqlite` y `sqlite3` en el `php.ini` activo. `Product CI` instala ambas extensiones.
 - **Automatización:** `Product CI` cubre build, pruebas, cobertura frontend y lint del producto, además de PHPUnit en Ubuntu/PHP 8.4 con SQLite. `React Bits CI` valida el subproyecto embebido en su propio entorno.
 
 | # | Módulo de producto | Estado | Alcance confirmado y límites |
 |---:|---|---|---|
 | 1 | Usuarios y validación institucional | Parcial | Registro, login, verificación de correo, perfil, recuperación de contraseña, roles y bloqueo. La entrega de correo depende de configuración SMTP; se requiere verificación institucional antes de usar la mayoría de rutas privadas. |
-| 2 | Mapa, rutas y geolocalización | Parcial | Geolocalización explícita, búsqueda Nominatim, rutas OSRM/OpenStreetMap y consulta de paradas/trazados públicos del MIO. No hay calendario GTFS activo ni garantía de disponibilidad de proveedores externos. |
-| 3 | Búsqueda, filtros y ordenamiento | Parcial | Endpoint de ofertas autenticado con filtros y límites de privacidad; no todos los filtros que aparecen en el inventario de interfaz están respaldados por datos o por la API. |
+| 2 | Mapa, rutas y geolocalización | Parcial | Geolocalización explícita, búsqueda Nominatim, rutas OSRM/OpenStreetMap con URL autoalojable configurable y consulta de paradas/trazados públicos del MIO. No hay calendario GTFS activo; el grafo OSRM de Colombia está en preparación y todavía no se ha validado una ruta local. |
+| 3 | Búsqueda, filtros y ordenamiento | Parcial | Endpoint autenticado filtra zona, hora, transporte, carrera, universidad y rango inclusivo de fechas; limita resultados a perfiles verificados y pagina de forma estable. Ordenamiento de los resultados cargados en cliente, con fecha antes de hora de salida. No usa filtros de género ni distancia exacta. |
 | 4 | Match por zona y horario | Completado dentro del alcance actual | Recomendaciones calculadas en backend sobre ofertas verificadas, zona, jornada/hora y transporte; no son una calificación de seguridad ni usan reputación para certificar viajes. |
 | 5 | Gestión de viajes | Parcial | Ofertas, solicitudes, aceptación/rechazo, transiciones de estado, cupos y participantes. La publicación exige fecha y hora futuras; búsqueda y recomendaciones omiten ofertas vencidas y la interfaz muestra la fecha. Ofertas históricas sin fecha permanecen en la base de datos, pero no se ofrecen públicamente. |
 | 6 | Seguridad y ubicación | Parcial | SOS, seguimiento GPS consentido por viaje, check-ins y colas de notificación. La geocerca automática está desactivada en ofertas nuevas y rutas históricas no verificadas: la API rechaza rutas aportadas por el navegador y todavía no existe un verificador/ruteador del lado del servidor. Solo rutas marcadas explícitamente como verificadas pueden generar alertas de desvío/llegada. Las coordenadas precisas se eliminan al completar/cancelar y vencen tras 24 h sin actualización por una tarea programada; producción necesita scheduler y proveedores/workers configurados. No se contacta automáticamente a autoridades ni sustituye servicios de emergencia. |
@@ -30,10 +30,10 @@
 | 8 | Confiabilidad y reputación | Completado dentro del alcance actual | Valoraciones limitadas a participantes de viajes completados y reportes moderables. No equivale a investigación de identidad ni certificación independiente. |
 | 9 | Pago y seguro | Parcial | Membresía de prueba, solicitudes de cotización y revisión manual de pólizas. Wompi está restringido a sandbox; `payments_enabled` es `false`; no se cobran pagos ni se activa cobertura automáticamente. |
 | 10 | Dashboard, historial y comunicación | Parcial | Datos personales desde API y chat persistente entre responsables/pasajeros aceptados. No hay chat en tiempo real ni notificaciones push; la interfaz consulta periódicamente. |
-| 11 | Privacidad y seguridad backend | Parcial | Cookies Sanctum/CSRF, validación, roles, límites de solicitudes y controles de ubicación. No hay evidencia de una certificación, pentest independiente o procedimiento completo de derechos/retención desplegado. |
-| 12 | Notificaciones y recordatorios | Parcial | Alertas de seguridad y trabajos de entrega implementados; correo/SMS/WhatsApp dependen de credenciales, consentimiento, colas y scheduler. Push no está implementado. |
+| 11 | Privacidad y seguridad backend | Parcial | Cookies Sanctum/CSRF, validación, roles, límites de solicitudes y controles de ubicación. La ubicación precisa puede compartirse con participantes autorizados del viaje y su purga requiere el scheduler. No hay flujos automatizados completos de acceso/exportación/borrado ni evidencia de certificación o pentest independiente. |
+| 12 | Notificaciones y recordatorios | Parcial | Alertas de seguridad y trabajos de entrega implementados; correo/SMS/WhatsApp dependen de credenciales, consentimiento, colas y scheduler. Las opciones de la interfaz solo guardan preferencias locales; no programan recordatorios ni envían push, que no está implementado. |
 | 13 | Funcionalidades avanzadas | Pendiente | Varias funciones —calendario universitario, predicción de patrones, hotspots y recomendaciones avanzadas— permanecen como inventario o ideas, no como servicios verificados. |
-| 14 | Infraestructura y backend | Parcial | API Laravel, migraciones, jobs, scheduler y workflows CI presentes. No hay Docker/Compose ni evidencia de infraestructura de producción, backups operativos, SLO o monitoreo externo desplegado. |
+| 14 | Infraestructura y backend | Parcial | API Laravel, migraciones, jobs, scheduler y workflows CI presentes; se añadió Compose opcional para ruteo OSRM local. No hay evidencia de infraestructura de producción, backups operativos, SLO o monitoreo externo desplegado. |
 | 15 | Checklist de cumplimiento | Pendiente | El checklist de interfaz es contenido de producto, no prueba de cumplimiento legal, auditoría externa ni certificación. |
 | 16 | Roadmap | Pendiente | Es material de planificación; fases o porcentajes mostrados por la interfaz no demuestran entrega técnica. |
 
@@ -94,8 +94,8 @@ La raíz contiene 19 dependencias runtime y 9 de desarrollo. `react-bits-main/` 
 - Documentos de póliza se gestionan mediante el filesystem privado configurado por Laravel; la descarga está restringida a administración.
 - Jobs/colas y scheduler se usan para notificaciones de seguridad y vigilancia de check-ins. Requieren worker y tarea programada operativos.
 - CI: GitHub Actions con workflows `Product CI` y `React Bits CI`.
-- No hay `Dockerfile`, `docker-compose.yml` ni manifiesto de despliegue versionado identificado en la raíz. No se documenta una infraestructura de producción reproducible.
-- Proveedores externos: OSRM/OpenStreetMap, Nominatim, servicio público ArcGIS/GTFS de Metro Cali, Wompi sandbox y, si se configuran, SMTP/Twilio. Sus límites, disponibilidad y políticas dependen de terceros.
+- No hay `Dockerfile` ni manifiesto de despliegue general; `compose.osrm.yml` solo permite levantar ruteo local opcional. No se documenta una infraestructura de producción reproducible.
+- Proveedores externos configurables: OSRM/OpenStreetMap, Nominatim, servicio público ArcGIS/GTFS de Metro Cali, Wompi sandbox y, si se configuran, SMTP/Twilio. Sus límites, disponibilidad y políticas dependen de terceros; OSRM/Nominatim pueden apuntarse a instancias autoalojadas.
 
 ## 4. Estructura del repositorio
 
@@ -217,8 +217,14 @@ Las URLs pueden configurarse en el `.env` de la raíz; al cambiarlas, reinicia V
 
 Para preparar OSRM en Windows con Docker Desktop:
 
-1. Descarga manualmente desde Geofabrik un extracto `.osm.pbf` que cubra Cali y colócalo en `ops/osrm/data/`. Los archivos fuente y los grafos resultantes se ignoran en Git.
-2. Desde PowerShell, prepara el grafo de conducción (el procesamiento puede tomar bastante tiempo y espacio):
+1. Desde PowerShell, descarga el extracto de Colombia desde Geofabrik. Python usa solo su biblioteca estándar y verifica tamaño y checksum antes de conservar el archivo:
+
+   ```powershell
+   py .\scripts\download-colombia-osm.py
+   ```
+
+   El archivo de unos cientos de MB y los grafos resultantes se ignoran en Git.
+2. Prepara el grafo de conducción (el procesamiento puede tomar bastante tiempo y espacio):
 
    ```powershell
    .\scripts\prepare-osrm.ps1
@@ -235,7 +241,7 @@ Para preparar OSRM en Windows con Docker Desktop:
 
    Para detenerlo: `docker compose --env-file .env -f compose.osrm.yml down`.
 
-Este despliegue proporciona ruteo de conducción, no geocodificación ni mapas raster, y su capacidad depende del hardware y de actualizar el extracto OSM. Los datos OSM de Geofabrik se distribuyen bajo ODbL y requieren atribución. Nominatim, perfiles peatonales/bicicleta y el servicio ArcGIS MIO no quedan instalados por este Compose. No se debe llamar “ilimitado”: autoalojar elimina la cuota del proveedor público, pero no los límites de capacidad, mantenimiento, cobertura y licencia.
+Este despliegue proporciona ruteo de conducción, no geocodificación ni mapas raster, y su capacidad depende del hardware y de actualizar el extracto OSM. Los datos OSM de Geofabrik se distribuyen bajo ODbL y requieren atribución visible (© OpenStreetMap contributors). Nominatim, perfiles peatonales/bicicleta y el servicio ArcGIS MIO no quedan instalados por este Compose. No se debe llamar “ilimitado”: autoalojar elimina la cuota del proveedor público, pero no los límites de capacidad, mantenimiento, cobertura y licencia.
 
 La verificación de correo requiere configurar el mailer. Los avisos asíncronos requieren configurar cola, credenciales y worker; para la función programada, instala `php artisan schedule:run` en el scheduler del sistema. No uses credenciales de sandbox en producción ni habilites pagos reales: la configuración de producto los mantiene desactivados.
 
@@ -404,7 +410,7 @@ Todas las rutas API Laravel usan el prefijo `/api`. `GET` también admite `HEAD`
 | `GET` | `/api/reputation/profiles/{profile}` | Consulta perfil agregado de reputación. | Implementado; visibilidad limitada por reglas del dominio. |
 | `POST` | `/api/trips/{trip}/reviews` | Califica participante; 10/min. | Implementado tras viaje completado y con participación validada. |
 | `POST` | `/api/trips/{trip}/reports` | Reporta participante; 5/min. | Implementado; reporte privado/moderable. |
-| `GET` | `/api/trips` | Busca ofertas. | Implementado; requiere Sanctum, cuenta activa y correo verificado. |
+| `GET` | `/api/trips` | Busca ofertas con filtros opcionales `zone`, `time`, `faculty`, `university`, `transport`, `date_from` y `date_to`; `after_id` pagina resultados. | Implementado; requiere Sanctum, cuenta activa y correo verificado. Solo retorna ofertas futuras de estudiantes activos/verificados, sin correo ni contacto privado. |
 | `POST` | `/api/trips` | Publica oferta; 10/min. | Implementado; validación y reglas de negocio backend. |
 | `GET` | `/api/trips/mine` | Ofertas y solicitudes propias. | Implementado. |
 | `POST` | `/api/trips/{trip}/requests` | Solicita cupo; 10/min. | Implementado; estado y cupos coordinados por backend. |

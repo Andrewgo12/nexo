@@ -39,9 +39,14 @@ export function filterTravelMatches(searchState, candidates = []) {
       normalized(item.university).includes(normalized(searchState.university));
     const transportMatch = !searchState.transport || searchState.transport === 'Cualquiera' ||
       normalized(item.transport).includes(normalized(searchState.transport));
-    return zoneMatch && timeMatch && facultyMatch && universityMatch && transportMatch;
+    const dateMatch = (!searchState.date_from || item.departure_date >= searchState.date_from) &&
+      (!searchState.date_to || item.departure_date <= searchState.date_to);
+    return zoneMatch && timeMatch && facultyMatch && universityMatch && transportMatch && dateMatch;
   }).sort((a, b) => {
-    if (searchState.sort === 'Hora de salida') return String(a.time).localeCompare(String(b.time));
+    if (searchState.sort === 'Hora de salida') {
+      const dateOrder = String(a.departure_date || '').localeCompare(String(b.departure_date || ''));
+      return dateOrder || String(a.time || '').localeCompare(String(b.time || ''));
+    }
     if (searchState.sort === 'Más recientes') {
       const aDate = Date.parse(a.created_at || '');
       const bDate = Date.parse(b.created_at || '');

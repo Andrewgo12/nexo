@@ -25,10 +25,12 @@ export default function SearchSection({
           <label style={{ display: 'grid', gap: 8 }}><span>Programa o carrera</span><input value={searchState.faculty} onChange={(event) => onFilterChange('faculty', event.target.value)} style={field} /></label>
           <label style={{ display: 'grid', gap: 8 }}><span>Universidad</span><select value={searchState.university} onChange={(event) => onFilterChange('university', event.target.value)} style={field}><option>Cualquiera</option>{universities.map((university) => <option key={university.id}>{university.name}</option>)}</select></label>
           <label style={{ display: 'grid', gap: 8 }}><span>Transporte</span><select value={searchState.transport} onChange={(event) => onFilterChange('transport', event.target.value)} style={field}><option>Cualquiera</option><option>MIO</option><option>Carro</option><option>Moto</option><option>Bicicleta</option><option>Caminata</option><option>Taxi</option></select></label>
+          <label style={{ display: 'grid', gap: 8 }}><span>Desde</span><input type="date" value={searchState.date_from} onChange={(event) => onFilterChange('date_from', event.target.value)} style={field} /></label>
+          <label style={{ display: 'grid', gap: 8 }}><span>Hasta</span><input type="date" min={searchState.date_from || undefined} value={searchState.date_to} onChange={(event) => onFilterChange('date_to', event.target.value)} style={field} /></label>
           <label style={{ display: 'grid', gap: 8 }}><span>Orden</span><select value={searchState.sort} onChange={(event) => onSortChange(event.target.value)} style={field}><option>Compatibilidad</option><option>Hora de salida</option><option>Más recientes</option></select></label>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 14 }}>
-          <small style={{ color: '#94a3b8' }}>La hora filtra dentro de la misma hora. Solo aparecen ofertas activas de perfiles con correo verificado.</small>
+          <small style={{ color: '#94a3b8' }}>La hora filtra dentro de la misma hora. Las reseñas son opiniones de otros participantes; no verifican identidad ni garantizan seguridad.</small>
           <button type="button" onClick={onClearFilters} style={{ ...field, padding: '8px 12px', cursor: 'pointer' }}>Limpiar filtros</button>
         </div>
         <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
@@ -51,7 +53,7 @@ export default function SearchSection({
                 <div style={{ color: '#93c5fd', fontWeight: 800 }}>{item.score}% afinidad estimada</div>
               </div>
               <div style={{ marginTop: 6, color: '#dbeafe' }}>{item.origin} → {item.destination} • {item.departure_date} {item.time} • {item.transport}</div>
-              <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 13 }}>{item.university}{item.faculty ? ` • ${item.faculty}` : ''} • {item.seats} cupo(s) • {item.cost}</div>
+              <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 13 }}>{item.university}{item.faculty ? ` • ${item.faculty}` : ''} • {item.seats} cupo(s) • {item.cost} • {item.rating_average === null ? 'Sin reseñas' : `${item.rating_average}/5 (${item.rating_count})`}</div>
             </div>
           ))}
           {!searchLoading && searchLoaded && searchTruncated && (
@@ -70,7 +72,7 @@ export default function SearchSection({
           <div style={{ display: 'grid', gap: 8, marginTop: 10, color: '#cbd5e1', fontSize: 13 }}>
             {[
               { label: '3.1 Consultar ofertas activas de la API con sesión verificada', done: searchLoaded && !searchError },
-              { label: '3.2 Filtrar por zona, hora y transporte', done: true },
+              { label: '3.2 Filtrar por zona, hora, fecha y transporte', done: true },
               { label: '3.3 Filtrar por carrera y universidad del perfil', done: true },
               { label: '3.4 Ordenar por afinidad estimada, hora y fecha', done: true },
               { label: '3.5 Mostrar carga, error y resultados vacíos', done: true },
@@ -78,7 +80,7 @@ export default function SearchSection({
               { label: '3.7 Probar filtros, orden y protección de datos', done: true },
             ].map((item) => <div key={item.label} style={{ color: item.done ? '#86efac' : '#cbd5e1' }}>{item.done ? '☑' : '☐'} {item.label}</div>)}
           </div>
-          <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>{6 + Number(searchLoaded && !searchError)}/7 completados. Reputación, género y distancia no se filtran: requieren valoraciones confiables, preferencias voluntarias y coordenadas consentidas que el modelo actual no almacena.</small>
+          <small style={{ display: 'block', marginTop: 8, color: '#94a3b8' }}>{6 + Number(searchLoaded && !searchError)}/7 completados. Género no se filtra y la distancia exacta requiere coordenadas consentidas que el modelo no almacena.</small>
         </div>
       </div>
     </section>

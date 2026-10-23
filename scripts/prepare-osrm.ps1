@@ -4,6 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $dataDirectory = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\ops\osrm\data'))
+$null = New-Item -ItemType Directory -Force -Path $dataDirectory
 $pbfFiles = @(Get-ChildItem -LiteralPath $dataDirectory -Filter '*.osm.pbf' -File -ErrorAction SilentlyContinue)
 
 if ($pbfFiles.Count -ne 1) {
@@ -12,6 +13,7 @@ if ($pbfFiles.Count -ne 1) {
 
 $datasetName = $pbfFiles[0].Name -replace '\.osm\.pbf$', ''
 $mount = "type=bind,source=$dataDirectory,target=/data"
+$graphBase = "/data/$datasetName.osrm"
 
 function Invoke-Osrm {
     param([string[]]$Arguments)
@@ -22,9 +24,14 @@ function Invoke-Osrm {
     }
 }
 
-Invoke-Osrm @('osrm-extract', '-p', '/opt/car.lua', "/data/$($pbfFiles[0].Name)")
-Invoke-Osrm @('osrm-partition', "/data/$datasetName.osrm")
-Invoke-Osrm @('osrm-customize', "/data/$datasetName.osrm")
+if (-not (Test-Path -LiteralPath (Join-Path $dataDirectory "$datasetName.osrm.fileIndex"))) {
+    Invoke-Osrm @('osrm-extract', '-p', '/opt/car.lua', "/data/$($pbfFiles[0].Name)")
+} else {
+    Write-Host "Se reutiliza el grafo extraído existente: $datasetName"
+}
+
+Invoke-Osrm @('osrm-partition', $graphBase)
+Invoke-Osrm @('osrm-customize', $graphBase)
 
 Write-Host "Dataset preparado: $datasetName"
 Write-Host "Configura OSRM_DATASET_NAME=$datasetName en el archivo .env de la raíz."

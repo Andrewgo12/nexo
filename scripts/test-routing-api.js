@@ -337,6 +337,8 @@ const offersResponse = await getTravelOffers({
   faculty: 'Ingeniería',
   university: 'UNIAJC',
   transport: 'MIO',
+  date_from: '2026-10-23',
+  date_to: '2026-10-25',
   sort: 'Compatibilidad',
 }, 'test-session-token');
 assert.deepEqual(offersResponse.data, []);
@@ -347,6 +349,8 @@ assert.equal(offersUrl.searchParams.get('time'), '19:45');
 assert.equal(offersUrl.searchParams.get('faculty'), 'Ingeniería');
 assert.equal(offersUrl.searchParams.get('university'), 'UNIAJC');
 assert.equal(offersUrl.searchParams.get('transport'), 'MIO');
+assert.equal(offersUrl.searchParams.get('date_from'), '2026-10-23');
+assert.equal(offersUrl.searchParams.get('date_to'), '2026-10-25');
 assert.equal(offersUrl.searchParams.has('sort'), false);
 assert.equal(offersRequest.options.headers.get('Authorization'), null);
 assert.equal(offersRequest.options.credentials, 'include');

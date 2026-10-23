@@ -7,7 +7,7 @@ export default function useUiActions(state) {
 
   const toggleNotification = (index) => {
       setNotifications((current) => current.map((item, idx) => idx === index ? { ...item, active: !item.active } : item));
-      setToast('Recordatorio actualizado correctamente.');
+      setToast('Preferencia guardada en este navegador; no se programan ni envían alertas.');
     }
 
   const toggleAdvancedFeature = (key) => {

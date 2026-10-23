@@ -43,4 +43,20 @@ describe('self-hosted routing providers', () => {
       /^http:\/\/127\.0\.0\.1:8088\/search\?/,
     );
   });
+
+  it('uses the configured ArcGIS Feature Service for MIO data', async () => {
+    vi.stubEnv('VITE_MIO_GTFS_FEATURE_SERVICE', 'http://127.0.0.1:8080/FeatureServer/');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { getMioRoute } = await import('./mioRoutingApi.js');
+    await expect(getMioRoute([3.45, -76.53], [3.46, -76.52])).rejects.toThrow(
+      'No se encontraron paradas MIO',
+    );
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://127.0.0.1:8080/FeatureServer/0/query');
+  });
 });

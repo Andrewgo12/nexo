@@ -53,7 +53,11 @@ export default function useAppViewModel(state) {
     faculty: searchState.faculty,
     university: searchState.university,
     transport: searchState.transport,
+    date_from: searchState.date_from,
+    date_to: searchState.date_to,
   }), [
+    searchState.date_from,
+    searchState.date_to,
     searchState.faculty,
     searchState.time,
     searchState.transport,

@@ -163,7 +163,15 @@ export function getCurrentAccount(token = getAuthToken()) {
 
 export function getTravelOffers(filters, token = getAuthToken(), signal) {
   const params = new URLSearchParams();
-  for (const key of ['zone', 'time', 'faculty', 'university', 'transport']) {
+  for (const key of [
+    'zone',
+    'time',
+    'faculty',
+    'university',
+    'transport',
+    'date_from',
+    'date_to',
+  ]) {
     const value = filters[key]?.trim();
     if (value && value !== 'Cualquiera') params.set(key, value);
   }

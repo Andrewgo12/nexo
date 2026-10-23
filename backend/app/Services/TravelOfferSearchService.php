@@ -26,6 +26,12 @@ class TravelOfferSearchService
             ->when($filters['transport'] ?? null, function (Builder $query, string $transport): void {
                 $query->where('mode', 'like', '%'.$transport.'%');
             })
+            ->when($filters['date_from'] ?? null, function (Builder $query, string $date): void {
+                $query->whereDate('departure_date', '>=', $date);
+            })
+            ->when($filters['date_to'] ?? null, function (Builder $query, string $date): void {
+                $query->whereDate('departure_date', '<=', $date);
+            })
             ->when($filters['faculty'] ?? null, function (Builder $query, string $faculty): void {
                 $query->whereHas('studentProfile', fn (Builder $profileQuery) => $profileQuery
                     ->where('career', 'like', '%'.$faculty.'%'));

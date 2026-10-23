@@ -44,6 +44,8 @@ class ViajauController extends Controller
             'faculty' => ['nullable', 'string', 'max:120'],
             'university' => ['nullable', 'string', 'max:120'],
             'transport' => ['nullable', 'string', 'max:120'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
             'after_id' => ['nullable', 'integer', 'min:1'],
         ]);
 

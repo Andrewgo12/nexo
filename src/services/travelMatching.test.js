@@ -48,11 +48,24 @@ describe('travel matching', () => {
     }, offers).map(({ id }) => id)).toEqual([1]);
   });
 
+  it('filters offers by inclusive departure date range', () => {
+    const offers = [
+      { id: 1, departure_date: '2026-10-25' },
+      { id: 2, departure_date: '2026-10-26' },
+      { id: 3, departure_date: '2026-10-27' },
+    ];
+
+    expect(filterTravelMatches({
+      date_from: '2026-10-25',
+      date_to: '2026-10-26',
+    }, offers).map(({ id }) => id)).toEqual([1, 2]);
+  });
+
   it('sorts offers by departure time, recency, or estimated score', () => {
     const offers = [
-      { id: 'later', time: '20:30', created_at: '2026-10-20T10:00:00Z', score: 60 },
-      { id: 'early', time: '08:15', created_at: '2026-10-19T10:00:00Z', score: 90 },
-      { id: 'newest', time: '12:00', created_at: '2026-10-21T10:00:00Z', score: 75 },
+      { id: 'later', departure_date: '2026-10-26', time: '08:30', created_at: '2026-10-20T10:00:00Z', score: 60 },
+      { id: 'early', departure_date: '2026-10-25', time: '20:15', created_at: '2026-10-19T10:00:00Z', score: 90 },
+      { id: 'newest', departure_date: '2026-10-26', time: '07:00', created_at: '2026-10-21T10:00:00Z', score: 75 },
     ];
 
     expect(filterTravelMatches({ sort: 'Hora de salida' }, offers).map(({ id }) => id))

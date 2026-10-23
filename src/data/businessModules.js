@@ -19,7 +19,7 @@ export const BUSINESS_MODULES = [
     id: 'mapa-rutas',
     title: '2. Mapa, rutas y geolocalización',
     summary: 'Ubicación consentida, geocodificación, rutas multimodales y datos del MIO.',
-    status: 'Parcial: rutas OSRM, Nominatim, OpenStreetMap y MIO disponibles; horarios GTFS y OTP no integrados.',
+    status: 'Parcial: OSRM y Nominatim admiten endpoints configurables; la capa MIO pública aporta paradas y trazados, no horarios GTFS activos. OTP no está integrado.',
     functions: [
       'obtenerUbicacionActual()', 'obtenerUbicacionBarrio()', 'buscarZonaPorTexto()',
       'geocodificarDireccion()', 'calcularDistanciaEntrePuntos()', 'calcularRutaACaminando()',
@@ -39,7 +39,7 @@ export const BUSINESS_MODULES = [
     id: 'busqueda-filtros',
     title: '3. Búsqueda, filtros y ordenamiento',
     summary: 'Consulta de ofertas con filtros respaldados por los datos disponibles.',
-    status: 'Parcial: zona, hora, transporte, universidad y carrera; filtros de género, confianza y distancia no disponibles.',
+    status: 'Parcial: zona, hora, fecha, transporte, universidad y carrera; filtros de género y distancia exacta no disponibles.',
     functions: [
       'buscarViajesPorZona()', 'buscarViajesPorHora()', 'buscarViajesPorJornada()',
       'buscarViajesPorUniversidad()', 'buscarViajesPorRuta()', 'buscarViajesPorFacultad()',
@@ -155,7 +155,7 @@ export const BUSINESS_MODULES = [
     id: 'privacidad-seguridad-backend',
     title: '11. Privacidad y seguridad del backend',
     summary: 'Sesiones, protección de datos, auditoría y derechos de privacidad.',
-    status: 'Parcial: Sanctum, HTTPS en producción y límites de login; auditoría y borrado solicitado pendientes.',
+    status: 'Parcial: Sanctum/CSRF, validación y límites de login; auditoría operativa y flujos de acceso, exportación y borrado de datos pendientes.',
     functions: [
       'cifrarDatosSensibles()', 'protegerJWT()', 'validarToken()', 'gestionarSesiones()',
       'limitarIntentosLogin()', 'auditoriaAcciones()', 'generarLogsSeguridad()',
@@ -167,7 +167,7 @@ export const BUSINESS_MODULES = [
     id: 'notificaciones-recordatorios',
     title: '12. Notificaciones y recordatorios',
     summary: 'Avisos de salida, llegada, cambios, coincidencias y alertas.',
-    status: 'Pendiente: los controles actuales no envían notificaciones externas reales.',
+    status: 'Parcial: las preferencias se guardan localmente; no hay programación de recordatorios ni entrega push/correo/SMS conectada.',
     functions: [
       'recordatorioViajeProximo()', 'recordatorioCheckIn()', 'recordatorioLlegada()',
       'recordatorioSeguro()', 'alertaHoraSalida()', 'alertaCambioRuta()', 'alertaViajeCancelado()',

@@ -113,7 +113,16 @@ export default function AppSectionContent({ appState: state, actions, viewModel:
           onLoadMore={() => state.setSearchCursor(state.searchNextCursor)}
           onSortChange={(sort) => state.setSearchState((current) => ({ ...current, sort }))}
           onClearFilters={() => {
-            state.setSearchState({ zone: '', time: '', faculty: '', university: 'Cualquiera', transport: 'Cualquiera', sort: 'Compatibilidad' });
+            state.setSearchState({
+              zone: '',
+              time: '',
+              faculty: '',
+              university: 'Cualquiera',
+              transport: 'Cualquiera',
+              date_from: '',
+              date_to: '',
+              sort: 'Compatibilidad',
+            });
             state.setSearchCursor(null);
             state.setSearchNextCursor(null);
             state.setSearchResults([]);

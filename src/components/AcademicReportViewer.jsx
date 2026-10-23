@@ -426,7 +426,7 @@ export default function AcademicReportViewer({ onOpenInterviewRecorder }) {
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>3. Infraestructura de Datos Abiertos</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: 1.6 }}>
-              El mapa de rutas se construye 100% sobre fuentes de datos abiertos: el feed GTFS oficial de Metrocali para las 91 rutas y 1.949 paradas del MIO, la red vial de OpenStreetMap y el motor Open Source Routing Machine (OSRM), sin incurrir en costos comerciales por consulta.
+              El módulo combina la red vial de OpenStreetMap y rutas OSRM configurables con la capa pública de Metro Cali para consultar paradas y trazados del MIO. La capa revisada no confirma calendarios activos; por eso la app no presenta horarios ni frecuencias como vigentes. OSRM puede autoalojarse con un extracto OSM, sujeto a recursos locales y a la atribución de OpenStreetMap (ODbL).
             </p>
           </div>
 

@@ -20,6 +20,8 @@ export default function useAppState(persisted, { initialStudent, universities })
       faculty: '',
       university: 'Cualquiera',
       transport: 'Cualquiera',
+      date_from: '',
+      date_to: '',
       sort: 'Compatibilidad',
     });
   const [searchResults, setSearchResults] = useState([]);
