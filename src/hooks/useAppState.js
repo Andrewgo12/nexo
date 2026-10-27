@@ -8,6 +8,7 @@ function localDateString(date = new Date()) {
 }
 
 export default function useAppState(persisted, { initialStudent, universities }) {
+  const resetParams = new URLSearchParams(window.location.search);
   const [active, setActive] = useState(persisted.activeTab || 'auth');
   const [student, setStudent] = useState(initialStudent);
   const [uni, setUni] = useState(universities[0]);
