@@ -243,7 +243,7 @@ export default function AuthenticatedShell({ state, actions, viewModel }) {
           field={field}
         />
 
-          <AppSectionContent appState={appState} actions={actions} viewModel={viewModel} />
+          <AppSectionContent appState={state} actions={actions} viewModel={viewModel} />
 
 
 

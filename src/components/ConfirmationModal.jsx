@@ -11,12 +11,27 @@ export default function ConfirmationModal({
   if (!modal) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 560, animation: 'slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onClick={onClose}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') onClose();
+      }}
+    >
+      <div
+        className="modal-card modal-card-enhanced"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmation-modal-title"
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+        style={{ maxWidth: 560, animation: 'slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: '0.14em', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800 }}>Confirmación</div>
-            <h3 style={{ marginTop: 6, fontSize: 28, fontWeight: 800 }}>{modal.title}</h3>
+            <h3 id="confirmation-modal-title" style={{ marginTop: 6, fontSize: 28, fontWeight: 800 }}>{modal.title}</h3>
           </div>
           <button type="button" className="btn-secondary" style={{ padding: '8px 10px' }} onClick={onClose}>✕</button>
         </div>
