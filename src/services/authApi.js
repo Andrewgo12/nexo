@@ -71,6 +71,7 @@ async function readJsonResponse(response) {
 }
 
 async function ensureCsrfCookie(force = false) {
+  if (import.meta.env?.VITE_API_MODE === 'node') return;
   if (!force && getXsrfToken()) return;
   csrfCookiePromise ??= fetchWithTimeout(`${API_ROOT_URL}/sanctum/csrf-cookie`, {
     headers: { Accept: 'application/json' },
