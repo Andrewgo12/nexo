@@ -11,6 +11,7 @@ export default function useSessionEffects(state, helpers = {}) {
     setIsBooting,
     setIsLoggedIn,
     setToast,
+    setActive,
   } = state;
   const { applyAuthenticatedUser } = helpers;
 
@@ -20,6 +21,25 @@ export default function useSessionEffects(state, helpers = {}) {
         if (new URLSearchParams(window.location.search).get('verified') === '1') {
           setToast('Correo institucional verificado. Ya puedes iniciar sesión.');
         }
+
+        // Modo demostración temporal para revisar todas las vistas sin depender de XAMPP/PHP.
+        // Se puede desactivar definiendo VITE_DEMO_MODE=false en el entorno de Vite.
+        if (import.meta.env.VITE_DEMO_MODE !== 'false') {
+          if (!cancelled) {
+            applyAuthenticatedUser({
+              id: 'demo-user',
+              name: 'Usuario demo',
+              email: 'demo@uniajc.edu.co',
+              role: 'admin',
+              email_verified_at: new Date().toISOString(),
+            });
+            setIsLoggedIn(true);
+            setActive('routes');
+            setIsBooting(false);
+          }
+          return;
+        }
+
         clearAuthToken();
         try {
           const { user } = await getCurrentAccount();
