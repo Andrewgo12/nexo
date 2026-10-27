@@ -17,14 +17,14 @@ export default function AuthenticatedShell({ state, actions, viewModel }) {
 
       {!state.isBooting && !state.isLoggedIn && (
         <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-          <div style={{ width: '100%', maxWidth: 980, borderRadius: 28, background: 'linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,11,16,.96))', border: '1px solid rgba(148,163,184,.2)', boxShadow: '0 28px 80px rgba(15,23,42,.5)', display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', overflow: 'hidden' }}>
+          <div className="auth-shell" style={{ width: '100%', maxWidth: 980, borderRadius: 28, background: 'linear-gradient(135deg, rgba(15,23,42,.96), rgba(2,11,16,.96))', border: '1px solid rgba(148,163,184,.2)', boxShadow: '0 28px 80px rgba(15,23,42,.5)', display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', overflow: 'hidden' }}>
             <div style={{ padding: 40, background: 'linear-gradient(135deg, rgba(16,185,129,.12), rgba(59,130,246,.08), transparent)' }}>
               <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#86efac', fontWeight: 800, marginBottom: 12 }}>VIAJAU</div>
               <h1 style={{ margin: 0, fontSize: 44, lineHeight: 1.08 }}>Movilidad compartida universitaria</h1>
               <p style={{ margin: '18px 0 28px', color: '#dbeafe', fontSize: 16, lineHeight: 1.7 }}>
                 Validación por correo institucional, rutas consultadas mediante proveedores externos y registro de alertas SOS. No hay monitoreo 24/7 ni contacto automático con servicios de emergencia.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12 }}>
+              <div className="auth-benefits" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12 }}>
                 <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#86efac' }}>Correo institucional</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Verifica el dominio universitario, no la identidad personal.</div></div>
                 <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#7dd3fc' }}>Rutas externas</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>La disponibilidad depende de proveedores externos.</div></div>
                 <div style={{ background: 'rgba(15,23,42,.65)', border: '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 16 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#fbbf24' }}>Alertas SOS</div><div style={{ marginTop: 6, color: '#dbeafe', fontSize: 12 }}>Se registran en la app; no sustituyen servicios de emergencia.</div></div>
@@ -142,13 +142,13 @@ export default function AuthenticatedShell({ state, actions, viewModel }) {
 
       {!state.isBooting && state.isLoggedIn && state.isEmailVerified && (
         <>
-      <div style={{ borderBottom: '1px solid rgba(148,163,184,.2)', padding: 18, position: 'sticky', top: 0, background: 'rgba(2,11,16,.75)', backdropFilter: 'blur(8px)' }}>
+      <header className="app-header" style={{ borderBottom: '1px solid rgba(148,163,184,.2)', padding: 18, position: 'sticky', top: 0, background: 'rgba(2,11,16,.75)', backdropFilter: 'blur(8px)' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: '0.2em', color: '#86efac', fontWeight: 800 }}>VIAJAU</div>
             <div style={{ fontSize: 24, fontWeight: 800 }}>Movilidad segura universitaria</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <nav className="view-navigation" aria-label="Vistas de ViajaU">
             {modules.filter((module) => {
               if (module.key === 'admin') return ['admin', 'university'].includes(state.authUser?.role);
               if (state.authUser?.role === 'security') return ['auth', 'safety'].includes(module.key);
@@ -175,11 +175,11 @@ export default function AuthenticatedShell({ state, actions, viewModel }) {
             >
               Cerrar sesión
             </button>
-          </div>
+          </nav>
         </div>
-      </div>
+      </header>
 
-      <main style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px 60px' }}>
+      <main className="app-main" style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px 60px' }}>
         {state.toast && <div style={{ background: 'rgba(16,185,129,.12)', border: '1px solid rgba(52,211,153,.4)', borderRadius: 12, padding: '12px 14px', marginBottom: 18, color: '#d1fae5', animation: 'fadeIn 0.22s ease-out' }}>{state.toast}</div>}
 
         <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(59,130,246,0.08), rgba(15,23,42,0.9))', border: '1px solid rgba(148,163,184,.18)', borderRadius: 24, padding: 24, marginBottom: 24, boxShadow: '0 22px 40px rgba(2,6,23,0.45)' }}>

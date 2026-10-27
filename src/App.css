@@ -2,6 +2,84 @@
    VIAJAU - ESTILOS ESPECÍFICOS DE COMPONENTES
    ========================================================================== */
 
+/* Plantilla de vistas y navegación principal */
+.app-header {
+  z-index: 1000;
+}
+
+.view-navigation {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-height: 112px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.app-main {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 760px) {
+  .auth-shell {
+    grid-template-columns: 1fr !important;
+    max-width: 440px !important;
+  }
+
+  .auth-shell > div:first-child {
+    padding: 26px !important;
+  }
+
+  .auth-shell > div:last-child {
+    padding: 18px !important;
+  }
+
+  .auth-benefits {
+    grid-template-columns: 1fr !important;
+  }
+
+  .auth-shell h1 {
+    font-size: 32px !important;
+  }
+
+  .app-header {
+    padding: 12px !important;
+  }
+
+  .app-header > div {
+    align-items: flex-start !important;
+  }
+
+  .app-header > div > div:first-child {
+    width: 100%;
+  }
+
+  .app-header > div > div:first-child > div:last-child {
+    font-size: 20px !important;
+  }
+
+  .view-navigation {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    padding-bottom: 4px;
+  }
+
+  .view-navigation button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .app-main {
+    padding: 16px 12px 40px !important;
+  }
+}
+
 /* Filter Bar & Search */
 .filter-container {
   display: flex;
